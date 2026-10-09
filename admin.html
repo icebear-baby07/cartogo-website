@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — carTOGO.mnl</title>
+<meta name="robots" content="noindex, nofollow">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-body">
+
+<!-- ============ LOGIN ============ -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <a href="index.html" class="logo">carTOGO.mnl</a>
+    <h2 style="font-size:1.1rem; margin-bottom:1.25rem;">Admin sign-in</h2>
+    <div class="login-error" id="loginError"></div>
+    <form id="loginForm">
+      <div class="field" style="margin-bottom:1rem;">
+        <label for="loginPassword">Password</label>
+        <input type="password" id="loginPassword" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Sign in</button>
+    </form>
+    <p class="hint">Use the admin password configured in <code>js/data.js</code>. Change it under Settings before sharing the site.</p>
+  </div>
+</div>
+
+<!-- ============ ADMIN SHELL ============ -->
+<div class="admin-shell" id="adminShell">
+  <aside class="admin-sidebar">
+    <a href="index.html" class="logo">carTOGO.mnl</a>
+    <nav class="admin-tabs">
+      <button class="admin-tab-btn active" data-tab="tab-fleet">Fleet &amp; Rates</button>
+      <button class="admin-tab-btn" data-tab="tab-labels">Site Labels</button>
+      <button class="admin-tab-btn" data-tab="tab-inquiries">Inquiries</button>
+      <button class="admin-tab-btn" data-tab="tab-chat">Chat Monitor</button>
+      <button class="admin-tab-btn" data-tab="tab-settings">Settings</button>
+    </nav>
+    <a href="index.html" class="back-link"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> View live site</a>
+    <button class="back-link" id="logoutBtn" style="background:none; border:none; text-align:left; cursor:pointer; margin-top:0.5rem;">Log out</button>
+  </aside>
+
+  <main class="admin-main">
+
+    <!-- ---------- FLEET TAB ---------- -->
+    <section class="admin-panel active" id="tab-fleet">
+      <div class="admin-header">
+        <div>
+          <h1>Fleet &amp; rates</h1>
+          <p>Edit any field and click the save icon on that row. Rates update on the public site immediately.</p>
+        </div>
+      </div>
+
+      <div class="admin-card">
+        <h2>Current fleet</h2>
+        <p class="sub">Rate is per day, in your configured currency.</p>
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr><th>Name</th><th>Category</th><th>Seats</th><th>Transmission</th><th>Fuel</th><th>Rate / day</th><th>Image</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody id="fleetTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="admin-card">
+        <h2>Add a new car</h2>
+        <p class="sub">New cars appear on the public fleet grid right away.</p>
+        <form id="addCarForm">
+          <div class="form-grid" style="display:grid; grid-template-columns: repeat(3,1fr); gap:1rem;">
+            <div class="label-field"><label>Name</label><input id="newCarName" placeholder="e.g. Toyota Wigo" required></div>
+            <div class="label-field"><label>Category</label><input id="newCarCategory" placeholder="e.g. Economy" required></div>
+            <div class="label-field"><label>Seats</label><input id="newCarSeats" type="number" value="5" min="1" max="30"></div>
+            <div class="label-field"><label>Transmission</label><input id="newCarTransmission" placeholder="Automatic"></div>
+            <div class="label-field"><label>Fuel</label><input id="newCarFuel" placeholder="Gasoline"></div>
+            <div class="label-field"><label>Rate / day</label><input id="newCarRate" type="number" min="0" step="50" required></div>
+            <div class="label-field"><label>Image path (optional)</label><input id="newCarImage" placeholder="images/yourcar.jpg"></div>
+            <div class="label-field" style="grid-column:1/-1;"><label>Short description</label><input id="newCarBlurb" placeholder="One line on why someone would rent this car"></div>
+          </div>
+          <button type="submit" class="btn btn-dark">Add car to fleet</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ---------- LABELS TAB ---------- -->
+    <section class="admin-panel" id="tab-labels">
+      <div class="admin-header">
+        <div>
+          <h1>Site labels</h1>
+          <p>All the copy on the public site — headline, stats, about text, contact info, FAQ.</p>
+        </div>
+      </div>
+      <div class="admin-card">
+        <form id="labelsForm" onsubmit="return false;"></form>
+      </div>
+    </section>
+
+    <!-- ---------- INQUIRIES TAB ---------- -->
+    <section class="admin-panel" id="tab-inquiries">
+      <div class="admin-header">
+        <div>
+          <h1>Inquiries</h1>
+          <p>Every booking-form submission from the public site lands here.</p>
+        </div>
+        <div style="display:flex; gap:0.6rem; align-items:center;">
+          <span class="tag" id="inquiryCount">0 inquiries</span>
+          <button class="btn btn-ghost btn-sm" id="refreshInquiriesBtn">Refresh</button>
+          <button class="btn btn-dark btn-sm" id="exportCsvBtn">Export CSV</button>
+        </div>
+      </div>
+      <div class="admin-card">
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr><th>Submitted</th><th>Client</th><th>Car</th><th>Dates</th><th>Pickup</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody id="inquiriesTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- CHAT MONITOR TAB ---------- -->
+    <section class="admin-panel" id="tab-chat">
+      <div class="admin-header">
+        <div>
+          <h1>Chat monitor</h1>
+          <p>Review chatbot sessions and remove individual conversations from the monitor.</p>
+        </div>
+        <div style="display:flex; gap:0.6rem; align-items:center;">
+          <span class="tag" id="chatSessionCount">0 sessions</span>
+          <button class="btn btn-ghost btn-sm" id="refreshChatBtn">Refresh</button>
+        </div>
+      </div>
+      <div class="chat-metrics" id="chatMetrics"></div>
+      <div class="admin-card">
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead><tr><th>Started</th><th>Username</th><th>Session</th><th>Messages</th><th>Last activity</th><th></th></tr></thead>
+            <tbody id="chatSessionsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- SETTINGS TAB ---------- -->
+    <section class="admin-panel" id="tab-settings">
+      <div class="admin-header">
+        <div>
+          <h1>Settings</h1>
+          <p>Company info, currency, fees, and the admin password.</p>
+        </div>
+      </div>
+      <div class="admin-card">
+        <form id="settingsForm" onsubmit="return false;"></form>
+      </div>
+    </section>
+
+  </main>
+  <div class="admin-modal" id="chatTranscriptModal" hidden role="dialog" aria-modal="true" aria-labelledby="chatTranscriptTitle">
+    <div class="admin-modal-panel">
+      <header class="admin-modal-header">
+        <div>
+          <p class="eyebrow">Chat session</p>
+          <h2 id="chatTranscriptTitle">Conversation</h2>
+          <p class="admin-modal-meta" id="chatTranscriptMeta"></p>
+        </div>
+        <button class="icon-btn" id="closeChatTranscript" type="button" title="Close transcript" aria-label="Close transcript"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+      </header>
+      <div class="chat-transcript" id="chatTranscript"></div>
+    </div>
+  </div>
+  <div class="admin-modal inquiry-modal" id="inquiryDetailModal" hidden role="dialog" aria-modal="true" aria-labelledby="inquiryDetailTitle">
+    <div class="admin-modal-panel inquiry-modal-panel">
+      <header class="admin-modal-header">
+        <div>
+          <p class="eyebrow">Reservation inquiry</p>
+          <h2 id="inquiryDetailTitle">Inquiry details</h2>
+          <p class="admin-modal-meta" id="inquiryDetailMeta"></p>
+        </div>
+        <div class="admin-modal-actions">
+          <button class="icon-btn" id="exportSelectedInquiry" type="button" title="Download inquiry CSV" aria-label="Download inquiry CSV"><i class="fa-solid fa-file-csv" aria-hidden="true"></i></button>
+          <button class="icon-btn" id="closeInquiryDetail" type="button" title="Close inquiry details" aria-label="Close inquiry details"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+        </div>
+      </header>
+      <div class="inquiry-details" id="inquiryDetails"></div>
+    </div>
+  </div>
+</div>
+
+<div class="admin-toast" id="adminToast"></div>
+<script src="js/supabase.js"></script>
+<script src="js/data.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>

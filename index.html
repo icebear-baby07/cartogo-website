@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cartogo.mnl — Car Rental Philippines</title>
+<meta name="description" content="Reliable cars, simple rates, and easy reservations. Rent with carTOGO.mnl.">
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+<!-- Styles -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<div class="topbar">Reliable cars · Easy booking · Flexible pickup across Metro Manila</div>
+<div class="kerb-strip" aria-hidden="true"></div>
+
+<!-- ============ HEADER ============ -->
+<header class="site-header" id="siteHeader">
+  <div class="wrap">
+    <a href="#top" class="logo"><span data-company-name>carTOGO.mnl</span></a>
+
+    <nav class="nav-links" aria-label="Primary">
+      <a href="#fleet">Fleet</a>
+      <a href="#how">How it Works</a>
+      <a href="#rates">Rates</a>
+      <a href="#about">About</a>
+      <a href="#faq">FAQ</a>
+      <a href="#contact">Contact</a>
+    </nav>
+
+    <div class="header-actions">
+      <a href="#booking" class="btn btn-primary btn-sm">Reserve a Car</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ============ HERO ============ -->
+  <section class="hero" id="top">
+    <div class="wrap">
+      <div class="hero-grid">
+        <div>
+          <p class="eyebrow">Book in minutes · Drive in hours</p>
+          <h1 id="heroTitle">Your trip starts with <em>carTOGO.mnl</em>.</h1>
+          <p class="hero-sub" id="heroSubtitle">Clean, well-maintained rental cars with clear daily rates and friendly service.</p>
+          <div class="hero-cta-row">
+            <a href="#fleet" class="btn btn-primary">Browse the Fleet</a>
+            <a href="#how" class="btn btn-ghost on-dark">How it works</a>
+          </div>
+        </div>
+        <div class="hero-art" aria-label="Main website image">
+    <img src="images/main-picture.jpg" alt="carTOGO.mnl rental cars">
+</div>
+      </div>
+    </div>
+    <div class="road" aria-hidden="true"></div>
+  </section>
+
+  <!-- ============ QUICK SEARCH (overlaps hero/road) ============ -->
+  <div class="wrap">
+    <form class="quick-search" id="quickSearchForm">
+      <div class="field">
+        <label for="qsLocation">Pickup point</label>
+        <select id="qsLocation">
+          <option>Quezon City — Fairview</option>
+          <option>Airport Area — Pasay</option>
+          <option>Quezon City — Commonwealth Ave</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="qsPickup">Pickup date</label>
+        <input type="date" id="qsPickup">
+      </div>
+      <div class="field">
+        <label for="qsReturn">Return date</label>
+        <input type="date" id="qsReturn">
+      </div>
+      <div class="field">
+        <label for="qsCategory">Car type</label>
+        <select id="qsCategory">
+          <option>Any category</option>
+          <option>Sedan</option>
+          <option>SUV</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary">Search Fleet</button>
+    </form>
+  </div>
+
+  <!-- ============ TRUST STRIP ============ -->
+  <section class="trust-strip">
+    <div class="wrap">
+      <div class="trust-grid" id="trustGrid"><!-- filled by main.js --></div>
+    </div>
+  </section>
+
+  <!-- ============ FLEET ============ -->
+  <section class="section" id="fleet">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Our fleet</p>
+        <h2>Choose the right car for your trip</h2>
+        <p>Choose from our available vehicles and send a reservation inquiry in minutes.</p>
+      </div>
+      <div class="filter-row" id="filterRow"><!-- filled by main.js --></div>
+      <div class="fleet-grid" id="fleetGrid"><!-- filled by main.js --></div>
+    </div>
+  </section>
+
+  <!-- ============ HOW IT WORKS ============ -->
+  <section class="section bg-paper" id="how">
+    <div class="wrap">
+      <div class="section-head center">
+        <p class="eyebrow">Four steps, no surprises</p>
+        <h2>How renting with us works</h2>
+      </div>
+      <div class="markers" id="markersGrid"><!-- filled by main.js --></div>
+    </div>
+  </section>
+
+  <!-- ============ WHY CHOOSE US ============ -->
+  <section class="section bg-dark">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Why carTOGO.mnl</p>
+        <h2>What's included, always</h2>
+      </div>
+      <div class="why-grid" id="whyGrid"><!-- filled by main.js --></div>
+    </div>
+  </section>
+
+  <!-- ============ RATES ============ -->
+  <section class="section" id="rates">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Pricing</p>
+        <h2>Rates &amp; deposits</h2>
+        <p>Rates shown are starting rates for the current fleet. Confirm the final rental price, deposit, and requirements with carTOGO.mnl before booking.</p>
+      </div>
+      <div class="rates-table-wrap">
+        <table class="rates">
+          <thead>
+            <tr><th>Car</th><th>Category</th><th>Per day</th><th>Per week</th><th>Deposit</th></tr>
+          </thead>
+          <tbody id="ratesBody"><!-- filled by main.js --></tbody>
+        </table>
+      </div>
+      <div class="fees-note" id="feesGrid"><!-- filled by main.js --></div>
+    </div>
+  </section>
+
+  <!-- ============ BOOKING / INQUIRY ============ -->
+  <section class="section bg-paper" id="booking">
+    <div class="wrap">
+      <div class="booking-panel">
+        <div class="booking-info">
+          <p class="eyebrow">Reserve</p>
+          <h2>Tell us about your trip</h2>
+          <p>Submit your details and our team will confirm availability and the final rental details. No payment is taken online.</p>
+          <ul class="booking-list">
+            <li><b>01</b>&nbsp; We confirm your car and dates by phone or email.</li>
+            <li><b>02</b>&nbsp; You pay the refundable deposit at pickup, not before.</li>
+            <li><b>03</b>&nbsp; Bring your license, ID, and the confirmation reference.</li>
+          </ul>
+        </div>
+
+        <form id="bookingForm" novalidate>
+          <div class="form-grid">
+            <div class="field">
+              <label for="bookingLastName">Last name</label>
+              <input type="text" id="bookingLastName" autocomplete="family-name" required>
+            </div>
+            <div class="field">
+              <label for="bookingFirstName">First name</label>
+              <input type="text" id="bookingFirstName" autocomplete="given-name" required>
+            </div>
+            <div class="field">
+              <label for="bookingMiddleName">Middle name <small class="field-note">optional</small></label>
+              <input type="text" id="bookingMiddleName" autocomplete="additional-name">
+            </div>
+            <div class="field">
+              <label for="bookingSuffix">Suffix <small class="field-note">optional</small></label>
+              <input type="text" id="bookingSuffix" autocomplete="honorific-suffix" placeholder="Jr., Sr., III">
+            </div>
+            <div class="field">
+              <label for="bookingPhone">Phone number</label>
+              <input type="tel" id="bookingPhone" autocomplete="tel" inputmode="numeric" pattern="09[0-9]{2}-[0-9]{3}-[0-9]{3}" maxlength="12" placeholder="09xx-xxx-xxx" title="Use the format 09xx-xxx-xxx" required>
+              <small class="phone-error" id="bookingPhoneError" aria-live="polite" hidden>Numbers and hyphens only.</small>
+            </div>
+            <div class="field">
+              <label for="bookingSecondaryPhone">Secondary phone <small class="field-note">optional</small></label>
+              <input type="tel" id="bookingSecondaryPhone" autocomplete="tel" inputmode="numeric" pattern="09[0-9]{2}-[0-9]{3}-[0-9]{3}" maxlength="12" placeholder="09xx-xxx-xxx" title="Use the format 09xx-xxx-xxx">
+              <small class="phone-error" id="bookingSecondaryPhoneError" aria-live="polite" hidden>Numbers and hyphens only.</small>
+            </div>
+            <div class="field span-2">
+              <label for="bookingEmail">Email address</label>
+              <input type="email" id="bookingEmail" autocomplete="email" required>
+            </div>
+            <div class="field span-2">
+              <label for="bookingCar">Car</label>
+              <select id="bookingCar" required></select>
+            </div>
+            <div class="field">
+              <label for="bookingPickup">Pickup date</label>
+              <input type="date" id="bookingPickup" required>
+            </div>
+            <div class="field">
+              <label for="bookingReturn">Return date</label>
+              <input type="date" id="bookingReturn" required>
+            </div>
+            <div class="field span-2">
+              <label for="bookingLocation">Pickup point</label>
+              <select id="bookingLocation"></select>
+            </div>
+            <div class="field span-2">
+              <label for="bookingNotes">Notes (optional)</label>
+              <textarea id="bookingNotes" rows="3" placeholder="Extra driver, child seat, airport flight number, etc."></textarea>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block" style="margin-top:1.25rem;">Send Inquiry</button>
+          <div class="form-msg" id="formMsg"></div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TESTIMONIALS ============ -->
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head center">
+        <p class="eyebrow">Vehicle highlights</p>
+        <h2>Find the right vehicle for your trip</h2>
+      </div>
+      <div class="testi-grid" id="testiGrid"><!-- filled by main.js --></div>
+    </div>
+  </section>
+
+  <!-- ============ ABOUT ============ -->
+  <section class="section bg-paper" id="about">
+    <div class="wrap">
+      <div class="section-head center">
+        <p class="eyebrow">About us</p>
+        <h2 id="aboutTitle">Built by people who actually rent cars</h2>
+        <p id="aboutBody"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FAQ ============ -->
+  <section class="section" id="faq">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Questions</p>
+        <h2>Frequently asked</h2>
+      </div>
+      <div class="faq-list" id="faqList"><!-- filled by main.js --></div>
+    </div>
+  </section>
+
+  <!-- ============ CONTACT ============ -->
+  <section class="section bg-paper" id="contact">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Contact</p>
+        <h2>Talk to a real person</h2>
+      </div>
+      <div class="contact-grid">
+        <div>
+          <div class="contact-card">
+            <h3>Phone</h3>
+            <p id="contactPhone"></p>
+            <h3 style="margin-top:1rem;">Email</h3>
+            <p id="contactEmail"></p>
+            <h3 style="margin-top:1rem;">Hours</h3>
+            <p id="contactHours"></p>
+          </div>
+          <div class="contact-card">
+            <h3>Pickup points</h3>
+            <ul id="contactLocations" style="margin-top:0.6rem; display:flex; flex-direction:column; gap:0.4rem; font-size:0.9rem; color:var(--slate);"></ul>
+          </div>
+        </div>
+        <div class="map-box">
+          <div>
+            <span class="pin"><i class="fa-solid fa-location-dot" aria-hidden="true"></i></span>
+            <span>Map preview — plug in your Google Maps embed here</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============ FOOTER ============ -->
+<div class="kerb-strip" aria-hidden="true"></div>
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="#top" class="logo"><span data-company-name>carTOGO.mnl</span></a>
+        <p id="footerAbout"></p>
+        <div class="social-row" aria-label="Social links">
+          <a href="#" aria-label="Facebook">f</a>
+          <a href="#" aria-label="Instagram">ig</a>
+          <a href="#" aria-label="X / Twitter">x</a>
+        </div>
+      </div>
+      <div>
+        <h4>Explore</h4>
+        <ul>
+          <li><a href="#fleet">Fleet</a></li>
+          <li><a href="#rates">Rates</a></li>
+          <li><a href="#how">How it works</a></li>
+          <li><a href="#faq">FAQ</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Locations</h4>
+        <ul id="footerLocations"></ul>
+      </div>
+      <div>
+        <h4>Company</h4>
+        <ul>
+          <li><a href="#about">About</a></li>
+          <li><a href="#contact">Contact</a></li>
+          <li><a href="admin.html">Admin login</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© <span id="footerYear"></span> <span data-company-name>carTOGO.mnl</span>. All rights reserved.</span>
+      <span>Built with editable rates &amp; labels via the admin panel.</span>
+    </div>
+  </div>
+</footer>
+<section class="chatbot-shell" id="chatbotShell" aria-label="carTOGO.mnl chat assistant">
+  <button class="chatbot-launcher" id="chatbotLauncher" type="button" aria-expanded="false" aria-controls="chatbotWindow">
+    <i class="fa-solid fa-comment-dots" aria-hidden="true"></i>
+    <span>Ask carTOGO</span>
+  </button>
+  <div class="chatbot-window" id="chatbotWindow" hidden>
+    <header class="chatbot-header">
+      <div><strong>carTOGO assistant</strong><span>Ready to help with your rental</span></div>
+      <div class="chatbot-actions">
+        <button class="chatbot-icon-btn" id="chatbotExpand" type="button" title="Open full view" aria-label="Open full view"><i class="fa-solid fa-expand" aria-hidden="true"></i></button>
+        <button class="chatbot-icon-btn" id="chatbotClose" type="button" title="Close chat" aria-label="Close chat"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+      </div>
+    </header>
+    <div class="chatbot-messages" id="chatbotMessages" aria-live="polite"></div>
+    <form class="chatbot-form" id="chatbotForm">
+      <input id="chatbotInput" type="text" maxlength="500" placeholder="Ask about cars, rates, or pickup..." autocomplete="off" required>
+      <button class="chatbot-send" type="submit" title="Send message" aria-label="Send message"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i></button>
+    </form>
+  </div>
+</section>
+<script src="js/supabase.js"></script>
+<script src="js/data.js"></script>
+<script src="js/main.js"></script>
+<script src="js/chatbot.js"></script>
+</body>
+</html>
