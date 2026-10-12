@@ -1,0 +1,16 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "carTOGO website server",
+			"type": "shell",
+			"command": "python",
+			"args": [
+				"main/cartogo-website/server.py"
+			],
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}

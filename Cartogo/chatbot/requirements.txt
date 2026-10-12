@@ -1,0 +1,5 @@
+boto3>=1.43.0
+botocore[crt]>=1.43.0
+pymongo>=4.10.0
+dnspython>=2.7.0
+python-dotenv>=1.0.1

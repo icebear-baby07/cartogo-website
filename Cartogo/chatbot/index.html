@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="theme-color" content="#ffffff">
+	<title>Cartogo | Chat</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+	<link rel="stylesheet" href="assets/ui/chat.css">
+</head>
+<body>
+	<div id="homePage">
+	<button class="chat-launcher" id="chatLauncher" type="button" aria-label="Open Cartogo chat" title="Open chat">
+		<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4.75 5.75h14.5v10.5H11l-5.5 3v-3H4.75V5.75Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 10h8M8 13h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+	</button>
+
+	<section class="chat-window" id="chatWindow" aria-label="Cartogo chat assistant" aria-describedby="chatStatus" hidden>
+		<header class="chat-header">
+			<div class="brand-lockup">
+				<span class="brand-symbol" aria-hidden="true">
+					<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4.75 5.75h14.5v10.5H11l-5.5 3v-3H4.75V5.75Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 10h8M8 13h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+				</span>
+				<span class="brand-info">
+					<span class="brand-title">Cartogo assistant</span>
+					<span class="brand-status" id="chatStatus"><span class="status-dot"></span>You're now talking to our AI (CB 🤖)</span>
+				</span>
+			</div>
+			<div class="header-actions">
+				<button class="icon-button fullscreen-button" id="fullscreenButton" type="button" aria-label="Expand chat to fullscreen" aria-pressed="false" title="Expand">
+					<svg class="expand-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 4H4v4m12-4h4v4M4 16v4h4m12-4v4h-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+					<svg class="shrink-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 9h5V4m6 0v5h5m0 6h-5v5m-6 0v-5H4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+				</button>
+				<button class="icon-button" id="collapseButton" type="button" aria-label="Collapse chat" title="Minimize">
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+				</button>
+			</div>
+		</header>
+
+		<main class="chat-body" id="chatBody" aria-live="polite">
+			<div class="day-label">Today</div>
+			<div class="welcome">
+				<span class="mini-avatar" aria-hidden="true">
+					<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4.75 5.75h14.5v10.5H11l-5.5 3v-3H4.75V5.75Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 10h8M8 13h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+				</span>
+				<div class="message-stack">
+					<div class="message-meta"><strong>Cartogo assistant</strong><span>9:41 AM</span></div>
+					<div class="message-bubble"><p>Hi there! What can I help you with today?</p><p>I can help with your bookings, trips, and account.</p></div>
+				</div>
+			</div>
+			<div class="suggestions" aria-label="Suggested questions">
+				<span class="suggestions-label">A few things I can help with</span>
+				<button class="suggestion" type="button" data-prompt="I need help with a booking">
+					<span>Help with a booking</span>
+					<svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+				</button>
+				<button class="suggestion" type="button" data-prompt="I have a question about my trip">
+					<span>Question about my trip</span>
+					<svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+				</button>
+				<button class="suggestion" type="button" data-prompt="I need help with my account">
+					<span>Account support</span>
+					<svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+				</button>
+			</div>
+			<div class="conversation" id="conversation"></div>
+		</main>
+
+		<footer class="chat-footer">
+			<div class="footer-promo">
+				<p class="footer-note">A little help from <span>Cartogo</span></p>
+				<div class="footer-contact-prompt" id="footerContactPrompt">
+					<button class="footer-contact-button" id="footerContactButton" type="button">Talk to an expert</button>
+					<button class="footer-contact-dismiss" id="footerContactDismiss" type="button" aria-label="Hide expert contact prompt" title="Hide">
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+					</button>
+				</div>
+			</div>
+			<form class="composer" id="chatForm">
+				<input class="message-input" id="messageInput" type="text" maxlength="10000" autocomplete="off" placeholder="Write a message..." aria-label="Write a message">
+				<button class="send-button" id="sendButton" type="submit" aria-label="Send message" title="Send message" disabled>
+					<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m21 3-7.2 18-3.9-7.9L2 9.2 21 3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M10 13 21 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+				</button>
+			</form>
+		</footer>
+	</section>
+	</div>
+
+	<main class="recommend-page" id="recommendPage" aria-label="Talk to an expert" hidden>
+		<button class="recommend-back-button" id="recommendBackButton" type="button" aria-label="Back to chat" title="Back to chat">
+			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M19 12H5m7 7-7-7 7-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+		</button>
+	</main>
+
+	<script src="assets/back/chat.js"></script>
+</body>
+</html>
