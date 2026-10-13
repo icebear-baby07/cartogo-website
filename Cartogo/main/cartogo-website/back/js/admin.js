@@ -16,6 +16,7 @@ let CARS = [];
 let INQUIRIES = [];
 let CHAT_SESSIONS = [];
 let SELECTED_INQUIRY = null;
+const ADMIN_SIGN_IN_PENDING_KEY = "cartogo.adminGoogleSignInPending";
 
 document.addEventListener("DOMContentLoaded", initAdmin);
 
@@ -28,7 +29,16 @@ async function initAdmin() {
     document.getElementById("loginError").style.display = "block";
     return;
   }
-  if (data.session) await enterAdmin();
+  if (data.session) {
+    await enterAdmin();
+    if (document.getElementById("adminShell").classList.contains("visible")
+      && sessionStorage.getItem(ADMIN_SIGN_IN_PENDING_KEY) === "true") {
+      sessionStorage.removeItem(ADMIN_SIGN_IN_PENDING_KEY);
+      toast("Signed in successfully.");
+    }
+  } else {
+    sessionStorage.removeItem(ADMIN_SIGN_IN_PENDING_KEY);
+  }
 }
 
 /* ---------- Login ---------- */
@@ -39,12 +49,14 @@ function bindLogin() {
     errorBox.textContent = "";
     errorBox.style.display = "none";
     try {
+      sessionStorage.setItem(ADMIN_SIGN_IN_PENDING_KEY, "true");
       const { error } = await supa.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo: window.location.href.split("#")[0] }
       });
       if (error) throw error;
     } catch (error) {
+      sessionStorage.removeItem(ADMIN_SIGN_IN_PENDING_KEY);
       errorBox.textContent = `Google sign-in failed: ${error.message}`;
       errorBox.style.display = "block";
       event.currentTarget.disabled = false;

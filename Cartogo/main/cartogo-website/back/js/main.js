@@ -274,6 +274,8 @@ function bindBookingForm() {
   const authStatus = document.getElementById("bookingAuthStatus");
   const submitButton = form.querySelector("[type=submit]");
   const draftKey = "cartogo.bookingDraft";
+  const signInPendingKey = "cartogo.customerGoogleSignInPending";
+  const authToast = document.getElementById("authToast");
   let currentUser = null;
 
   const hasVerifiedGoogleAccount = user => user?.app_metadata?.provider === "google"
@@ -283,6 +285,13 @@ function bindBookingForm() {
     googleButton.hidden = isGoogle;
     if (isGoogle) {
       authStatus.textContent = `Signed in as ${currentUser.email}. Google verified this email.`;
+      if (sessionStorage.getItem(signInPendingKey) === "true") {
+        sessionStorage.removeItem(signInPendingKey);
+        authToast.textContent = "Signed in successfully.";
+        authToast.classList.add("show");
+        clearTimeout(authToast.hideTimeout);
+        authToast.hideTimeout = setTimeout(() => authToast.classList.remove("show"), 3000);
+      }
     } else {
       authStatus.textContent = "Sign in with Google to send your inquiry.";
     }
@@ -342,11 +351,15 @@ function bindBookingForm() {
 
   const startGoogleSignIn = async () => {
     saveDraft();
+    sessionStorage.setItem(signInPendingKey, "true");
     const { error } = await supa.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: new URL("index.html", window.location.href).href.split("#")[0] }
     });
-    if (error) throw error;
+    if (error) {
+      sessionStorage.removeItem(signInPendingKey);
+      throw error;
+    }
   };
 
   restoreDraft();
@@ -368,6 +381,8 @@ function bindBookingForm() {
     currentUser = data.session?.user || null;
     if (hasVerifiedGoogleAccount(currentUser)) {
       sessionStorage.removeItem(draftKey);
+    } else {
+      sessionStorage.removeItem(signInPendingKey);
     }
     updateVerificationUI();
   });
