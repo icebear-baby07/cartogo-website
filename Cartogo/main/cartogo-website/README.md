@@ -1,37 +1,37 @@
-# carTOGO.mnl — Car Rental Website
+# carTOGO.mnl Website
 
-A red-themed car rental website for carTOGO.mnl with a customer-facing fleet, reservation inquiry form, pricing table, FAQ, contact section, and browser-based admin panel.
+Customer-facing car rental site with fleet information, booking inquiries, and an admin panel.
 
-## Fleet
-- Honda City — Ignited Red Metallic
-- Mitsubishi Mirage G4 — Red
-- Mitsubishi Mirage G4 — Silver
-- Toyota Fortuner
+## Start the website
 
-Vehicle photos are stored in `assets/photos/` and are connected to the fleet cards. The rates in `back/js/data.js` are starter values; update them in the Admin panel to your actual carTOGO.mnl rates before publishing.
+Requirements: Python 3.10 or newer and a Supabase project.
 
-## Run locally
+From the `Cartogo` directory, run `start_site.cmd`. On first launch, it creates `main/cartogo-website/.env` from `.env.example` and stops so you can configure it. Set `SUPABASE_URL` and `SUPABASE_ANON_KEY`, then run the launcher again. The default port is `8000`; the launcher prints local and LAN addresses.
 
-From the workspace root, double-click `start_cartogo.cmd`. It opens separate terminals for AWS sign-in, the website, and `chatbot/start_chat.cmd`. Both services bind for LAN access and print their LAN URLs. The service launchers detect an existing server and avoid starting duplicates. Allow Python through Windows Firewall on private networks if prompted.
+To start manually, run `python server.py` from `main/cartogo-website`. To start the website, chatbot, and AWS login together, run `start_cartogo.cmd` from the `Cartogo` directory. The chatbot has separate setup instructions in [OPERATIONAL_TUTORIAL.md](../../chatbot/OPERATIONAL_TUTORIAL.md).
 
-To start only the website, double-click the root `start_site.cmd`. It validates `main/cartogo-website/.env`, checks Python and the configured port, then starts `main/cartogo-website/server.py`.
+For phone testing, open the printed LAN URL on a device connected to the same network. Allow Python through Windows Firewall on the Private profile if prompted. Set `HOST=0.0.0.0` for LAN access; use `127.0.0.1` when access should be limited to this computer. LAN addresses may change, so update the Supabase redirect settings if the address changes.
 
-To start only the chatbot, double-click `chatbot/start_chat.cmd`. It creates/checks the isolated Python environment, installs dependencies, and starts the service on port `8001` by default. MongoDB logging is optional. Set `CARTOGO_CHAT_PORT` and update `CHATBOT_PORT` in `main/cartogo-website/back/js/chatbot.js` together if that port is occupied. The site embeds the chatbot at that port. This local setup uses HTTP; production deployments must serve both origins securely and configure the chatbot URL accordingly.
+## Environment
 
-## Admin
-Open `front/admin.html` and sign in with Google. Only the authorized admin email can read customer contact details or update inquiry statuses. To replace the allowlisted email, the new address must complete Google sign-in once; the current admin then adds it in Settings, and the new address signs in again to access the inbox.
+`.env.example` is the safe template. Keep the real `.env` local; it is ignored by Git. `SUPABASE_URL` and `SUPABASE_ANON_KEY` must come from the same project. The key may be that project's publishable key or legacy anon key. Never put a service-role key in this file or browser code.
 
-## Supabase setup
+The server exposes these public settings through `/config.js` and blocks direct requests for dotfiles. Restart the server after changing `.env`.
 
-1. Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `.env` to the active project's values. Start the site with `python server.py`; it exposes only those public settings through `/config.js` and blocks direct `.env` requests. Never put a service-role key in `.env` or browser code.
-2. Run [supabase-inquiry-migration.sql](back/db/supabase-inquiry-migration.sql) in the Supabase SQL editor. It creates/extends `public.inquiries`, enables row-level security, seeds `remuelfernan07@gmail.com` as the initial admin, and limits inquiry reads/updates to that Google-authenticated admin.
-3. In Supabase Authentication, enable the Google provider and leave Phone sign-in disabled; no SMS provider is needed. Configure a Google OAuth client in Google Cloud and enter its client ID/secret in Supabase, using the Supabase callback URL shown in the Google provider settings as the Google OAuth redirect URI. In Supabase URL Configuration, set Site URL to the real deployed site URL (not `http://localhost:3000`); for local testing, the app returns to the exact URL used to open it. Add these local URLs to Redirect URLs: `http://localhost:8002/front/index.html`, `http://localhost:8002/front/admin.html`, `http://127.0.0.1:8002/front/index.html`, and `http://127.0.0.1:8002/front/admin.html`. To sign in from a phone, also add the computer's exact LAN URLs, for example `http://192.168.1.20:8002/front/index.html` and `http://192.168.1.20:8002/front/admin.html` (replace the IP with the LAN URL printed by `start_site.ps1`). Add production URLs before deployment.
-4. Inquiries now require a verified Google account and are stored as `confirmed`; no SMS provider or phone OTP is used.
-5. Open Admin Settings to replace the initial admin email if needed. The change is authorized by the current admin session; the new email must first complete Google sign-in once, then the current admin can add it in Settings.
+## Supabase and Google sign-in
 
-The customer browser uses Supabase Auth and the project's public key. RLS, not hidden UI or a browser password, enforces access. Do not disable RLS or grant anonymous reads on inquiries. The SQL migration replaces existing policies on `public.inquiries` with the verified-customer/admin rules.
+Use one Supabase project consistently for the site URL, public key, Google provider, and database migrations. A mismatched URL/key pair causes authentication requests to fail.
 
-The chatbot remains a separate service. Its optional MongoDB collection stores request logs; Supabase `inquiries` stores booking requests and customer contact details. The chatbot's Supabase Chat Monitor remains separate from this inquiry workflow.
+1. In Supabase Authentication, enable Google. Create a Web application OAuth client in Google Cloud, then add the callback URL shown in Supabase's Google provider settings to Google's Authorized redirect URIs. Put the Google client ID and secret in Supabase, not in this repository.
+2. In the same Supabase project, set the Site URL to the normal deployed site URL. For local LAN testing, it can be set to the current LAN site URL, such as `http://<lan-ip>:<port>/front/`.
+3. Add the exact return pages under Supabase Authentication → URL Configuration → Redirect URLs. Include `/front/index.html` and `/front/admin.html` for every address used: `localhost`, `127.0.0.1`, the current LAN IP, and the deployed HTTPS domain as applicable. The app requests a return to the page where sign-in started. The Google Cloud callback remains the Supabase callback URL; it is not a site page.
+4. Run [supabase-inquiry-migration.sql](back/db/supabase-inquiry-migration.sql) in the SQL editor for inquiry storage, row-level security, and admin authorization. Review its initial admin email before running it. Run [supabase-chat-schema.sql](back/db/supabase-chat-schema.sql) only if using the Supabase Chat Monitor.
+5. Sign in at `front/admin.html` with an authorized Google account. To change the authorized email, first have the new account complete Google sign-in, then update the email in Admin Settings.
 
-## Important
-Fleet settings and labels still use browser `localStorage`; inquiries are stored in Supabase. The configured project endpoint now responds, but the read-only inquiry check returned `PGRST205` because `public.inquiries` is not in the project's schema cache yet. Run the migration above before testing orders. Google OAuth still requires dashboard configuration.
+Customer inquiries require a verified Google account. Row-level security restricts inquiry access; do not disable it or grant anonymous access to inquiries. If a token request returns `UNAUTHORIZED_INVALID_API_KEY`, verify that the Supabase URL and public key belong to the same project.
+
+## Data and security notes
+
+Inquiries and chat sessions use Supabase. Fleet content is seeded in `back/js/data.js`; site settings use browser-local storage and are not shared across devices.
+
+The supplied chat schema currently grants anonymous clients broad access to `public.chat_sessions`, including read and delete. Review and tighten those policies before using that schema with real or sensitive conversations in production. The chatbot service and its optional MongoDB request logging are separate from inquiry storage.

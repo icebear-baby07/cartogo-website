@@ -1,18 +1,4 @@
-/* ==========================================================================
-   carTOGO.mnl — DATA LAYER (js/data.js)
-   --------------------------------------------------------------------------
-   Every read/write to stored data goes through the `DB` object below.
-   main.js (public site) and admin.js (admin panel) never touch localStorage
-   directly — they only call DB.get___() / DB.save___() / DB.addInquiry().
-
-   WHY THIS MATTERS FOR YOU:
-   Right now DB is implemented with the browser's localStorage, which is
-   great for building/testing but is PER BROWSER — inquiries submitted by a
-   real visitor land in *their* browser, not yours. See README.md, section
-   "Connecting real data storage", for four ways to upgrade this file to a
-   real shared backend. Because every other file calls DB instead of
-   localStorage directly, upgrading storage means editing ONLY this file.
-   ========================================================================== */
+/* Site seed data, browser-local settings, Supabase inquiries, and chat sessions. */
 
 const STORAGE_KEY = "carTOGOmnl.v1";
 const SUPABASE_URL = window.CARTOGO_CONFIG?.supabaseUrl;
@@ -131,12 +117,7 @@ function _uid(prefix) {
   return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-/* ---------- Public DB API ----------
-   All methods are written as async functions even though localStorage is
-   synchronous. Do this on purpose: it means every caller already uses
-   `await DB.something()`, so swapping the body of these methods for a
-   `fetch()` call to a real backend later requires NO changes anywhere else.
-------------------------------------------------------------------------- */
+/* ---------- Public DB API ---------- */
 const DB = {
   // --- Settings (company name, currency, fees) ---
   async getSettings() {
