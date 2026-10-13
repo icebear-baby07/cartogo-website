@@ -270,17 +270,13 @@ function bindQuickSearch() {
 function bindBookingForm() {
   const form = document.getElementById("bookingForm");
   const msg = document.getElementById("formMsg");
-  const emailInput = document.getElementById("bookingEmail");
   const phoneInput = document.getElementById("bookingPhone");
+  const phoneGroup = document.getElementById("bookingPhoneGroup");
   const googleButton = document.getElementById("googleOrderButton");
   const authStatus = document.getElementById("bookingAuthStatus");
   const otpPanel = document.getElementById("bookingOtpPanel");
   const otpInput = document.getElementById("bookingOtp");
   const submitButton = form.querySelector("[type=submit]");
-  const phoneFields = [
-    { input: document.getElementById("bookingPhone"), error: document.getElementById("bookingPhoneError") },
-    { input: document.getElementById("bookingSecondaryPhone"), error: document.getElementById("bookingSecondaryPhoneError") }
-  ];
   const draftKey = "cartogo.bookingDraft";
   let currentUser = null;
   let pendingInquiry = null;
@@ -290,11 +286,9 @@ function bindBookingForm() {
   const updateVerificationUI = () => {
     const isGoogle = selectedVerification() === "google";
     googleButton.hidden = !isGoogle || currentUser?.app_metadata?.provider === "google";
-    emailInput.required = isGoogle;
-    emailInput.readOnly = isGoogle && currentUser?.app_metadata?.provider === "google";
+    phoneGroup.hidden = isGoogle;
     phoneInput.required = !isGoogle;
     if (currentUser?.app_metadata?.provider === "google") {
-      emailInput.value = currentUser.email || "";
       authStatus.textContent = `Signed in as ${currentUser.email}. Google verified this email.`;
     } else {
       authStatus.textContent = isGoogle ? "Sign in with Google to confirm your email and skip manual order review." : "A code will be sent to the phone number provided; guests stay pending admin review.";
@@ -335,9 +329,7 @@ function bindBookingForm() {
     const car = CARS.find(item => item.id === carId);
     return {
       name,
-      email: emailInput.value.trim(),
-      phone: document.getElementById("bookingPhone").value.trim(),
-      secondaryPhone: document.getElementById("bookingSecondaryPhone").value.trim(),
+      phone: phoneInput.value.trim(),
       carId,
       carName: car ? car.name : "Unknown",
       pickupDate: document.getElementById("bookingPickup").value,
@@ -347,7 +339,7 @@ function bindBookingForm() {
     };
   };
 
-  const normalizePhone = value => `+63${value.replace(/\D/g, "").replace(/^0/, "")}`;
+  const normalizePhone = value => `+63${value.replace(/\D/g, "").slice(1)}`;
 
   const persistInquiry = async (inquiry, options) => {
     await DB.addInquiry({ ...inquiry, ...options });
@@ -359,10 +351,6 @@ function bindBookingForm() {
     otpPanel.hidden = true;
     pendingInquiry = null;
     pendingOtpPhone = null;
-    phoneFields.forEach(({ input, error }) => {
-      input.classList.remove("phone-invalid");
-      error.hidden = true;
-    });
     msg.className = "form-msg success";
     msg.textContent = options.status === "confirmed"
       ? `Thanks, ${inquiry.name}. Your order is confirmed.`
@@ -418,14 +406,6 @@ function bindBookingForm() {
     updateVerificationUI();
   });
 
-  phoneFields.forEach(({ input, error }) => {
-    input.addEventListener("input", () => {
-      const hasInvalidCharacters = /[^0-9-]/.test(input.value);
-      input.classList.toggle("phone-invalid", hasInvalidCharacters);
-      error.hidden = !hasInvalidCharacters;
-    });
-  });
-
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     msg.className = "form-msg";
@@ -437,15 +417,14 @@ function bindBookingForm() {
     const hasGoogleAccount = currentUser?.app_metadata?.provider === "google"
       && (currentUser.user_metadata?.email_verified === true || currentUser.user_metadata?.email_verified === "true");
 
-    if (!lastName || !firstName || (!inquiry.phone && method === "phone") || !inquiry.carId || !inquiry.pickupDate || !inquiry.returnDate
-      || (method === "google" && !inquiry.email)) {
+    if (!lastName || !firstName || !inquiry.carId || !inquiry.pickupDate || !inquiry.returnDate) {
       msg.className = "form-msg error";
-      msg.textContent = "Please fill in your name, phone, car, and both dates. Google sign-in also requires an email.";
+      msg.textContent = "Please fill in your name, car, and both dates.";
       return;
     }
-    if ((inquiry.phone && !isValidPhone(inquiry.phone)) || (inquiry.secondaryPhone && !isValidPhone(inquiry.secondaryPhone))) {
+    if (method === "phone" && !isValidPhone(inquiry.phone)) {
       msg.className = "form-msg error";
-      msg.textContent = "Please use 09xx-xxx-xxxx for each phone number. Country codes are not accepted.";
+      msg.textContent = "Enter a valid Philippine mobile number beginning with 09. Hyphens are optional; country codes are not accepted.";
       return;
     }
     if (new Date(inquiry.returnDate) < new Date(inquiry.pickupDate)) {
@@ -521,7 +500,8 @@ function bindBookingForm() {
 
 /* ---------- Utility ---------- */
 function isValidPhone(value) {
-  return /^09\d{2}-\d{3}-\d{4}$/.test(value);
+  if (!/^[0-9\s()-]+$/.test(value)) return false;
+  return /^09\d{9}$/.test(value.replace(/\D/g, ""));
 }
 
 function escapeHtml(str) {

@@ -336,8 +336,7 @@ input, select, textarea{ font-family: inherit; font-size: 1rem; }
 .field input:focus, .field select:focus, .field textarea:focus{
   outline: none; border-color: var(--signal);
 }
-.phone-invalid{ border-color: var(--signal) !important; }
-.phone-error{ color: var(--signal); font-size: 0.72rem; line-height: 1.2; }
+.verification-phone{ margin-top: 0.45rem; }
 
 /* ---------- 6. TRUST STRIP ---------- */
 .trust-strip{
