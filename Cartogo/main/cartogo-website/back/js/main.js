@@ -270,28 +270,21 @@ function bindQuickSearch() {
 function bindBookingForm() {
   const form = document.getElementById("bookingForm");
   const msg = document.getElementById("formMsg");
-  const phoneInput = document.getElementById("bookingPhone");
-  const phoneGroup = document.getElementById("bookingPhoneGroup");
   const googleButton = document.getElementById("googleOrderButton");
   const authStatus = document.getElementById("bookingAuthStatus");
-  const otpPanel = document.getElementById("bookingOtpPanel");
-  const otpInput = document.getElementById("bookingOtp");
   const submitButton = form.querySelector("[type=submit]");
   const draftKey = "cartogo.bookingDraft";
   let currentUser = null;
-  let pendingInquiry = null;
-  let pendingOtpPhone = null;
 
-  const selectedVerification = () => form.querySelector('input[name="bookingVerification"]:checked').value;
+  const hasVerifiedGoogleAccount = user => user?.app_metadata?.provider === "google"
+    && (user.user_metadata?.email_verified === true || user.user_metadata?.email_verified === "true");
   const updateVerificationUI = () => {
-    const isGoogle = selectedVerification() === "google";
-    googleButton.hidden = !isGoogle || currentUser?.app_metadata?.provider === "google";
-    phoneGroup.hidden = isGoogle;
-    phoneInput.required = !isGoogle;
-    if (currentUser?.app_metadata?.provider === "google") {
+    const isGoogle = hasVerifiedGoogleAccount(currentUser);
+    googleButton.hidden = isGoogle;
+    if (isGoogle) {
       authStatus.textContent = `Signed in as ${currentUser.email}. Google verified this email.`;
     } else {
-      authStatus.textContent = isGoogle ? "Sign in with Google to confirm your email and skip manual order review." : "A code will be sent to the phone number provided; guests stay pending admin review.";
+      authStatus.textContent = "Sign in with Google to send your inquiry.";
     }
   };
 
@@ -329,7 +322,6 @@ function bindBookingForm() {
     const car = CARS.find(item => item.id === carId);
     return {
       name,
-      phone: phoneInput.value.trim(),
       carId,
       carName: car ? car.name : "Unknown",
       pickupDate: document.getElementById("bookingPickup").value,
@@ -339,31 +331,13 @@ function bindBookingForm() {
     };
   };
 
-  const normalizePhone = value => `+63${value.replace(/\D/g, "").slice(1)}`;
-
   const persistInquiry = async (inquiry, options) => {
     await DB.addInquiry({ ...inquiry, ...options });
     sessionStorage.removeItem(draftKey);
     form.reset();
-    if (currentUser?.app_metadata?.provider === "google") {
-      form.querySelector('input[name="bookingVerification"][value="google"]').checked = true;
-    }
-    otpPanel.hidden = true;
-    pendingInquiry = null;
-    pendingOtpPhone = null;
     msg.className = "form-msg success";
-    msg.textContent = options.status === "confirmed"
-      ? `Thanks, ${inquiry.name}. Your order is confirmed.`
-      : `Thanks, ${inquiry.name}. Your verified inquiry is pending admin review.`;
+    msg.textContent = `Thanks, ${inquiry.name}. Your inquiry is confirmed.`;
     updateVerificationUI();
-  };
-
-  const sendPhoneOtp = async phone => {
-    const { error } = await supa.auth.signInWithOtp({
-      phone,
-      options: { shouldCreateUser: true }
-    });
-    if (error) throw error;
   };
 
   const startGoogleSignIn = async () => {
@@ -376,9 +350,6 @@ function bindBookingForm() {
   };
 
   restoreDraft();
-  form.querySelectorAll('input[name="bookingVerification"]').forEach(input => {
-    input.addEventListener("change", updateVerificationUI);
-  });
   googleButton.addEventListener("click", async () => {
     googleButton.disabled = true;
     try {
@@ -395,8 +366,7 @@ function bindBookingForm() {
       return;
     }
     currentUser = data.session?.user || null;
-    if (currentUser?.app_metadata?.provider === "google") {
-      form.querySelector('input[name="bookingVerification"][value="google"]').checked = true;
+    if (hasVerifiedGoogleAccount(currentUser)) {
       sessionStorage.removeItem(draftKey);
     }
     updateVerificationUI();
@@ -413,18 +383,10 @@ function bindBookingForm() {
     const inquiry = collectInquiry();
     const lastName = document.getElementById("bookingLastName").value.trim();
     const firstName = document.getElementById("bookingFirstName").value.trim();
-    const method = selectedVerification();
-    const hasGoogleAccount = currentUser?.app_metadata?.provider === "google"
-      && (currentUser.user_metadata?.email_verified === true || currentUser.user_metadata?.email_verified === "true");
 
     if (!lastName || !firstName || !inquiry.carId || !inquiry.pickupDate || !inquiry.returnDate) {
       msg.className = "form-msg error";
       msg.textContent = "Please fill in your name, car, and both dates.";
-      return;
-    }
-    if (method === "phone" && !isValidPhone(inquiry.phone)) {
-      msg.className = "form-msg error";
-      msg.textContent = "Enter a valid Philippine mobile number beginning with 09. Hyphens are optional; country codes are not accepted.";
       return;
     }
     if (new Date(inquiry.returnDate) < new Date(inquiry.pickupDate)) {
@@ -432,31 +394,21 @@ function bindBookingForm() {
       msg.textContent = "Return date can't be earlier than the pickup date.";
       return;
     }
-    if (method === "google" && !hasGoogleAccount) {
+    if (!hasVerifiedGoogleAccount(currentUser)) {
       msg.className = "form-msg error";
-      msg.textContent = "Sign in with Google first to verify your email and confirm this order.";
+      msg.textContent = "Sign in with Google before sending your inquiry.";
       googleButton.focus();
       return;
     }
     submitButton.disabled = true;
     submitButton.textContent = "Sending…";
     try {
-      if (method === "google") {
-        inquiry.email = currentUser.email;
-        await persistInquiry(inquiry, {
-          userId: currentUser.id,
-          verificationMethod: "google_oauth",
-          status: "confirmed"
-        });
-      } else {
-        pendingInquiry = inquiry;
-        pendingOtpPhone = normalizePhone(inquiry.phone);
-        await sendPhoneOtp(pendingOtpPhone);
-        otpPanel.hidden = false;
-        otpInput.focus();
-        msg.className = "form-msg";
-        msg.textContent = `A verification code was sent to ${inquiry.phone}. Enter it to submit your inquiry.`;
-      }
+      inquiry.email = currentUser.email;
+      await persistInquiry(inquiry, {
+        userId: currentUser.id,
+        verificationMethod: "google_oauth",
+        status: "confirmed"
+      });
     } catch (err) {
       console.error(err);
       msg.className = "form-msg error";
@@ -467,43 +419,10 @@ function bindBookingForm() {
     }
   });
 
-  document.getElementById("verifyBookingOtp").addEventListener("click", async () => {
-    if (!pendingInquiry || !pendingOtpPhone) return;
-    const verifyButton = document.getElementById("verifyBookingOtp");
-    verifyButton.disabled = true;
-    try {
-      const { error } = await supa.auth.verifyOtp({ phone: pendingOtpPhone, token: otpInput.value.trim(), type: "sms" });
-      if (error) throw error;
-      await persistInquiry(pendingInquiry, { phone: pendingOtpPhone, userId: null, verificationMethod: "phone_otp", status: "pending_review" });
-      await supa.auth.signOut();
-    } catch (error) {
-      msg.className = "form-msg error";
-      msg.textContent = `Verification failed: ${error.message}`;
-    } finally {
-      verifyButton.disabled = false;
-    }
-  });
-
-  document.getElementById("resendBookingOtp").addEventListener("click", async () => {
-    if (!pendingOtpPhone) return;
-    try {
-      await sendPhoneOtp(pendingOtpPhone);
-      msg.className = "form-msg";
-      msg.textContent = "A new verification code was sent.";
-    } catch (error) {
-      msg.className = "form-msg error";
-      msg.textContent = `Could not resend the code: ${error.message}`;
-    }
-  });
   updateVerificationUI();
 }
 
 /* ---------- Utility ---------- */
-function isValidPhone(value) {
-  if (!/^[0-9\s()-]+$/.test(value)) return false;
-  return /^09\d{9}$/.test(value.replace(/\D/g, ""));
-}
-
 function escapeHtml(str) {
   return String(str)
     .replaceAll("&", "&amp;")

@@ -22,7 +22,8 @@ const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: {
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    persistSession: true
+    persistSession: true,
+    flowType: "pkce"
   }
 });
 /* ---------- Seed content (used the very first time the site loads) ---------- */

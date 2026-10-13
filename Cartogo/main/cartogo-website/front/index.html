@@ -33,6 +33,7 @@
       <a href="#about">About</a>
       <a href="#faq">FAQ</a>
       <a href="#contact">Contact</a>
+      <a href="#booking" class="mobile-nav-cta btn btn-primary btn-sm">Reserve a Car</a>
     </nav>
 
     <div class="header-actions">
@@ -215,22 +216,10 @@
             </div>
           </div>
           <fieldset class="verification-options">
-            <legend>Choose one verification method</legend>
-            <label><input type="radio" name="bookingVerification" value="phone" checked> Continue as guest with a phone code</label>
-            <label><input type="radio" name="bookingVerification" value="google"> Sign in with Google (verified email, no code)</label>
-            <div class="field verification-phone" id="bookingPhoneGroup">
-              <label for="bookingPhone">Phone number for verification</label>
-              <input type="tel" id="bookingPhone" autocomplete="tel-national" inputmode="tel" maxlength="20" placeholder="09xx-xxx-xxxx" title="Enter a Philippine mobile number beginning with 09; hyphens are optional">
-            </div>
+            <legend>Google sign-in</legend>
             <p id="bookingAuthStatus" role="status" aria-live="polite"></p>
-            <button type="button" class="btn btn-ghost" id="googleOrderButton" hidden>Continue with Google</button>
+            <button type="button" class="btn btn-ghost" id="googleOrderButton" hidden>Sign in with Google</button>
           </fieldset>
-          <div class="field span-2 booking-otp-panel" id="bookingOtpPanel" hidden>
-            <label for="bookingOtp">Text-message verification code</label>
-            <input type="text" id="bookingOtp" inputmode="numeric" autocomplete="one-time-code" maxlength="8">
-            <button type="button" class="btn btn-ghost btn-sm" id="verifyBookingOtp">Verify and send inquiry</button>
-            <button type="button" class="btn btn-ghost btn-sm" id="resendBookingOtp">Send another code</button>
-          </div>
           <button type="submit" class="btn btn-primary btn-block" style="margin-top:1.25rem;">Send Inquiry</button>
           <div class="form-msg" id="formMsg"></div>
         </form>
@@ -356,8 +345,8 @@
 </section>
 <script src="../config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="../back/js/data.js?v=inquiry-auth-2"></script>
-<script src="../back/js/main.js?v=inquiry-auth-2"></script>
+<script src="../back/js/data.js?v=inquiry-auth-3"></script>
+<script src="../back/js/main.js?v=inquiry-auth-3"></script>
 <script src="../back/js/chatbot.js"></script>
 </body>
 </html>
