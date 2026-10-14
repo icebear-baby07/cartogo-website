@@ -531,11 +531,20 @@ table.rates .skeleton-line{ height:0.7rem; }
 .booking-list b{ color: var(--asphalt); }
 .form-grid{ display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.1rem; }
 .form-grid .span-2{ grid-column: 1 / -1; }
+.booking-estimate{ min-width:0; padding:0.8rem 1rem; background:var(--concrete); border-left:3px solid var(--signal); border-radius:0 var(--radius-sm) var(--radius-sm) 0; }
+.booking-estimate[hidden]{ display:none; }
+.booking-estimate dl{ margin:0; }
+.booking-estimate-row{ display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:baseline; gap:1rem; padding:0.45rem 0; font-size:0.88rem; }
+.booking-estimate-row dt{ min-width:0; }
+.booking-estimate-row dd{ grid-column:2; grid-row:1; margin:0; font-family:var(--font-mono); font-weight:600; white-space:nowrap; text-align:right; }
+.booking-estimate-context{ display:inline; margin-left:0.25rem; color:var(--slate); font-size:0.76rem; font-weight:400; }
+.deposit-row{ border-top:1px dashed var(--line); }
+.booking-estimate-note{ margin:0.55rem 0 0; font-size:0.75rem; }
 .optional-details{ min-width:0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
-.optional-details summary{ display:flex; align-items:center; justify-content:space-between; gap:0.75rem; padding:0.85rem 0; color:var(--asphalt); font-size:0.9rem; font-weight:600; cursor:pointer; list-style:none; }
+.optional-details summary{ display:flex; align-items:center; justify-content:flex-start; gap:0.5rem; padding:0.85rem 0; color:var(--asphalt); font-size:0.9rem; font-weight:600; cursor:pointer; list-style:none; }
 .optional-details summary::-webkit-details-marker{ display:none; }
-.optional-details summary::after{ content:"+"; color:var(--signal-deep); font-family:var(--font-mono); font-size:1.2rem; transition:transform 0.2s ease; }
-.optional-details[open] summary::after{ transform:rotate(45deg); }
+.optional-details summary::before{ content:""; width:0; height:0; border-top:4px solid transparent; border-bottom:4px solid transparent; border-left:5px solid var(--slate); transition:transform 0.2s ease; }
+.optional-details[open] summary::before{ transform:rotate(90deg); }
 .optional-details-grid{ padding:0.35rem 0 1rem; }
 .verification-options{ display:grid; grid-template-columns:minmax(0, 1fr); gap:0.65rem; min-width:0; margin:1rem 0 0; padding:1rem; border:1px solid var(--line); border-radius:var(--radius-sm); }
 .verification-options legend{ max-width:100%; padding:0 0.35rem; font-weight:700; color:var(--asphalt); white-space:normal; }

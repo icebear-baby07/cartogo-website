@@ -32,6 +32,7 @@ async function init() {
   populateCarSelect();
   bindNav();
   bindBookingForm();
+  bindBookingEstimate();
   bindQuickSearch();
   bindFaqToggles();
   window.addEventListener("storage", handleFleetStorageChange);
@@ -62,6 +63,7 @@ async function handleFleetStorageChange(event) {
   renderContact();
   renderFooter();
   populateCarSelect();
+  renderBookingEstimate();
   bindFaqToggles();
 }
 
@@ -304,6 +306,55 @@ function populateCarSelect() {
   finishLoading(location);
 }
 
+function renderBookingEstimate() {
+  const estimate = document.querySelector(".booking-estimate");
+  const credentialsEntered = document.getElementById("bookingLastName").value.trim()
+    && document.getElementById("bookingFirstName").value.trim();
+  const car = CARS.find(item => item.id === document.getElementById("bookingCar").value);
+  const pickup = document.getElementById("bookingPickup").value;
+  const returnDate = document.getElementById("bookingReturn").value;
+  estimate.hidden = !(credentialsEntered && car && pickup && returnDate);
+  if (!credentialsEntered || !car || !pickup || !returnDate) return;
+
+  const location = document.getElementById("bookingLocation").value;
+  const summary = document.getElementById("bookingEstimateSummary");
+  const subtotal = document.getElementById("bookingRentalSubtotal");
+  const deposit = document.getElementById("bookingDepositEstimate");
+  const depositPercent = Number(SETTINGS.depositPercent) || 0;
+
+  document.getElementById("bookingDepositPercent").textContent = depositPercent;
+  const toUtcDay = value => {
+    const [year, month, day] = value.split("-").map(Number);
+    return Date.UTC(year, month - 1, day);
+  };
+  const elapsedDays = Math.ceil((toUtcDay(returnDate) - toUtcDay(pickup)) / 86400000);
+  if (elapsedDays < 0) {
+    summary.textContent = "Return date must be the same day or later than pickup.";
+    subtotal.textContent = "—";
+    deposit.textContent = "—";
+    return;
+  }
+
+  const rentalDays = Math.max(1, elapsedDays);
+  const rentalSubtotal = car.rate * rentalDays;
+  summary.textContent = `${rentalDays} ${rentalDays === 1 ? "day" : "days"} · ${location || "Pickup point not selected"} · ${rentalDays * 24} hours`;
+  subtotal.textContent = formatCurrency(rentalSubtotal, SETTINGS.currency);
+  deposit.textContent = formatCurrency(Math.round(rentalSubtotal * depositPercent / 100), SETTINGS.currency);
+}
+
+function bindBookingEstimate() {
+  ["bookingCar", "bookingPickup", "bookingReturn", "bookingLocation"].forEach(id => {
+    document.getElementById(id).addEventListener("change", renderBookingEstimate);
+  });
+  ["bookingLastName", "bookingFirstName"].forEach(id => {
+    document.getElementById(id).addEventListener("input", renderBookingEstimate);
+  });
+  document.getElementById("bookingForm").addEventListener("reset", () => {
+    window.setTimeout(renderBookingEstimate, 0);
+  });
+  renderBookingEstimate();
+}
+
 /* ---------- Nav (mobile toggle + smooth focus) ---------- */
 function bindNav() {
   const header = document.getElementById("siteHeader");
@@ -323,6 +374,7 @@ function bindQuickSearch() {
     const ret = document.getElementById("qsReturn").value;
     if (pickup) document.getElementById("bookingPickup").value = pickup;
     if (ret) document.getElementById("bookingReturn").value = ret;
+    renderBookingEstimate();
     document.getElementById("fleet").scrollIntoView({ behavior: "smooth", block: "start" });
   });
 }

@@ -12,7 +12,7 @@
 
 <!-- Styles -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=estimate-panel-3">
 </head>
 <body>
 
@@ -254,6 +254,19 @@
               <label for="bookingLocation">Pickup point</label>
               <select id="bookingLocation" class="skeleton-select" aria-busy="true" disabled><option value="">Loading pickup points...</option></select>
             </div>
+            <section class="booking-estimate span-2" aria-label="Estimated rental pricing" aria-live="polite" hidden>
+              <dl>
+                <div class="booking-estimate-row">
+                  <dt>Estimated rental subtotal <span class="booking-estimate-context" id="bookingEstimateSummary">Choose pickup and return dates.</span></dt>
+                  <dd id="bookingRentalSubtotal">—</dd>
+                </div>
+                <div class="booking-estimate-row deposit-row">
+                  <dt>Refundable deposit estimate (<span id="bookingDepositPercent">20</span>% of subtotal)</dt>
+                  <dd id="bookingDepositEstimate">—</dd>
+                </div>
+              </dl>
+              <p class="booking-estimate-note">The refundable deposit is separate from the rental subtotal. Final pricing is confirmed by our team.</p>
+            </section>
           </div>
           <fieldset class="verification-options">
             <legend>Google sign-in</legend>
@@ -394,7 +407,7 @@
 <script src="../config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../back/js/data.js?v=labels-storage-1"></script>
-<script src="../back/js/main.js?v=live-label-sync-1"></script>
+<script src="../back/js/main.js?v=booking-estimate-2"></script>
 <script src="../back/js/chatbot.js"></script>
 </body>
 </html>
