@@ -21,12 +21,17 @@ const ADMIN_SIGN_IN_PENDING_KEY = "cartogo.adminGoogleSignInPending";
 document.addEventListener("DOMContentLoaded", initAdmin);
 
 async function initAdmin() {
-  SETTINGS = await DB.getSettings();
   bindLogin();
+  if (!window.CARTOGO_CONFIG?.supabaseUrl || !window.CARTOGO_CONFIG?.supabaseAnonKey) {
+    showLoginError("Supabase configuration is missing. Start the site with Cartogo/start_site.cmd after setting SUPABASE_URL and SUPABASE_ANON_KEY in main/cartogo-website/.env.");
+    document.getElementById("adminGoogleSignIn").disabled = true;
+    return;
+  }
+
+  SETTINGS = await DB.getSettings();
   const { data, error } = await supa.auth.getSession();
   if (error) {
-    document.getElementById("loginError").textContent = `Could not check sign-in status: ${error.message}`;
-    document.getElementById("loginError").style.display = "block";
+    showLoginError(`Could not check sign-in status: ${error.message}`);
     return;
   }
   if (data.session) {
@@ -39,6 +44,12 @@ async function initAdmin() {
   } else {
     sessionStorage.removeItem(ADMIN_SIGN_IN_PENDING_KEY);
   }
+}
+
+function showLoginError(message) {
+  const errorBox = document.getElementById("loginError");
+  errorBox.textContent = message;
+  errorBox.style.display = "block";
 }
 
 /* ---------- Login ---------- */
@@ -57,8 +68,7 @@ function bindLogin() {
       if (error) throw error;
     } catch (error) {
       sessionStorage.removeItem(ADMIN_SIGN_IN_PENDING_KEY);
-      errorBox.textContent = `Google sign-in failed: ${error.message}`;
-      errorBox.style.display = "block";
+      showLoginError(`Google sign-in failed: ${error.message}`);
       event.currentTarget.disabled = false;
     }
   });
