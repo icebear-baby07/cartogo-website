@@ -774,20 +774,21 @@ function closeInquiryDetailModal() {
 function renderSettingsTab() {
   const wrap = document.getElementById("settingsForm");
   wrap.innerHTML = `
-    <div class="label-field"><label>Company name</label><input id="setCompanyName" value="${attr(SETTINGS.companyName)}"></div>
-    <div class="label-field"><label>Currency symbol</label><input id="setCurrency" value="${attr(SETTINGS.currency)}" maxlength="3"></div>
-    <div class="label-field"><label>Deposit percentage (% of daily rate)</label><input id="setDeposit" type="number" value="${SETTINGS.depositPercent}"></div>
-    <div class="label-field"><label>Extra driver fee</label><input id="setExtraDriver" type="number" value="${SETTINGS.extraDriverFee}"></div>
-    <div class="label-field"><label>Child seat fee</label><input id="setChildSeat" type="number" value="${SETTINGS.childSeatFee}"></div>
-    <div class="label-field"><label>Late return fee (per hour)</label><input id="setLateFee" type="number" value="${SETTINGS.lateFeePerHour}"></div>
-    <div class="label-field"><label for="setAdminEmail">Authorized admin Google email</label><input id="setAdminEmail" type="email" value="${attr(SETTINGS.adminEmail || "")}" required></div>
-    <button type="button" class="btn btn-primary" id="saveSettingsBtn">Save settings</button>
-
-    <div class="admin-card" style="margin-top:1.75rem; border: 1px dashed var(--danger);">
-      <h2 style="color:var(--danger);">Danger zone</h2>
-      <p class="sub">Resets local fleet, labels, and site preferences. Customer inquiries and admin authorization remain stored in Supabase.</p>
-      <button type="button" class="btn btn-ghost btn-sm" id="resetAllBtn" style="border-color:var(--danger); color:var(--danger);">Reset everything to defaults</button>
+    <div class="settings-grid">
+      <div class="label-field"><label for="setCompanyName">Company name</label><input id="setCompanyName" value="${attr(SETTINGS.companyName)}"></div>
+      <div class="label-field"><label for="setCurrency">Currency symbol</label><input id="setCurrency" value="${attr(SETTINGS.currency)}" maxlength="3"></div>
+      <div class="label-field"><label for="setDeposit">Deposit percentage (% of daily rate)</label><input id="setDeposit" type="number" value="${SETTINGS.depositPercent}"></div>
+      <div class="label-field"><label for="setExtraDriver">Extra driver fee</label><input id="setExtraDriver" type="number" value="${SETTINGS.extraDriverFee}"></div>
+      <div class="label-field"><label for="setChildSeat">Child seat fee</label><input id="setChildSeat" type="number" value="${SETTINGS.childSeatFee}"></div>
+      <div class="label-field"><label for="setLateFee">Late return fee (per hour)</label><input id="setLateFee" type="number" value="${SETTINGS.lateFeePerHour}"></div>
+      <div class="label-field settings-admin-email"><label for="setAdminEmail">Authorized admin Google email</label><input id="setAdminEmail" type="email" value="${attr(SETTINGS.adminEmail || "")}" required></div>
     </div>
+    <div class="settings-actions"><button type="button" class="btn btn-primary" id="saveSettingsBtn">Save settings</button></div>
+
+    <section class="danger-zone">
+      <div><h2>Danger zone</h2><p>Resets local fleet, labels, and site preferences. Customer inquiries and admin authorization remain stored in Supabase.</p></div>
+      <button type="button" class="btn btn-ghost btn-sm" id="resetAllBtn">Reset everything to defaults</button>
+    </section>
   `;
 
   document.getElementById("saveSettingsBtn").addEventListener("click", async () => {

@@ -11,7 +11,7 @@
 
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-<link rel="stylesheet" href="css/admin.css?v=admin-fleet-layout-2">
+<link rel="stylesheet" href="css/admin.css?v=admin-mobile-tabs-1">
 </head>
 <body class="admin-body">
 
@@ -109,7 +109,7 @@
         </div>
       </div>
       <div class="admin-card">
-        <div style="overflow-x:auto;">
+        <div class="admin-table-scroll" style="overflow-x:auto;">
           <table class="admin-table">
             <thead>
               <tr><th>Submitted</th><th>Client</th><th>Car</th><th>Dates</th><th>Pickup</th><th>Status</th><th></th></tr>
@@ -134,7 +134,7 @@
       </div>
       <div class="chat-metrics" id="chatMetrics"></div>
       <div class="admin-card">
-        <div style="overflow-x:auto;">
+        <div class="admin-table-scroll" style="overflow-x:auto;">
           <table class="admin-table">
             <thead><tr><th>Started</th><th>Username</th><th>Session</th><th>Messages</th><th>Last activity</th><th></th></tr></thead>
             <tbody id="chatSessionsTableBody"></tbody>
@@ -192,6 +192,6 @@
 <script src="../config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../back/js/data.js?v=fleet-storage-1"></script>
-<script src="../back/js/admin.js?v=fleet-editor-1"></script>
+<script src="../back/js/admin.js?v=admin-mobile-tabs-1"></script>
 </body>
 </html>
