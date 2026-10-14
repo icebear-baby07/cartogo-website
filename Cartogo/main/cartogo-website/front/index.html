@@ -52,8 +52,8 @@
       <div class="hero-grid">
         <div>
           <p class="eyebrow">Book in minutes · Drive in hours</p>
-          <h1 id="heroTitle">Your trip starts with <em>carTOGO.mnl</em>.</h1>
-          <p class="hero-sub" id="heroSubtitle">Clean, well-maintained rental cars with clear daily rates and friendly service.</p>
+          <h1 id="heroTitle" aria-busy="true" aria-label="Loading headline"><span class="skeleton skeleton-hero-title" aria-hidden="true"></span><span class="skeleton skeleton-hero-title skeleton-hero-title-short" aria-hidden="true"></span></h1>
+          <p class="hero-sub" id="heroSubtitle" aria-busy="true" aria-label="Loading introduction"><span class="skeleton skeleton-hero-copy" aria-hidden="true"></span><span class="skeleton skeleton-hero-copy skeleton-hero-copy-short" aria-hidden="true"></span></p>
           <div class="hero-cta-row">
             <a href="#fleet" class="btn btn-primary">Browse the Fleet</a>
             <a href="#how" class="btn btn-ghost on-dark">How it works</a>
@@ -101,7 +101,12 @@
   <!-- ============ TRUST STRIP ============ -->
   <section class="trust-strip">
     <div class="wrap">
-      <div class="trust-grid" id="trustGrid"><!-- filled by main.js --></div>
+      <div class="trust-grid" id="trustGrid" aria-busy="true" aria-label="Loading service details">
+        <div class="trust-item" aria-hidden="true"><span class="skeleton skeleton-trust-value"></span><span class="skeleton skeleton-line line-medium"></span></div>
+        <div class="trust-item" aria-hidden="true"><span class="skeleton skeleton-trust-value"></span><span class="skeleton skeleton-line line-medium"></span></div>
+        <div class="trust-item" aria-hidden="true"><span class="skeleton skeleton-trust-value"></span><span class="skeleton skeleton-line line-medium"></span></div>
+        <div class="trust-item" aria-hidden="true"><span class="skeleton skeleton-trust-value"></span><span class="skeleton skeleton-line line-medium"></span></div>
+      </div>
     </div>
   </section>
 
@@ -113,8 +118,17 @@
         <h2>Choose the right car for your trip</h2>
         <p>Choose from our available vehicles and send a reservation inquiry in minutes.</p>
       </div>
-      <div class="filter-row" id="filterRow"><!-- filled by main.js --></div>
-      <div class="fleet-grid" id="fleetGrid"><!-- filled by main.js --></div>
+      <div class="filter-row" id="filterRow" aria-busy="true" aria-label="Loading fleet filters">
+        <span class="skeleton filter-skeleton" aria-hidden="true"></span>
+        <span class="skeleton filter-skeleton" aria-hidden="true"></span>
+        <span class="skeleton filter-skeleton" aria-hidden="true"></span>
+      </div>
+      <div class="fleet-grid" id="fleetGrid" aria-busy="true" aria-label="Loading cars">
+        <article class="car-card skeleton-card" aria-hidden="true"><div class="skeleton skeleton-media"></div><div class="skeleton-card-body"><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-line line-short"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span><div class="skeleton-card-foot"><span class="skeleton skeleton-price"></span><span class="skeleton skeleton-button"></span></div></div></article>
+        <article class="car-card skeleton-card" aria-hidden="true"><div class="skeleton skeleton-media"></div><div class="skeleton-card-body"><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-line line-short"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span><div class="skeleton-card-foot"><span class="skeleton skeleton-price"></span><span class="skeleton skeleton-button"></span></div></div></article>
+        <article class="car-card skeleton-card" aria-hidden="true"><div class="skeleton skeleton-media"></div><div class="skeleton-card-body"><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-line line-short"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span><div class="skeleton-card-foot"><span class="skeleton skeleton-price"></span><span class="skeleton skeleton-button"></span></div></div></article>
+        <article class="car-card skeleton-card" aria-hidden="true"><div class="skeleton skeleton-media"></div><div class="skeleton-card-body"><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-line line-short"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span><div class="skeleton-card-foot"><span class="skeleton skeleton-price"></span><span class="skeleton skeleton-button"></span></div></div></article>
+      </div>
     </div>
   </section>
 
@@ -125,7 +139,12 @@
         <p class="eyebrow">Four steps, no surprises</p>
         <h2>How renting with us works</h2>
       </div>
-      <div class="markers" id="markersGrid"><!-- filled by main.js --></div>
+      <div class="markers" id="markersGrid" aria-busy="true" aria-label="Loading rental steps">
+        <div class="marker skeleton-marker" aria-hidden="true"><span class="skeleton skeleton-step-number"></span><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span></div>
+        <div class="marker skeleton-marker" aria-hidden="true"><span class="skeleton skeleton-step-number"></span><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span></div>
+        <div class="marker skeleton-marker" aria-hidden="true"><span class="skeleton skeleton-step-number"></span><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span></div>
+        <div class="marker skeleton-marker" aria-hidden="true"><span class="skeleton skeleton-step-number"></span><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span></div>
+      </div>
     </div>
   </section>
 
@@ -136,7 +155,14 @@
         <p class="eyebrow">Why carTOGO.mnl</p>
         <h2>What's included, always</h2>
       </div>
-      <div class="why-grid" id="whyGrid"><!-- filled by main.js --></div>
+      <div class="why-grid" id="whyGrid" aria-busy="true" aria-label="Loading service benefits">
+        <div class="why-item skeleton-why" aria-hidden="true"><span class="skeleton skeleton-benefit-icon"></span><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span></div>
+        <div class="why-item skeleton-why" aria-hidden="true"><span class="skeleton skeleton-benefit-icon"></span><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span></div>
+        <div class="why-item skeleton-why" aria-hidden="true"><span class="skeleton skeleton-benefit-icon"></span><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span></div>
+        <div class="why-item skeleton-why" aria-hidden="true"><span class="skeleton skeleton-benefit-icon"></span><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span></div>
+        <div class="why-item skeleton-why" aria-hidden="true"><span class="skeleton skeleton-benefit-icon"></span><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span></div>
+        <div class="why-item skeleton-why" aria-hidden="true"><span class="skeleton skeleton-benefit-icon"></span><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span></div>
+      </div>
     </div>
   </section>
 
@@ -153,10 +179,20 @@
           <thead>
             <tr><th>Car</th><th>Category</th><th>Per day</th><th>Per week</th><th>Deposit</th></tr>
           </thead>
-          <tbody id="ratesBody"><!-- filled by main.js --></tbody>
+          <tbody id="ratesBody" aria-busy="true">
+            <tr aria-hidden="true"><td><span class="skeleton skeleton-line line-wide"></span></td><td><span class="skeleton skeleton-line line-short"></span></td><td><span class="skeleton skeleton-line"></span></td><td><span class="skeleton skeleton-line"></span></td><td><span class="skeleton skeleton-line line-medium"></span></td></tr>
+            <tr aria-hidden="true"><td><span class="skeleton skeleton-line line-wide"></span></td><td><span class="skeleton skeleton-line line-short"></span></td><td><span class="skeleton skeleton-line"></span></td><td><span class="skeleton skeleton-line"></span></td><td><span class="skeleton skeleton-line line-medium"></span></td></tr>
+            <tr aria-hidden="true"><td><span class="skeleton skeleton-line line-wide"></span></td><td><span class="skeleton skeleton-line line-short"></span></td><td><span class="skeleton skeleton-line"></span></td><td><span class="skeleton skeleton-line"></span></td><td><span class="skeleton skeleton-line line-medium"></span></td></tr>
+            <tr aria-hidden="true"><td><span class="skeleton skeleton-line line-wide"></span></td><td><span class="skeleton skeleton-line line-short"></span></td><td><span class="skeleton skeleton-line"></span></td><td><span class="skeleton skeleton-line"></span></td><td><span class="skeleton skeleton-line line-medium"></span></td></tr>
+          </tbody>
         </table>
       </div>
-      <div class="fees-note" id="feesGrid"><!-- filled by main.js --></div>
+      <div class="fees-note" id="feesGrid" aria-busy="true" aria-label="Loading fees">
+        <div class="fee-skeleton" aria-hidden="true"><span class="skeleton skeleton-line line-short"></span><span class="skeleton skeleton-line"></span></div>
+        <div class="fee-skeleton" aria-hidden="true"><span class="skeleton skeleton-line line-short"></span><span class="skeleton skeleton-line"></span></div>
+        <div class="fee-skeleton" aria-hidden="true"><span class="skeleton skeleton-line line-short"></span><span class="skeleton skeleton-line"></span></div>
+        <div class="fee-skeleton" aria-hidden="true"><span class="skeleton skeleton-line line-short"></span><span class="skeleton skeleton-line"></span></div>
+      </div>
     </div>
   </section>
 
@@ -185,17 +221,26 @@
               <label for="bookingFirstName">First name</label>
               <input type="text" id="bookingFirstName" autocomplete="given-name" required>
             </div>
-            <div class="field">
-              <label for="bookingMiddleName">Middle name <small class="field-note">optional</small></label>
-              <input type="text" id="bookingMiddleName" autocomplete="additional-name">
-            </div>
-            <div class="field">
-              <label for="bookingSuffix">Suffix <small class="field-note">optional</small></label>
-              <input type="text" id="bookingSuffix" autocomplete="honorific-suffix" placeholder="Jr., Sr., III">
-            </div>
+            <details class="optional-details span-2">
+              <summary>Additional details <small class="field-note">optional</small></summary>
+              <div class="form-grid optional-details-grid">
+                <div class="field">
+                  <label for="bookingMiddleName">Middle name</label>
+                  <input type="text" id="bookingMiddleName" autocomplete="additional-name">
+                </div>
+                <div class="field">
+                  <label for="bookingSuffix">Suffix</label>
+                  <input type="text" id="bookingSuffix" autocomplete="honorific-suffix" placeholder="Jr., Sr., III">
+                </div>
+                <div class="field span-2">
+                  <label for="bookingNotes">Notes</label>
+                  <textarea id="bookingNotes" rows="3" placeholder="Extra driver, child seat, airport flight number, etc."></textarea>
+                </div>
+              </div>
+            </details>
             <div class="field span-2">
               <label for="bookingCar">Car</label>
-              <select id="bookingCar" required></select>
+              <select id="bookingCar" class="skeleton-select" aria-busy="true" required disabled><option value="">Loading cars...</option></select>
             </div>
             <div class="field">
               <label for="bookingPickup">Pickup date</label>
@@ -207,11 +252,7 @@
             </div>
             <div class="field span-2">
               <label for="bookingLocation">Pickup point</label>
-              <select id="bookingLocation"></select>
-            </div>
-            <div class="field span-2">
-              <label for="bookingNotes">Notes (optional)</label>
-              <textarea id="bookingNotes" rows="3" placeholder="Extra driver, child seat, airport flight number, etc."></textarea>
+              <select id="bookingLocation" class="skeleton-select" aria-busy="true" disabled><option value="">Loading pickup points...</option></select>
             </div>
           </div>
           <fieldset class="verification-options">
@@ -233,7 +274,11 @@
         <p class="eyebrow">Vehicle highlights</p>
         <h2>Find the right vehicle for your trip</h2>
       </div>
-      <div class="testi-grid" id="testiGrid"><!-- filled by main.js --></div>
+      <div class="testi-grid" id="testiGrid" aria-busy="true" aria-label="Loading vehicle highlights">
+        <div class="testi-card skeleton-testimonial" aria-hidden="true"><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span><span class="skeleton skeleton-line line-short"></span></div>
+        <div class="testi-card skeleton-testimonial" aria-hidden="true"><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span><span class="skeleton skeleton-line line-short"></span></div>
+        <div class="testi-card skeleton-testimonial" aria-hidden="true"><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span><span class="skeleton skeleton-line line-short"></span></div>
+      </div>
     </div>
   </section>
 
@@ -244,7 +289,13 @@
         <p class="eyebrow">Questions</p>
         <h2>Frequently asked</h2>
       </div>
-      <div class="faq-list" id="faqList"><!-- filled by main.js --></div>
+      <div class="faq-list" id="faqList" aria-busy="true" aria-label="Loading frequently asked questions">
+        <div class="faq-item skeleton-faq" aria-hidden="true"><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-faq-plus"></span></div>
+        <div class="faq-item skeleton-faq" aria-hidden="true"><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-faq-plus"></span></div>
+        <div class="faq-item skeleton-faq" aria-hidden="true"><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-faq-plus"></span></div>
+        <div class="faq-item skeleton-faq" aria-hidden="true"><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-faq-plus"></span></div>
+        <div class="faq-item skeleton-faq" aria-hidden="true"><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-faq-plus"></span></div>
+      </div>
     </div>
   </section>
 
@@ -259,15 +310,19 @@
         <div>
           <div class="contact-card">
             <h3>Phone</h3>
-            <p id="contactPhone"></p>
+            <p id="contactPhone" aria-busy="true"><span class="skeleton skeleton-contact-line" aria-hidden="true"></span></p>
             <h3 style="margin-top:1rem;">Email</h3>
-            <p id="contactEmail"></p>
+            <p id="contactEmail" aria-busy="true"><span class="skeleton skeleton-contact-line line-wide" aria-hidden="true"></span></p>
             <h3 style="margin-top:1rem;">Hours</h3>
-            <p id="contactHours"></p>
+            <p id="contactHours" aria-busy="true"><span class="skeleton skeleton-contact-line line-medium" aria-hidden="true"></span></p>
           </div>
           <div class="contact-card">
             <h3>Pickup points</h3>
-            <ul id="contactLocations" style="margin-top:0.6rem; display:flex; flex-direction:column; gap:0.4rem; font-size:0.9rem; color:var(--slate);"></ul>
+            <ul id="contactLocations" aria-busy="true" aria-label="Loading pickup points" style="margin-top:0.6rem; display:flex; flex-direction:column; gap:0.4rem; font-size:0.9rem; color:var(--slate);">
+              <li aria-hidden="true"><span class="skeleton skeleton-contact-line"></span></li>
+              <li aria-hidden="true"><span class="skeleton skeleton-contact-line line-wide"></span></li>
+              <li aria-hidden="true"><span class="skeleton skeleton-contact-line line-medium"></span></li>
+            </ul>
           </div>
         </div>
         <div class="map-box">
@@ -289,8 +344,8 @@
     <div class="footer-grid">
       <div class="footer-brand">
         <a href="#top" class="logo"><span data-company-name>carTOGO.mnl</span></a>
-        <h4 id="footerAboutTitle"></h4>
-        <p id="footerAbout"></p>
+        <h4 id="footerAboutTitle" aria-busy="true"><span class="skeleton skeleton-footer-title" aria-hidden="true"></span></h4>
+        <p id="footerAbout" aria-busy="true"><span class="skeleton skeleton-footer-line" aria-hidden="true"></span><span class="skeleton skeleton-footer-line" aria-hidden="true"></span><span class="skeleton skeleton-footer-line line-medium" aria-hidden="true"></span></p>
         <div class="social-row" aria-label="Social links">
           <a href="#" aria-label="Facebook">f</a>
           <a href="#" aria-label="Instagram">ig</a>
@@ -308,7 +363,11 @@
       </div>
       <div>
         <h4>Locations</h4>
-        <ul id="footerLocations"></ul>
+        <ul id="footerLocations" aria-busy="true" aria-label="Loading pickup locations">
+          <li aria-hidden="true"><span class="skeleton skeleton-footer-line"></span></li>
+          <li aria-hidden="true"><span class="skeleton skeleton-footer-line line-medium"></span></li>
+          <li aria-hidden="true"><span class="skeleton skeleton-footer-line line-wide"></span></li>
+        </ul>
       </div>
       <div>
         <h4>Company</h4>

@@ -6,7 +6,7 @@ Customer-facing car rental site with fleet information, booking inquiries, and a
 
 Requirements: Python 3.10 or newer and a Supabase project.
 
-From the `Cartogo` directory, run `start_site.cmd`. On first launch, it creates `main/cartogo-website/.env` from `.env.example` and stops so you can configure it. Set `SUPABASE_URL` and `SUPABASE_ANON_KEY`, then run the launcher again. The default port is `8000`; the launcher prints local and LAN addresses.
+From the `Cartogo` directory, run `start_site.cmd`. On first launch, it creates `main/cartogo-website/.env` from `.env.example` and stops so you can configure it. Set `SUPABASE_URL` and `SUPABASE_ANON_KEY`, then run the launcher again. The default port is `8002`; the launcher prints local and LAN addresses.
 
 To start manually, run `python server.py` from `main/cartogo-website`. To start the website, chatbot, and AWS login together, run `start_cartogo.cmd` from the `Cartogo` directory. The chatbot has separate setup instructions in [OPERATIONAL_TUTORIAL.md](../../chatbot/OPERATIONAL_TUTORIAL.md).
 

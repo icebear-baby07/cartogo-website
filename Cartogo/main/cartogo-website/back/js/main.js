@@ -72,10 +72,19 @@ function renderBrand() {
   });
 }
 
+function finishLoading(element) {
+  element.setAttribute("aria-busy", "false");
+  element.removeAttribute("aria-label");
+}
+
 /* ---------- Hero ---------- */
 function renderHero() {
-  document.getElementById("heroTitle").innerHTML = LABELS.hero.title;
-  document.getElementById("heroSubtitle").textContent = LABELS.hero.subtitle;
+  const title = document.getElementById("heroTitle");
+  title.innerHTML = LABELS.hero.title;
+  finishLoading(title);
+  const subtitle = document.getElementById("heroSubtitle");
+  subtitle.textContent = LABELS.hero.subtitle;
+  finishLoading(subtitle);
 }
 
 /* ---------- Trust strip ---------- */
@@ -91,12 +100,14 @@ function renderTrustStrip() {
     </div>
   `;
   }).join("");
+  finishLoading(wrap);
 }
 
 /* ---------- Fleet filters ---------- */
 function renderFilters() {
   const categories = ["All", ...new Set(CARS.map(c => c.category))];
   const wrap = document.getElementById("filterRow");
+  finishLoading(wrap);
   wrap.innerHTML = categories.map(cat => `
     <button class="filter-btn ${cat === activeFilter ? "active" : ""}" data-filter="${escapeHtml(cat)}">${escapeHtml(cat)}</button>
   `).join("");
@@ -112,6 +123,7 @@ function renderFilters() {
 /* ---------- Fleet grid ---------- */
 function renderFleet() {
   const grid = document.getElementById("fleetGrid");
+  finishLoading(grid);
   const list = activeFilter === "All" ? CARS : CARS.filter(c => c.category === activeFilter);
 
   if (list.length === 0) {
@@ -170,6 +182,7 @@ function renderHowItWorks() {
       <p>${escapeHtml(step.description)}</p>
     </div>
   `).join("");
+  finishLoading(wrap);
 }
 
 /* ---------- Why choose us ---------- */
@@ -182,6 +195,7 @@ function renderWhyChooseUs() {
       <p>${escapeHtml(item.description)}</p>
     </div>
   `).join("");
+  finishLoading(wrap);
 }
 
 /* ---------- Rates table ---------- */
@@ -196,13 +210,16 @@ function renderRates() {
       <td class="num">${formatCurrency(Math.round(car.rate * SETTINGS.depositPercent / 100), SETTINGS.currency)}</td>
     </tr>
   `).join("");
+  finishLoading(tbody);
 
-  document.getElementById("feesGrid").innerHTML = `
+  const feesGrid = document.getElementById("feesGrid");
+  feesGrid.innerHTML = `
     <div class="fee-chip"><b>${formatCurrency(SETTINGS.extraDriverFee, SETTINGS.currency)}</b><span>Extra driver / trip</span></div>
     <div class="fee-chip"><b>${formatCurrency(SETTINGS.childSeatFee, SETTINGS.currency)}</b><span>Child seat / trip</span></div>
     <div class="fee-chip"><b>${formatCurrency(SETTINGS.lateFeePerHour, SETTINGS.currency)}</b><span>Late return / hour</span></div>
     <div class="fee-chip"><b>${SETTINGS.depositPercent}%</b><span>Refundable deposit</span></div>
   `;
+  finishLoading(feesGrid);
 }
 
 /* ---------- Testimonials ---------- */
@@ -214,6 +231,7 @@ function renderTestimonials() {
       <div class="who">${escapeHtml(t.name)} — ${escapeHtml(t.detail)}</div>
     </div>
   `).join("");
+  finishLoading(wrap);
 }
 
 /* ---------- FAQ ---------- */
@@ -228,6 +246,7 @@ function renderFaq() {
       <div class="faq-a"><p>${escapeHtml(item.a)}</p></div>
     </div>
   `).join("");
+  finishLoading(wrap);
 }
 
 function bindFaqToggles() {
@@ -246,16 +265,25 @@ function renderContact() {
   document.getElementById("contactPhone").textContent = c.phone;
   document.getElementById("contactEmail").textContent = c.email;
   document.getElementById("contactHours").textContent = c.hours;
-  document.getElementById("contactLocations").innerHTML = c.locations.map(loc => `<li><i class="fa-solid fa-location-dot" aria-hidden="true"></i> ${escapeHtml(loc)}</li>`).join("");
+  ["contactPhone", "contactEmail", "contactHours"].forEach(id => finishLoading(document.getElementById(id)));
+  const locations = document.getElementById("contactLocations");
+  locations.innerHTML = c.locations.map(loc => `<li><i class="fa-solid fa-location-dot" aria-hidden="true"></i> ${escapeHtml(loc)}</li>`).join("");
+  finishLoading(locations);
 }
 
 /* ---------- Footer ---------- */
 function renderFooter() {
-  document.getElementById("footerAboutTitle").textContent = LABELS.about.title;
-  document.getElementById("footerAbout").textContent = LABELS.about.body;
+  const aboutTitle = document.getElementById("footerAboutTitle");
+  aboutTitle.textContent = LABELS.about.title;
+  finishLoading(aboutTitle);
+  const aboutBody = document.getElementById("footerAbout");
+  aboutBody.textContent = LABELS.about.body;
+  finishLoading(aboutBody);
   document.getElementById("footerYear").textContent = new Date().getFullYear();
-  document.getElementById("footerLocations").innerHTML = LABELS.contact.locations
+  const locations = document.getElementById("footerLocations");
+  locations.innerHTML = LABELS.contact.locations
     .map(loc => `<li>${escapeHtml(loc.split("—")[0].trim())}</li>`).join("");
+  finishLoading(locations);
 }
 
 /* ---------- Booking form select ---------- */
@@ -263,11 +291,17 @@ function populateCarSelect() {
   const select = document.getElementById("bookingCar");
   select.innerHTML = `<option value="">Select a car</option>` +
     CARS.map(c => `<option value="${c.id}">${escapeHtml(c.name)} — ${formatCurrency(c.rate, SETTINGS.currency)}/day</option>`).join("");
+  select.disabled = false;
+  select.classList.remove("skeleton-select");
+  finishLoading(select);
 
   const location = document.getElementById("bookingLocation");
   location.innerHTML = LABELS.contact.locations
     .map(loc => loc.split("—")[0].trim())
     .map(loc => `<option value="${escapeHtml(loc)}">${escapeHtml(loc)}</option>`).join("");
+  location.disabled = false;
+  location.classList.remove("skeleton-select");
+  finishLoading(location);
 }
 
 /* ---------- Nav (mobile toggle + smooth focus) ---------- */
