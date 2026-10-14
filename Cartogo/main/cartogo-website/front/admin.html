@@ -11,7 +11,7 @@
 
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-<link rel="stylesheet" href="css/admin.css?v=admin-mobile-tabs-1">
+<link rel="stylesheet" href="css/admin.css?v=admin-mobile-tabs-2">
 </head>
 <body class="admin-body">
 
@@ -104,8 +104,8 @@
         </div>
         <div style="display:flex; gap:0.6rem; align-items:center;">
           <span class="tag" id="inquiryCount">0 inquiries</span>
-          <button class="btn btn-ghost btn-sm" id="refreshInquiriesBtn">Refresh</button>
-          <button class="btn btn-dark btn-sm" id="exportCsvBtn">Export CSV</button>
+          <button class="btn btn-ghost btn-sm" id="refreshInquiriesBtn" type="button" title="Refresh inquiries" aria-label="Refresh inquiries"><i class="fa-solid fa-rotate" aria-hidden="true"></i><span class="admin-action-label">Refresh</span></button>
+          <button class="btn btn-dark btn-sm" id="exportCsvBtn" type="button" title="Export inquiries as CSV" aria-label="Export inquiries as CSV"><i class="fa-solid fa-file-csv" aria-hidden="true"></i><span class="admin-action-label">Export CSV</span></button>
         </div>
       </div>
       <div class="admin-card">
@@ -129,7 +129,7 @@
         </div>
         <div style="display:flex; gap:0.6rem; align-items:center;">
           <span class="tag" id="chatSessionCount">0 sessions</span>
-          <button class="btn btn-ghost btn-sm" id="refreshChatBtn">Refresh</button>
+          <button class="btn btn-ghost btn-sm" id="refreshChatBtn" type="button" title="Refresh chat sessions" aria-label="Refresh chat sessions"><i class="fa-solid fa-rotate" aria-hidden="true"></i><span class="admin-action-label">Refresh</span></button>
         </div>
       </div>
       <div class="chat-metrics" id="chatMetrics"></div>

@@ -252,3 +252,22 @@ table.admin-table input:focus, table.admin-table select:focus{ outline:none; bor
   .danger-zone{ align-items:stretch; flex-direction:column; }
   .danger-zone .btn{ align-self:flex-start; white-space:normal; }
 }
+
+@media (max-width:600px){
+  #tab-inquiries .admin-header,#tab-chat .admin-header{ position:relative; display:block; }
+  #tab-inquiries .admin-header > div:first-child,#tab-chat .admin-header > div:first-child{ width:100%; }
+  #tab-inquiries .admin-header h1,#tab-chat .admin-header h1{ min-height:1.5rem; padding-right:220px; }
+  #tab-inquiries .admin-header > div:last-child,#tab-chat .admin-header > div:last-child{
+    position:absolute; top:0; right:0; width:auto; max-width:none; display:flex !important;
+    flex-wrap:nowrap; justify-content:flex-end; gap:0.25rem;
+  }
+  #tab-inquiries .admin-header .tag,#tab-chat .admin-header .tag{ padding:0.25em 0.4em; font-size:0.62rem; white-space:nowrap; }
+  #tab-inquiries .admin-header .btn,#tab-chat .admin-header .btn{ padding:0.35em 0.45em; font-size:0.68rem; white-space:nowrap; }
+}
+
+@media (max-width:360px){
+  #tab-inquiries .admin-header h1,#tab-chat .admin-header h1{ padding-right:140px; }
+  #tab-inquiries .admin-header .btn,#tab-chat .admin-header .btn{ width:30px; height:30px; padding:0; display:grid; place-items:center; }
+  #tab-inquiries .admin-header .btn i,#tab-chat .admin-header .btn i{ margin:0; font-size:0.8rem; }
+  .admin-action-label{ display:none; }
+}
