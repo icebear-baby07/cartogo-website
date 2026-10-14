@@ -143,7 +143,8 @@ const DB = {
 
   // --- Cars / fleet + rates ---
   async getCars() {
-    return SEED_DATA.cars;
+    const cars = _readAll().cars;
+    return Array.isArray(cars) ? cars : JSON.parse(JSON.stringify(SEED_DATA.cars));
   },
   async saveCar(car) {
     const data = _readAll();

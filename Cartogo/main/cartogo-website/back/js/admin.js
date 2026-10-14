@@ -142,36 +142,67 @@ function toast(message) {
    FLEET TAB — add / edit / delete cars and their rates
    ========================================================================== */
 function renderFleetTab() {
-  const tbody = document.getElementById("fleetTableBody");
+  const list = document.getElementById("fleetList");
   if (CARS.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state">No cars yet. Add your first one below.</div></td></tr>`;
+    list.innerHTML = `<div class="empty-state">No cars yet. Add your first one below.</div>`;
     return;
   }
-  tbody.innerHTML = CARS.map(car => `
-    <tr data-id="${car.id}">
-      <td><input type="text" class="f-name" value="${attr(car.name)}"></td>
-      <td><input type="text" class="f-category" value="${attr(car.category)}"></td>
-      <td><input type="number" class="f-seats" value="${car.seats}" min="1" max="30"></td>
-      <td><input type="text" class="f-transmission" value="${attr(car.transmission)}"></td>
-      <td><input type="text" class="f-fuel" value="${attr(car.fuel)}"></td>
-      <td><input type="number" class="f-rate" value="${car.rate}" min="0" step="50"></td>
-      <td><input type="text" class="f-image" value="${attr(car.image)}" placeholder="images/yourcar.jpg" style="min-width:150px;"></td>
-      <td>
-        <select class="f-available">
-          <option value="true" ${car.available ? "selected" : ""}>Available</option>
-          <option value="false" ${!car.available ? "selected" : ""}>Booked out</option>
-        </select>
-      </td>
-      <td class="row-actions">
-        <button class="icon-btn save-car" title="Save row"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i></button>
-        <button class="icon-btn danger delete-car" title="Delete car"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
-      </td>
-    </tr>
+  list.innerHTML = CARS.map(car => `
+    <article class="fleet-item" data-id="${attr(car.id)}">
+      <div class="fleet-photo">
+        <img class="fleet-photo-preview" src="${attr(car.image || "")}" alt="${attr(car.name)}" ${car.image ? "" : "hidden"}>
+        <div class="fleet-photo-empty" ${car.image ? "hidden" : ""}><i class="fa-solid fa-car-side" aria-hidden="true"></i><span>No photo</span></div>
+        <label class="fleet-image-picker"><i class="fa-solid fa-image" aria-hidden="true"></i> Choose image<input class="f-image" type="file" accept="image/*" aria-label="Choose image for ${attr(car.name)}"></label>
+      </div>
+      <div class="fleet-editor">
+        <div class="fleet-fields">
+          <label class="fleet-field">Name<input type="text" class="f-name" value="${attr(car.name)}"></label>
+          <label class="fleet-field">Category<input type="text" class="f-category" value="${attr(car.category)}"></label>
+          <label class="fleet-field">Rate / day<input type="number" class="f-rate" value="${car.rate}" min="0" step="50"></label>
+          <label class="fleet-field">Seats<input type="number" class="f-seats" value="${car.seats}" min="1" max="30"></label>
+          <label class="fleet-field">Transmission<input type="text" class="f-transmission" value="${attr(car.transmission)}"></label>
+          <label class="fleet-field">Fuel<input type="text" class="f-fuel" value="${attr(car.fuel)}"></label>
+          <label class="fleet-field">Availability<select class="f-available">
+            <option value="true" ${car.available ? "selected" : ""}>Available</option>
+            <option value="false" ${!car.available ? "selected" : ""}>Booked out</option>
+          </select></label>
+        </div>
+        <div class="fleet-actions">
+          <button class="btn btn-dark btn-sm save-car" type="button"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Save changes</button>
+          <button class="icon-btn danger delete-car" type="button" title="Delete car" aria-label="Delete ${attr(car.name)}"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
+        </div>
+      </div>
+    </article>
   `).join("");
 
-  tbody.querySelectorAll(".save-car").forEach(btn => {
+  list.querySelectorAll(".fleet-photo-preview").forEach(image => {
+    image.addEventListener("error", () => {
+      image.hidden = true;
+      image.nextElementSibling.hidden = false;
+    });
+  });
+
+  list.querySelectorAll(".f-image").forEach(input => {
+    input.addEventListener("change", async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const row = input.closest(".fleet-item");
+      try {
+        const imageData = await prepareCarImage(file);
+        row.dataset.pendingImage = imageData;
+        row.querySelector(".fleet-photo-preview").src = imageData;
+        row.querySelector(".fleet-photo-preview").hidden = false;
+        row.querySelector(".fleet-photo-empty").hidden = true;
+      } catch (error) {
+        input.value = "";
+        toast(`Could not use that image: ${error.message}`);
+      }
+    });
+  });
+
+  list.querySelectorAll(".save-car").forEach(btn => {
     btn.addEventListener("click", async (e) => {
-      const row = e.target.closest("tr");
+      const row = e.currentTarget.closest(".fleet-item");
       const id = row.dataset.id;
       const car = CARS.find(c => c.id === id);
       const updated = {
@@ -182,18 +213,19 @@ function renderFleetTab() {
         transmission: row.querySelector(".f-transmission").value.trim(),
         fuel: row.querySelector(".f-fuel").value.trim(),
         rate: Number(row.querySelector(".f-rate").value) || 0,
-        image: row.querySelector(".f-image").value.trim(),
+        image: row.dataset.pendingImage || car.image,
         available: row.querySelector(".f-available").value === "true"
       };
       await DB.saveCar(updated);
       CARS = await DB.getCars();
+      renderFleetTab();
       toast(`Saved changes to ${updated.name}.`);
     });
   });
 
-  tbody.querySelectorAll(".delete-car").forEach(btn => {
+  list.querySelectorAll(".delete-car").forEach(btn => {
     btn.addEventListener("click", async (e) => {
-      const row = e.target.closest("tr");
+      const row = e.currentTarget.closest(".fleet-item");
       const id = row.dataset.id;
       const car = CARS.find(c => c.id === id);
       if (!confirm(`Delete "${car.name}" from the fleet? This can't be undone.`)) return;
@@ -205,8 +237,47 @@ function renderFleetTab() {
   });
 }
 
+async function prepareCarImage(file) {
+  if (!file.type.startsWith("image/")) throw new Error("Choose an image file.");
+  if (file.size > 15 * 1024 * 1024) throw new Error("Image must be smaller than 15 MB.");
+
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 1400 / bitmap.width, 1000 / bitmap.height);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Your browser could not process this image.");
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+
+  let imageData = canvas.toDataURL("image/webp", 0.82);
+  if (!imageData.startsWith("data:image/webp")) imageData = canvas.toDataURL("image/jpeg", 0.82);
+  return imageData;
+}
+
 function bindAddCarForm() {
   const form = document.getElementById("addCarForm");
+  const imageInput = document.getElementById("newCarImage");
+  const imagePreview = document.getElementById("newCarImagePreview");
+  let newCarImageData = "";
+
+  imageInput.addEventListener("change", async () => {
+    const file = imageInput.files?.[0];
+    if (!file) return;
+    try {
+      newCarImageData = await prepareCarImage(file);
+      imagePreview.innerHTML = `<img src="${newCarImageData}" alt="Selected car photo">`;
+      imagePreview.hidden = false;
+    } catch (error) {
+      imageInput.value = "";
+      newCarImageData = "";
+      imagePreview.replaceChildren();
+      imagePreview.hidden = true;
+      toast(`Could not use that image: ${error.message}`);
+    }
+  });
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const newCar = {
@@ -217,7 +288,7 @@ function bindAddCarForm() {
       fuel: document.getElementById("newCarFuel").value.trim() || "Gasoline",
       rate: Number(document.getElementById("newCarRate").value) || 0,
       blurb: document.getElementById("newCarBlurb").value.trim() || "A great pick for your next trip.",
-      image: document.getElementById("newCarImage").value.trim(),
+      image: newCarImageData,
       available: true
     };
     if (!newCar.name || !newCar.category) {
@@ -228,6 +299,9 @@ function bindAddCarForm() {
     CARS = await DB.getCars();
     renderFleetTab();
     form.reset();
+    newCarImageData = "";
+    imagePreview.replaceChildren();
+    imagePreview.hidden = true;
     toast(`Added ${newCar.name} to the fleet.`);
   });
 }
