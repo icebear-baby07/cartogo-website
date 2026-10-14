@@ -41,15 +41,30 @@ async function init() {
 async function handleFleetStorageChange(event) {
   if (event.key !== STORAGE_KEY && event.key !== null) return;
 
-  CARS = await DB.getCars();
+  [SETTINGS, LABELS, CARS] = await Promise.all([
+    DB.getSettings(),
+    DB.getLabels(),
+    DB.getCars()
+  ]);
   if (activeFilter !== "All" && !CARS.some(car => car.category === activeFilter)) {
     activeFilter = "All";
   }
+  document.title = SETTINGS.companyName + " — Car Rentals";
+  renderBrand();
+  renderHero();
+  renderTrustStrip();
   renderFilters();
   renderFleet();
-  renderTrustStrip();
+  renderHowItWorks();
+  renderWhyChooseUs();
   renderRates();
+  renderTestimonials();
+  renderAbout();
+  renderFaq();
+  renderContact();
+  renderFooter();
   populateCarSelect();
+  bindFaqToggles();
 }
 
 /* ---------- Brand / header ---------- */

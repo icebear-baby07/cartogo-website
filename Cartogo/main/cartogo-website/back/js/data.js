@@ -132,7 +132,8 @@ const DB = {
 
   // --- Labels (all editable site copy) ---
   async getLabels() {
-    return SEED_DATA.labels;
+    const labels = _readAll().labels;
+    return labels || JSON.parse(JSON.stringify(SEED_DATA.labels));
   },
   async saveLabels(labels) {
     const data = _readAll();
