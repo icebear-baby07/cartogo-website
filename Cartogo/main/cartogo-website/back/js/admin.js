@@ -308,6 +308,7 @@ function bindAddCarForm() {
    ========================================================================== */
 function renderLabelsTab() {
   const wrap = document.getElementById("labelsForm");
+  const editableTrustItems = LABELS.trustStrip.filter(item => !isAutomaticFleetStat(item));
 
   wrap.innerHTML = `
     <div class="label-group">
@@ -317,8 +318,8 @@ function renderLabelsTab() {
     </div>
 
     <div class="label-group">
-      <h3>Trust strip (4 stats)</h3>
-      <div id="trustRepeat">${LABELS.trustStrip.map((item, i) => `
+      <h3>Trust strip</h3>
+      <div id="trustRepeat">${editableTrustItems.map(item => `
         <div class="repeat-item">
           <div class="label-field"><label>Value</label><input class="trust-value" value="${attr(item.value)}"></div>
           <div class="label-field"><label>Label</label><input class="trust-label" value="${attr(item.label)}"></div>
@@ -471,16 +472,20 @@ function renderLabelsTab() {
       return;
     }
 
+    const editedTrustItems = [...document.querySelectorAll("#trustRepeat .repeat-item")].map(item => ({
+      value: item.querySelector(".trust-value").value,
+      label: item.querySelector(".trust-label").value
+    }));
+    let editedTrustIndex = 0;
     const newLabels = {
       ...LABELS,
       hero: {
         title: document.getElementById("lblHeroTitle").value,
         subtitle: document.getElementById("lblHeroSubtitle").value
       },
-      trustStrip: [...document.querySelectorAll("#trustRepeat .repeat-item")].map(item => ({
-        value: item.querySelector(".trust-value").value,
-        label: item.querySelector(".trust-label").value
-      })),
+      trustStrip: LABELS.trustStrip.map(item => isAutomaticFleetStat(item)
+        ? item
+        : editedTrustItems[editedTrustIndex++]),
       about: {
         title: document.getElementById("lblAboutTitle").value,
         body: document.getElementById("lblAboutBody").value
@@ -766,6 +771,10 @@ function closeChatTranscriptModal() {
 function closeInquiryDetailModal() {
   document.getElementById("inquiryDetailModal").hidden = true;
   SELECTED_INQUIRY = null;
+}
+
+function isAutomaticFleetStat(item) {
+  return /^(cars? in our fleet|vehicle options)$/i.test(String(item.label).trim());
 }
 
 /* ==========================================================================
