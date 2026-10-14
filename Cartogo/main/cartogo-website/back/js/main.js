@@ -35,6 +35,20 @@ async function init() {
   bindBookingForm();
   bindQuickSearch();
   bindFaqToggles();
+  window.addEventListener("storage", handleFleetStorageChange);
+}
+
+async function handleFleetStorageChange(event) {
+  if (event.key !== STORAGE_KEY && event.key !== null) return;
+
+  CARS = await DB.getCars();
+  if (activeFilter !== "All" && !CARS.some(car => car.category === activeFilter)) {
+    activeFilter = "All";
+  }
+  renderFilters();
+  renderFleet();
+  renderRates();
+  populateCarSelect();
 }
 
 /* ---------- Brand / header ---------- */
