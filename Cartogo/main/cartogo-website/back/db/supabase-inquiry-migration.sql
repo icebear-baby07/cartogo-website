@@ -74,6 +74,10 @@ insert into public.cartogo_admin_config (singleton, admin_email)
 values (true, 'remuelfernan07@gmail.com')
 on conflict (singleton) do nothing;
 
+update public.cartogo_admin_config
+set admin_email = lower('jhonrey.loreno77@gmail.com')
+where singleton = true;
+
 create or replace function public.is_cartogo_admin()
 returns boolean
 language sql
