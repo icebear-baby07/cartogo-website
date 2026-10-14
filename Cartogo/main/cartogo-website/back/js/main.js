@@ -26,7 +26,6 @@ async function init() {
   renderWhyChooseUs();
   renderRates();
   renderTestimonials();
-  renderAbout();
   renderFaq();
   renderContact();
   renderFooter();
@@ -59,7 +58,6 @@ async function handleFleetStorageChange(event) {
   renderWhyChooseUs();
   renderRates();
   renderTestimonials();
-  renderAbout();
   renderFaq();
   renderContact();
   renderFooter();
@@ -251,14 +249,9 @@ function renderContact() {
   document.getElementById("contactLocations").innerHTML = c.locations.map(loc => `<li><i class="fa-solid fa-location-dot" aria-hidden="true"></i> ${escapeHtml(loc)}</li>`).join("");
 }
 
-/* ---------- About ---------- */
-function renderAbout() {
-  document.getElementById("aboutTitle").textContent = LABELS.about.title;
-  document.getElementById("aboutBody").textContent = LABELS.about.body;
-}
-
 /* ---------- Footer ---------- */
 function renderFooter() {
+  document.getElementById("footerAboutTitle").textContent = LABELS.about.title;
   document.getElementById("footerAbout").textContent = LABELS.about.body;
   document.getElementById("footerYear").textContent = new Date().getFullYear();
   document.getElementById("footerLocations").innerHTML = LABELS.contact.locations
