@@ -101,7 +101,19 @@ table.admin-table input:focus, table.admin-table select:focus{ outline:none; bor
 .fleet-actions{ display:flex; align-items:center; justify-content:flex-end; gap:0.55rem; }
 .fleet-actions .btn i{ margin-right:0.35rem; }
 .image-upload-preview{ margin-top:0.55rem; }
-.image-upload-preview img{ display:block; width:100px; aspect-ratio:4 / 3; object-fit:cover; border-radius:var(--radius-sm); border:1px solid var(--line); }
+.add-car-form{ max-width:900px; }
+.add-car-layout{ display:grid; grid-template-columns:180px minmax(0, 1fr); gap:1.25rem; align-items:start; }
+.new-car-photo{ display:grid; gap:0.65rem; }
+.image-upload-preview{ margin:0; width:100%; aspect-ratio:4 / 3; overflow:hidden; border:1px dashed var(--line); border-radius:var(--radius-sm); background:var(--concrete); }
+.image-upload-preview img{ display:block; width:100%; height:100%; object-fit:cover; }
+.new-car-photo-empty{ display:flex; height:100%; flex-direction:column; align-items:center; justify-content:center; gap:0.5rem; color:var(--slate-light); font-size:0.78rem; }
+.new-car-photo-empty i{ font-size:1.4rem; }
+.add-car-fields{ display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:0 1rem; }
+.add-car-fields .label-field{ min-width:0; }
+.add-car-fields .label-field input{ min-width:0; }
+.add-car-description,.add-car-submit{ grid-column:1 / -1; }
+.add-car-submit{ display:flex; justify-content:flex-end; }
+.add-car-submit .btn i{ margin-right:0.35rem; }
 .image-upload-preview[hidden]{ display:none; }
 
 .icon-btn{
@@ -198,6 +210,10 @@ table.admin-table input:focus, table.admin-table select:focus{ outline:none; bor
   .admin-sidebar{ flex-wrap:wrap; align-items:flex-start; }
   .admin-sidebar .logo{ width:100%; margin:0 0 0.5rem; }
   .admin-tabs{ width:100%; flex:1 1 100%; }
+  .add-car-layout{ grid-template-columns:1fr; }
+  .new-car-photo{ grid-template-columns:112px minmax(0, 1fr); align-items:center; }
+  .add-car-fields{ grid-template-columns:1fr; }
+  .add-car-description,.add-car-submit{ grid-column:auto; }
   .fleet-item{ grid-template-columns:1fr; }
   .fleet-photo{ display:grid; grid-template-columns:100px minmax(0, 1fr); align-items:center; }
   .fleet-photo-preview,.fleet-photo-empty{ grid-row:span 2; }

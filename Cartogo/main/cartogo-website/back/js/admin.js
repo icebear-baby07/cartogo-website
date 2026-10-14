@@ -268,12 +268,10 @@ function bindAddCarForm() {
     try {
       newCarImageData = await prepareCarImage(file);
       imagePreview.innerHTML = `<img src="${newCarImageData}" alt="Selected car photo">`;
-      imagePreview.hidden = false;
     } catch (error) {
       imageInput.value = "";
       newCarImageData = "";
-      imagePreview.replaceChildren();
-      imagePreview.hidden = true;
+      imagePreview.innerHTML = `<div class="new-car-photo-empty"><i class="fa-solid fa-car-side" aria-hidden="true"></i><span>Photo preview</span></div>`;
       toast(`Could not use that image: ${error.message}`);
     }
   });
@@ -300,8 +298,7 @@ function bindAddCarForm() {
     renderFleetTab();
     form.reset();
     newCarImageData = "";
-    imagePreview.replaceChildren();
-    imagePreview.hidden = true;
+    imagePreview.innerHTML = `<div class="new-car-photo-empty"><i class="fa-solid fa-car-side" aria-hidden="true"></i><span>Photo preview</span></div>`;
     toast(`Added ${newCar.name} to the fleet.`);
   });
 }

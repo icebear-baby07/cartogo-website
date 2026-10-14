@@ -11,7 +11,7 @@
 
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-<link rel="stylesheet" href="css/admin.css">
+<link rel="stylesheet" href="css/admin.css?v=admin-fleet-layout-2">
 </head>
 <body class="admin-body">
 
@@ -61,18 +61,23 @@
       <div class="admin-card">
         <h2>Add a new car</h2>
         <p class="sub">New cars appear on the public fleet grid right away.</p>
-        <form id="addCarForm">
-          <div class="form-grid" style="display:grid; grid-template-columns: repeat(3,1fr); gap:1rem;">
-            <div class="label-field"><label>Name</label><input id="newCarName" placeholder="e.g. Toyota Wigo" required></div>
-            <div class="label-field"><label>Category</label><input id="newCarCategory" placeholder="e.g. Economy" required></div>
-            <div class="label-field"><label>Seats</label><input id="newCarSeats" type="number" value="5" min="1" max="30"></div>
-            <div class="label-field"><label>Transmission</label><input id="newCarTransmission" placeholder="Automatic"></div>
-            <div class="label-field"><label>Fuel</label><input id="newCarFuel" placeholder="Gasoline"></div>
-            <div class="label-field"><label>Rate / day</label><input id="newCarRate" type="number" min="0" step="50" required></div>
-            <div class="label-field"><label for="newCarImage">Car photo (optional)</label><input id="newCarImage" type="file" accept="image/*"><div class="image-upload-preview" id="newCarImagePreview" hidden></div></div>
-            <div class="label-field" style="grid-column:1/-1;"><label>Short description</label><input id="newCarBlurb" placeholder="One line on why someone would rent this car"></div>
+        <form id="addCarForm" class="add-car-form">
+          <div class="add-car-layout">
+            <div class="new-car-photo">
+              <div class="image-upload-preview" id="newCarImagePreview"><div class="new-car-photo-empty"><i class="fa-solid fa-car-side" aria-hidden="true"></i><span>Photo preview</span></div></div>
+              <label class="fleet-image-picker"><i class="fa-solid fa-image" aria-hidden="true"></i> Choose image<input id="newCarImage" type="file" accept="image/*" aria-label="Choose a photo for the new car"></label>
+            </div>
+            <div class="add-car-fields">
+              <div class="label-field"><label for="newCarName">Name</label><input id="newCarName" placeholder="e.g. Toyota Wigo" required></div>
+              <div class="label-field"><label for="newCarCategory">Category</label><input id="newCarCategory" placeholder="e.g. Economy" required></div>
+              <div class="label-field"><label for="newCarSeats">Seats</label><input id="newCarSeats" type="number" value="5" min="1" max="30"></div>
+              <div class="label-field"><label for="newCarTransmission">Transmission</label><input id="newCarTransmission" placeholder="Automatic"></div>
+              <div class="label-field"><label for="newCarFuel">Fuel</label><input id="newCarFuel" placeholder="Gasoline"></div>
+              <div class="label-field"><label for="newCarRate">Rate / day</label><input id="newCarRate" type="number" min="0" step="50" required></div>
+              <div class="label-field add-car-description"><label for="newCarBlurb">Short description</label><input id="newCarBlurb" placeholder="One line on why someone would rent this car"></div>
+              <div class="add-car-submit"><button type="submit" class="btn btn-dark"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add car to fleet</button></div>
+            </div>
           </div>
-          <button type="submit" class="btn btn-dark">Add car to fleet</button>
         </form>
       </div>
     </section>
