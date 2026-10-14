@@ -540,6 +540,25 @@ table.rates .skeleton-line{ height:0.7rem; }
 .booking-estimate-context{ display:inline; margin-left:0.25rem; color:var(--slate); font-size:0.76rem; font-weight:400; }
 .deposit-row{ border-top:1px dashed var(--line); }
 .booking-estimate-note{ margin:0.55rem 0 0; font-size:0.75rem; }
+.reservation-recap{ position:fixed; inset:0; width:min(42rem, calc(100vw - 2rem)); max-height:min(90dvh, 52rem); margin:auto; padding:0; overflow:auto; border:0; border-radius:var(--radius-md); background:var(--paper); color:var(--ink); box-shadow:0 24px 80px rgba(20,20,20,0.35); }
+.reservation-recap[open]{ display:block; }
+.reservation-recap::backdrop{ background:rgba(20,20,20,0.66); }
+.reservation-recap-inner{ padding:clamp(1.25rem, 4vw, 2rem); }
+.recap-header{ display:flex; align-items:center; justify-content:space-between; gap:1rem; }
+.recap-header h2{ margin:0; font-size:1.8rem; }
+.recap-close{ flex:none; width:42px; height:42px; display:grid; place-items:center; border:2px solid var(--signal); border-radius:var(--radius-sm); background:var(--paper); color:var(--asphalt); font-size:1.05rem; }
+.recap-close:hover{ background:var(--signal); color:var(--paper); }
+.recap-intro{ margin:0.5rem 0 1.2rem; color:var(--slate); font-size:0.9rem; }
+.recap-list{ margin:0 0 1.25rem; border-top:1px solid var(--line); }
+.recap-row{ display:grid; grid-template-columns:minmax(6rem, 0.7fr) minmax(0, 1.3fr); gap:1rem; padding:0.72rem 0; border-bottom:1px solid var(--line); }
+.recap-row dt{ color:var(--slate); font-size:0.86rem; }
+.recap-row dd{ min-width:0; margin:0; color:var(--asphalt); font-size:0.9rem; font-weight:600; overflow-wrap:anywhere; }
+.recap-row[hidden]{ display:none; }
+.recap-price-row dd{ font-family:var(--font-mono); }
+.recap-error{ margin:0 0 1rem; padding:0.75rem; border-left:3px solid var(--danger); background:rgba(122,31,31,0.08); color:var(--danger); font-size:0.88rem; }
+.recap-error[hidden]{ display:none; }
+.recap-actions{ display:flex; justify-content:flex-end; gap:0.75rem; flex-wrap:wrap; }
+.recap-actions .btn{ min-height:44px; }
 .optional-details{ min-width:0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
 .optional-details summary{ display:flex; align-items:center; justify-content:flex-start; gap:0.5rem; padding:0.85rem 0; color:var(--asphalt); font-size:0.9rem; font-weight:600; cursor:pointer; list-style:none; }
 .optional-details summary::-webkit-details-marker{ display:none; }
@@ -659,6 +678,8 @@ table.rates .skeleton-line{ height:0.7rem; }
   .markers{ grid-template-columns: 1fr; }
   .form-grid{ grid-template-columns: minmax(0, 1fr); }
   .footer-grid{ grid-template-columns: 1fr; gap:1.75rem; }
+  .recap-row{ grid-template-columns:minmax(5.5rem, 0.65fr) minmax(0, 1.35fr); gap:0.75rem; }
+  .recap-actions{ display:grid; grid-template-columns:1fr; }
 }
 
 

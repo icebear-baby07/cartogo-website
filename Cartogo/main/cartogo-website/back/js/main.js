@@ -389,7 +389,14 @@ function bindBookingForm() {
   const draftKey = "cartogo.bookingDraft";
   const signInPendingKey = "cartogo.customerGoogleSignInPending";
   const authToast = document.getElementById("authToast");
+  const recapDialog = document.getElementById("reservationRecap");
+  const recapCloseButton = document.getElementById("recapCloseButton");
+  const recapEditButton = document.getElementById("recapEditButton");
+  const recapConfirmButton = document.getElementById("recapConfirmButton");
+  const recapError = document.getElementById("recapError");
   let currentUser = null;
+  let pendingInquiry = null;
+  let isSendingInquiry = false;
 
   const hasVerifiedGoogleAccount = user => user?.app_metadata?.provider === "google"
     && (user.user_metadata?.email_verified === true || user.user_metadata?.email_verified === "true");
@@ -462,6 +469,79 @@ function bindBookingForm() {
     updateVerificationUI();
   };
 
+  const formatRecapDate = value => new Date(`${value}T00:00:00`).toLocaleDateString("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric"
+  });
+
+  const openReservationRecap = inquiry => {
+    document.getElementById("recapName").textContent = inquiry.name;
+    document.getElementById("recapEmail").textContent = currentUser.email;
+    document.getElementById("recapCar").textContent = inquiry.carName;
+    document.getElementById("recapPickupDate").textContent = formatRecapDate(inquiry.pickupDate);
+    document.getElementById("recapReturnDate").textContent = formatRecapDate(inquiry.returnDate);
+    document.getElementById("recapPickupPoint").textContent = inquiry.location;
+    document.getElementById("recapSubtotal").textContent = document.getElementById("bookingRentalSubtotal").textContent;
+    document.getElementById("recapDeposit").textContent = document.getElementById("bookingDepositEstimate").textContent;
+    document.getElementById("recapNotes").textContent = inquiry.notes;
+    document.getElementById("recapNotesRow").hidden = !inquiry.notes;
+    recapError.hidden = true;
+    recapError.textContent = "";
+    pendingInquiry = { ...inquiry, email: currentUser.email };
+    recapDialog.showModal();
+  };
+
+  const closeReservationRecap = () => {
+    if (isSendingInquiry) return;
+    pendingInquiry = null;
+    recapDialog.close();
+  };
+
+  recapCloseButton.addEventListener("click", closeReservationRecap);
+  recapEditButton.addEventListener("click", closeReservationRecap);
+  recapDialog.addEventListener("cancel", event => {
+    if (isSendingInquiry) event.preventDefault();
+  });
+  recapDialog.addEventListener("close", () => {
+    if (!isSendingInquiry) pendingInquiry = null;
+  });
+  recapConfirmButton.addEventListener("click", async () => {
+    if (!pendingInquiry || isSendingInquiry) return;
+    if (!hasVerifiedGoogleAccount(currentUser)) {
+      recapError.textContent = "Your Google sign-in is no longer valid. Sign in again before confirming.";
+      recapError.hidden = false;
+      return;
+    }
+
+    isSendingInquiry = true;
+    recapConfirmButton.disabled = true;
+    recapCloseButton.disabled = true;
+    recapEditButton.disabled = true;
+    submitButton.disabled = true;
+    submitButton.textContent = "Sending…";
+    try {
+      await persistInquiry(pendingInquiry, {
+        userId: currentUser.id,
+        verificationMethod: "google_oauth",
+        status: "confirmed"
+      });
+      pendingInquiry = null;
+      recapDialog.close();
+    } catch (err) {
+      console.error(err);
+      recapError.textContent = `Could not submit your inquiry: ${err.message || "Please try again."}`;
+      recapError.hidden = false;
+    } finally {
+      isSendingInquiry = false;
+      recapConfirmButton.disabled = false;
+      recapCloseButton.disabled = false;
+      recapEditButton.disabled = false;
+      submitButton.disabled = false;
+      submitButton.textContent = "Send Inquiry";
+    }
+  });
+
   const startGoogleSignIn = async () => {
     saveDraft();
     sessionStorage.setItem(signInPendingKey, "true");
@@ -528,23 +608,7 @@ function bindBookingForm() {
       googleButton.focus();
       return;
     }
-    submitButton.disabled = true;
-    submitButton.textContent = "Sending…";
-    try {
-      inquiry.email = currentUser.email;
-      await persistInquiry(inquiry, {
-        userId: currentUser.id,
-        verificationMethod: "google_oauth",
-        status: "confirmed"
-      });
-    } catch (err) {
-      console.error(err);
-      msg.className = "form-msg error";
-      msg.textContent = `Could not submit your inquiry: ${err.message || "Please try again."}`;
-    } finally {
-      submitButton.disabled = false;
-      submitButton.textContent = "Send Inquiry";
-    }
+    openReservationRecap(inquiry);
   });
 
   updateVerificationUI();

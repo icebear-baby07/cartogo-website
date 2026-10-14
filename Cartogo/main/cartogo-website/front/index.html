@@ -12,7 +12,7 @@
 
 <!-- Styles -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-<link rel="stylesheet" href="css/style.css?v=estimate-panel-3">
+<link rel="stylesheet" href="css/style.css?v=reservation-recap-1">
 </head>
 <body>
 
@@ -276,6 +276,33 @@
           <button type="submit" class="btn btn-primary btn-block" style="margin-top:1.25rem;">Send Inquiry</button>
           <div class="form-msg" id="formMsg"></div>
         </form>
+        <dialog class="reservation-recap" id="reservationRecap" aria-labelledby="reservationRecapTitle">
+          <div class="reservation-recap-inner">
+            <header class="recap-header">
+              <h2 id="reservationRecapTitle">Reservation recap</h2>
+              <button class="recap-close" id="recapCloseButton" type="button" aria-label="Close reservation recap" autofocus>
+                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+              </button>
+            </header>
+            <p class="recap-intro">Review your details before sending this inquiry.</p>
+            <dl class="recap-list">
+              <div class="recap-row"><dt>Name</dt><dd id="recapName"></dd></div>
+              <div class="recap-row"><dt>Email</dt><dd id="recapEmail"></dd></div>
+              <div class="recap-row"><dt>Car</dt><dd id="recapCar"></dd></div>
+              <div class="recap-row"><dt>Pickup date</dt><dd id="recapPickupDate"></dd></div>
+              <div class="recap-row"><dt>Return date</dt><dd id="recapReturnDate"></dd></div>
+              <div class="recap-row"><dt>Pickup point</dt><dd id="recapPickupPoint"></dd></div>
+              <div class="recap-row recap-price-row"><dt>Estimated rental subtotal</dt><dd id="recapSubtotal"></dd></div>
+              <div class="recap-row recap-price-row"><dt>Refundable deposit estimate</dt><dd id="recapDeposit"></dd></div>
+              <div class="recap-row" id="recapNotesRow" hidden><dt>Notes</dt><dd id="recapNotes"></dd></div>
+            </dl>
+            <p class="recap-error" id="recapError" role="alert" hidden></p>
+            <div class="recap-actions">
+              <button class="btn btn-ghost" id="recapEditButton" type="button">Back to edit</button>
+              <button class="btn btn-primary" id="recapConfirmButton" type="button">Confirm &amp; send inquiry</button>
+            </div>
+          </div>
+        </dialog>
       </div>
     </div>
   </section>
@@ -407,7 +434,7 @@
 <script src="../config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../back/js/data.js?v=labels-storage-1"></script>
-<script src="../back/js/main.js?v=booking-estimate-2"></script>
+<script src="../back/js/main.js?v=reservation-recap-1"></script>
 <script src="../back/js/chatbot.js"></script>
 </body>
 </html>
