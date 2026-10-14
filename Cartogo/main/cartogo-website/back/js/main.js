@@ -47,6 +47,7 @@ async function handleFleetStorageChange(event) {
   }
   renderFilters();
   renderFleet();
+  renderTrustStrip();
   renderRates();
   populateCarSelect();
 }
@@ -67,12 +68,16 @@ function renderHero() {
 /* ---------- Trust strip ---------- */
 function renderTrustStrip() {
   const wrap = document.getElementById("trustGrid");
-  wrap.innerHTML = LABELS.trustStrip.map(item => `
+  wrap.innerHTML = LABELS.trustStrip.map(item => {
+    const isFleetCount = /^(cars? in our fleet|vehicle options)$/i.test(String(item.label).trim());
+    const value = isFleetCount ? CARS.length : item.value;
+    return `
     <div class="trust-item">
-      <b>${escapeHtml(item.value)}</b>
+      <b>${escapeHtml(value)}</b>
       <span>${escapeHtml(item.label)}</span>
     </div>
-  `).join("");
+  `;
+  }).join("");
 }
 
 /* ---------- Fleet filters ---------- */
