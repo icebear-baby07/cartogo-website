@@ -1,3 +1,7 @@
+param(
+	[switch]$Restart
+)
+
 $ErrorActionPreference = "Stop"
 
 $WorkspaceRoot = $PSScriptRoot
@@ -44,17 +48,42 @@ if ($Port -lt 1024 -or $Port -gt 65535) {
 
 $Listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($Listener) {
+	$IsExpectedSite = $false
 	try {
 		$ExistingSite = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/config.js" -UseBasicParsing -TimeoutSec 3
-		if ($ExistingSite.StatusCode -eq 200 -and $ExistingSite.Content.Contains($SupabaseUrl)) {
+		$IsExpectedSite = $ExistingSite.StatusCode -eq 200 -and $ExistingSite.Content.Contains($SupabaseUrl)
+	}
+	catch {
+	}
+
+	if ($IsExpectedSite) {
+		if ($Restart) {
+			$ExistingProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $($Listener.OwningProcess)"
+			$ServerScript = [System.IO.Path]::GetFullPath((Join-Path $ProjectRoot "server.py"))
+			if (-not $ExistingProcess -or [string]::IsNullOrEmpty($ExistingProcess.CommandLine) -or $ExistingProcess.CommandLine.IndexOf($ServerScript, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+				throw "Refusing to stop the listener on port $Port because it could not be identified as the website's server.py."
+			}
+
+			Write-Host "Stopping the current website process on port $Port..."
+			Stop-Process -Id $Listener.OwningProcess -Force
+			try {
+				Wait-Process -Id $Listener.OwningProcess -Timeout 10 -ErrorAction Stop
+			}
+			catch {
+			}
+			$Listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+			if ($Listener) {
+				throw "The website process did not release port $Port. Stop it manually before restarting."
+			}
+		}
+		else {
 			Write-Host "Website is already running at http://127.0.0.1:$Port/front/"
 			exit 0
 		}
 	}
-	catch {
-		throw "Website port $Port is already in use. Change PORT in .env and add the matching OAuth redirect URLs in Supabase."
+	else {
+		throw "Website port $Port is already in use by a different project."
 	}
-	throw "Website port $Port is already in use by a different project."
 }
 
 $Launcher = Get-Command py.exe -ErrorAction SilentlyContinue

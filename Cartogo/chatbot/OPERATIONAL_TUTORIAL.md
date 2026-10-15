@@ -20,7 +20,7 @@ The website launcher validates `main/cartogo-website/.env` and starts the websit
 
 Keep the website and chatbot terminals open while using the app. The AWS sign-in terminal may be closed after authentication completes. Rerunning a service launcher detects an existing server instead of starting a duplicate.
 
-For chatbot-only development, use **`chatbot/restart_chat.cmd`** to restart the bot without restarting the website or AWS login. It only stops a listener that it can verify is running this chatbot's `server.py`.
+For bot and frontend development, use **`chatbot/restart_chat.cmd`** to restart the chatbot and the website at `/front/` without restarting AWS login. Each service only stops a listener it can verify belongs to that project's `server.py`.
 
 ## Contact Recommendation
 
