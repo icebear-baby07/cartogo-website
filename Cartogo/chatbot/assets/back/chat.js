@@ -7,59 +7,66 @@ const sendButton = document.querySelector("#sendButton");
 const chatForm = document.querySelector("#chatForm");
 const conversation = document.querySelector("#conversation");
 const chatBody = document.querySelector("#chatBody");
+const chatTitle = document.querySelector("#chatTitle");
+const chatStatusText = document.querySelector("#chatStatusText");
+const chatModeBar = document.querySelector("#chatModeBar");
+const botModeButton = document.querySelector("#botModeButton");
+const agentModeButton = document.querySelector("#agentModeButton");
+const botFooter = document.querySelector("#botFooter");
+const agentBody = document.querySelector("#agentBody");
+const agentQueue = document.querySelector("#agentQueue");
+const agentConversation = document.querySelector("#agentConversation");
+const agentFooter = document.querySelector("#agentFooter");
+const agentForm = document.querySelector("#agentForm");
+const agentMessageInput = document.querySelector("#agentMessageInput");
+const agentSendButton = document.querySelector("#agentSendButton");
 const footerContactPrompt = document.querySelector("#footerContactPrompt");
 const footerContactButton = document.querySelector("#footerContactButton");
 const footerContactDismiss = document.querySelector("#footerContactDismiss");
 const suggestions = document.querySelectorAll(".suggestion");
-const homePage = document.querySelector("#homePage");
-const recommendPage = document.querySelector("#recommendPage");
-const recommendBackButton = document.querySelector("#recommendBackButton");
-const RECOMMEND_CONTACT_PATH = "/recommend-contact";
 const embeddedMode = window.parent !== window && new URLSearchParams(window.location.search).get("embed") === "1";
 const embedParentOrigin = document.referrer ? new URL(document.referrer).origin : window.location.origin;
-let recommendationReturnFocus = null;
+let activeChatMode = "bot";
+let agentState = "idle";
 if (embeddedMode) document.body.classList.add("embedded-mode");
 
 function notifyEmbedParent(type, payload = {}) {
 	if (embeddedMode) window.parent.postMessage({ type, ...payload }, embedParentOrigin);
 }
 
-function syncPageWithLocation() {
-	const showingRecommendation = window.location.pathname === RECOMMEND_CONTACT_PATH;
-	homePage.hidden = showingRecommendation;
-	homePage.inert = showingRecommendation;
-	recommendPage.hidden = !showingRecommendation;
+function updateChatMode() {
+	const showingAgent = activeChatMode === "agent";
+	chatModeBar.hidden = agentState === "idle";
+	chatBody.hidden = showingAgent;
+	botFooter.hidden = showingAgent;
+	agentBody.hidden = !showingAgent;
+	agentFooter.hidden = !showingAgent;
+	agentQueue.hidden = agentState !== "queue";
+	agentConversation.hidden = agentState !== "preview";
+	botModeButton.classList.toggle("is-active", !showingAgent);
+	agentModeButton.classList.toggle("is-active", showingAgent);
+	botModeButton.setAttribute("aria-pressed", String(!showingAgent));
+	agentModeButton.setAttribute("aria-pressed", String(showingAgent));
+	chatTitle.textContent = showingAgent ? "Cartogo agent preview" : "Cartogo assistant";
+	chatStatusText.textContent = showingAgent
+		? agentState === "queue" ? "Preparing preview - no live queue" : "Agent preview - not connected"
+		: "You're now talking to our AI (CB 🤖)";
+	chatWindow.setAttribute("aria-label", showingAgent ? "Cartogo agent chat preview" : "Cartogo chat assistant");
 }
 
-function openContactRecommendation() {
-	recommendationReturnFocus = document.activeElement;
-	window.history.pushState({ view: "recommend-contact", source: "chat" }, "", RECOMMEND_CONTACT_PATH);
-	syncPageWithLocation();
-	recommendBackButton.focus();
-}
-
-function returnToChat() {
-	if (window.history.state?.source === "chat") {
-		window.history.back();
-		return;
+function switchChatMode(mode) {
+	activeChatMode = mode;
+	if (mode === "agent" && agentState === "idle") {
+		agentState = "queue";
+		window.setTimeout(() => {
+			agentState = "preview";
+			updateChatMode();
+			agentBody.scrollTop = 0;
+		}, 1800);
 	}
-	window.history.replaceState({ view: "home" }, "", "/");
-	syncPageWithLocation();
+	updateChatMode();
+	notifyEmbedParent("cartogo-chat-mode", { mode });
 }
-
-window.addEventListener("popstate", () => {
-	syncPageWithLocation();
-	if (window.location.pathname === RECOMMEND_CONTACT_PATH) {
-		recommendBackButton.focus();
-	} else if (recommendationReturnFocus?.isConnected) {
-		recommendationReturnFocus.focus();
-	}
-});
-
-if (window.location.pathname === RECOMMEND_CONTACT_PATH) {
-	window.history.replaceState({ view: "recommend-contact", source: "direct" }, "", RECOMMEND_CONTACT_PATH);
-}
-syncPageWithLocation();
 
 function appendInlineContent(parent, text) {
 	const tokenPattern = /(\*\*\*[^*]+\*\*\*|\*_([^_\n]+?)_\*?|\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|`[^`]+`|(?<!\*)\*[^*\s](?:[^*]*?[^*\s])?\*(?!\*)|(?<!_)_[^_\s](?:[^_]*?[^_\s])?_(?!_)|(?:[A-Za-z0-9⌘⌥⇧⌃]{1,12}\s*(?:\+|→|->)\s*)+[A-Za-z0-9⌘⌥⇧⌃]{1,12})/g;
@@ -205,6 +212,8 @@ function showFooterContactPrompt() {
 
 launcher.addEventListener("click", openChat);
 if (embeddedMode) openChat();
+botModeButton.addEventListener("click", () => switchChatMode("bot"));
+agentModeButton.addEventListener("click", () => switchChatMode("agent"));
 collapseButton.addEventListener("click", () => {
 	if (embeddedMode) {
 		notifyEmbedParent("cartogo-chat-close");
@@ -322,9 +331,29 @@ chatForm.addEventListener("submit", (event) => {
 		});
 });
 
-recommendBackButton.addEventListener("click", returnToChat);
-footerContactButton.addEventListener("click", openContactRecommendation);
+footerContactButton.addEventListener("click", () => switchChatMode("agent"));
 footerContactDismiss.addEventListener("click", () => {
 	footerContactPrompt.hidden = true;
 	footerContactPrompt.classList.remove("is-appearing");
+});
+
+agentMessageInput.addEventListener("input", () => {
+	agentSendButton.disabled = agentMessageInput.value.trim().length === 0;
+});
+
+agentForm.addEventListener("submit", (event) => {
+	event.preventDefault();
+	const text = agentMessageInput.value.trim();
+	if (!text || agentState !== "preview") return;
+
+	const userMessage = document.createElement("div");
+	userMessage.className = "user-message";
+	userMessage.textContent = text;
+	const deliveryNote = document.createElement("p");
+	deliveryNote.className = "agent-delivery-note";
+	deliveryNote.textContent = "Preview only. This message was not sent to an agent.";
+	agentConversation.append(userMessage, deliveryNote);
+	agentMessageInput.value = "";
+	agentSendButton.disabled = true;
+	agentBody.scrollTop = agentBody.scrollHeight;
 });

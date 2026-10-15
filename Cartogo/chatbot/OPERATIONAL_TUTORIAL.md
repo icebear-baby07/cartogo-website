@@ -20,6 +20,8 @@ The website launcher validates `main/cartogo-website/.env` and starts the websit
 
 Keep the website and chatbot terminals open while using the app. The AWS sign-in terminal may be closed after authentication completes. Rerunning a service launcher detects an existing server instead of starting a duplicate.
 
+For chatbot-only development, use **`chatbot/restart_chat.cmd`** to restart the bot without restarting the website or AWS login. It only stops a listener that it can verify is running this chatbot's `server.py`.
+
 ## Contact Recommendation
 
-Select **Talk to an expert** in the chat footer to open a blank page; use the back arrow or browser Back to return to the chat with the conversation preserved. You can hide the prompt with its X button.
+Select **Talk to an expert** in the chat footer to see the agent-queue preview, then open the agent-chat preview. Use the **Assistant** and **Agent** controls to switch views. The agent flow is a local UI preview only; it is not connected to a staffed queue, and its messages are not saved or delivered. You can hide the expert prompt with its X button.

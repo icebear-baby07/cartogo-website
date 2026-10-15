@@ -23,8 +23,8 @@
 					<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4.75 5.75h14.5v10.5H11l-5.5 3v-3H4.75V5.75Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 10h8M8 13h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
 				</span>
 				<span class="brand-info">
-					<span class="brand-title">Cartogo assistant</span>
-					<span class="brand-status" id="chatStatus"><span class="status-dot"></span>You're now talking to our AI (CB 🤖)</span>
+					<span class="brand-title" id="chatTitle">Cartogo assistant</span>
+					<span class="brand-status" id="chatStatus"><span class="status-dot"></span><span id="chatStatusText">You're now talking to our AI (CB 🤖)</span></span>
 				</span>
 			</div>
 			<div class="header-actions">
@@ -37,6 +37,10 @@
 				</button>
 			</div>
 		</header>
+		<div class="chat-mode-bar" id="chatModeBar" role="group" aria-label="Choose chat mode" hidden>
+			<button class="mode-button is-active" id="botModeButton" type="button" aria-pressed="true">Assistant</button>
+			<button class="mode-button" id="agentModeButton" type="button" aria-pressed="false">Agent</button>
+		</div>
 
 		<main class="chat-body" id="chatBody" aria-live="polite">
 			<div class="day-label">Today</div>
@@ -67,7 +71,20 @@
 			<div class="conversation" id="conversation"></div>
 		</main>
 
-		<footer class="chat-footer">
+		<main class="chat-body agent-body" id="agentBody" aria-live="polite" hidden>
+			<section class="agent-queue" id="agentQueue" aria-labelledby="agentQueueTitle" hidden>
+				<div class="queue-indicator" aria-hidden="true"><span></span><span></span><span></span></div>
+				<h2 id="agentQueueTitle">Connecting you with an agent</h2>
+				<p>Preparing the agent chat preview...</p>
+				<p class="preview-disclaimer">Preview only. No live support queue is connected yet.</p>
+			</section>
+			<div class="agent-conversation" id="agentConversation" hidden>
+				<p class="agent-preview-banner" role="status">Preview only. This chat is not connected to a live support queue. Messages stay in this tab.</p>
+				<p class="agent-system-message" role="status">Agent chat preview is ready. You can switch back to the assistant at any time.</p>
+			</div>
+		</main>
+
+		<footer class="chat-footer" id="botFooter">
 			<div class="footer-promo">
 				<p class="footer-note">A little help from <span>Cartogo</span></p>
 				<div class="footer-contact-prompt" id="footerContactPrompt">
@@ -84,14 +101,17 @@
 				</button>
 			</form>
 		</footer>
+		<footer class="chat-footer agent-footer" id="agentFooter" hidden>
+			<p class="agent-footer-note">Preview only. Messages are not sent to an agent.</p>
+			<form class="composer" id="agentForm">
+				<input class="message-input" id="agentMessageInput" type="text" maxlength="10000" autocomplete="off" placeholder="Write a preview message..." aria-label="Write a preview message">
+				<button class="send-button" id="agentSendButton" type="submit" aria-label="Add preview message" title="Add preview message" disabled>
+					<svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m21 3-7.2 18-3.9-7.9L2 9.2 21 3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M10 13 21 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+				</button>
+			</form>
+		</footer>
 	</section>
 	</div>
-
-	<main class="recommend-page" id="recommendPage" aria-label="Talk to an expert" hidden>
-		<button class="recommend-back-button" id="recommendBackButton" type="button" aria-label="Back to chat" title="Back to chat">
-			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M19 12H5m7 7-7-7 7-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-		</button>
-	</main>
 
 	<script src="assets/back/chat.js"></script>
 </body>

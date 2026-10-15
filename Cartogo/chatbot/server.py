@@ -39,7 +39,8 @@ CONTACT_REQUEST = re.compile(
 	r"who\s+(?:handles|is responsible for|deals with)|"
 	r"who\s+is\s+(?:the\s+)?(?:support|customer service)\b|"
 	r"how\s+do\s+i\s+(?:contact|reach|call)|"
-	r"(?:contact|phone|email)\s+(?:details|number|address)|"
+	r"(?:contact|phone|email)\s+(?:details|number|address|person|info(?:rmation)?)|"
+	r"(?:give|share|provide|send)\s+(?:me\s+)?(?:a\s+)?(?:contact|support|customer service)\b|"
 	r"(?:support|customer service)\s+(?:contact|number|email)|"
 	r"(?:contact|phonebook|directory)\s+(?:for|about))\b",
 	re.IGNORECASE,
@@ -91,6 +92,23 @@ def normalize_messages(messages):
 	if normalized[-1]["role"] != "user":
 		raise ValueError("The conversation must end with a user message.")
 	return normalized
+
+
+def is_contact_request_or_follow_up(messages):
+	user_messages = [
+		message["content"][0]["text"]
+		for message in messages
+		if message["role"] == "user"
+	]
+	if not user_messages:
+		return False
+	if CONTACT_REQUEST.search(user_messages[-1]):
+		return True
+	if len(user_messages) < 2 or not CONTACT_REQUEST.search(user_messages[-2]):
+		return False
+
+	previous_assistant = messages[-2]["content"][0]["text"]
+	return bool(re.search(r"\b(?:contact|support|customer service|specify|clarify|which|what)\b", previous_assistant, re.IGNORECASE))
 
 
 class ChatHandler(SimpleHTTPRequestHandler):
@@ -153,8 +171,8 @@ class ChatHandler(SimpleHTTPRequestHandler):
 			self.send_json(400, {"error": str(error)})
 			return
 
-		if CONTACT_REQUEST.search(self.chat_query or ""):
-			self.send_json(200, {"reply": "I can help connect you with a Cartogo contact person."})
+		if is_contact_request_or_follow_up(messages):
+			self.send_json(200, {"reply": "To reach a Cartogo expert, select the Talk to an expert button below. I don't have verified contact details to share here."})
 			return
 
 		if CARTOGO_DATA_REQUIRED.search(self.chat_query or ""):
