@@ -22,6 +22,24 @@ Keep the website and chatbot terminals open while using the app. The AWS sign-in
 
 For bot and frontend development, use **`chatbot/restart_chat.cmd`** to restart the chatbot and the website at `/front/` without restarting AWS login. Each service only stops a listener it can verify belongs to that project's `server.py`.
 
+## Company Knowledge
+
+The chatbot can look up company reference records in MongoDB and use matching content when answering. Chat logs remain in the database configured by `MONGODB_DATABASE` and `MONGODB_COLLECTION`; proprietary information uses the `kb` database and the `PROPRIETARY_INFO_COLLECTION` collection by default. Configure its database and collection with `MONGODB_KNOWLEDGE_DATABASE` and `MONGODB_KNOWLEDGE_COLLECTION` in `chatbot/.env`.
+
+Add documents to the knowledge collection with a text `content` field. The keyword lookup searches `title`, `content`, `topic`, `keywords`, and `tags`. For example:
+
+```json
+{
+	"title": "Reservation changes",
+	"topic": "reservations",
+	"keywords": ["change", "modify", "reservation"],
+	"content": "Company-approved information about changing a reservation goes here.",
+	"updated_at": "2026-10-15"
+}
+```
+
+The bot provides up to four matching records to Amazon Bedrock as reference context. If a Cartogo-specific question has no matching content, it will say it cannot verify the answer. This first version uses keyword matching, which is best suited to a relatively small knowledge collection. Only store information approved for processing by the configured Bedrock model, and ensure the MongoDB user can read the knowledge database as well as perform the existing chat-log operations.
+
 ## Contact Recommendation
 
 Select **Talk to an expert** in the chat footer to see the agent-queue preview, then open the agent-chat preview. Use the **Assistant** and **Agent** controls to switch views. The agent flow is a local UI preview only; it is not connected to a staffed queue, and its messages are not saved or delivered. You can hide the expert prompt with its X button.
