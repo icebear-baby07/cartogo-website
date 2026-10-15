@@ -19,6 +19,20 @@ create table if not exists public.inquiries (
   constraint inquiries_verification_method_check check (verification_method in ('phone_otp', 'google_oauth'))
 );
 
+do $$
+declare
+  existing_policy record;
+begin
+  for existing_policy in
+    select policyname
+    from pg_policies
+    where schemaname = 'public' and tablename = 'inquiries'
+  loop
+    execute format('drop policy %I on public.inquiries', existing_policy.policyname);
+  end loop;
+end;
+$$;
+
 alter table public.inquiries add column if not exists secondary_phone text;
 alter table public.inquiries alter column email drop not null;
 alter table public.inquiries alter column phone drop not null;
@@ -65,14 +79,25 @@ alter table public.inquiries alter column status set not null;
 alter table public.inquiries add constraint inquiries_status_check
   check (status in ('pending_review', 'contacted', 'confirmed', 'rejected'));
 
-create table if not exists public.cartogo_admin_config (
-  singleton boolean primary key default true check (singleton),
-  admin_email text not null unique
+create table if not exists public.cartogo_admin_accounts (
+  admin_email text primary key check (admin_email = lower(trim(admin_email))),
+  added_at timestamptz not null default now()
 );
 
-insert into public.cartogo_admin_config (singleton, admin_email)
-values (true, 'jhonrey.loreno77@gmail.com')
-on conflict (singleton) do nothing;
+do $$
+begin
+  if to_regclass('public.cartogo_admin_config') is not null then
+    execute $migration$
+      insert into public.cartogo_admin_accounts (admin_email)
+      select lower(trim(admin_email))
+      from public.cartogo_admin_config
+      where trim(admin_email) <> ''
+      on conflict (admin_email) do nothing
+    $migration$;
+    execute 'drop table public.cartogo_admin_config cascade';
+  end if;
+end;
+$$;
 
 create or replace function public.is_cartogo_admin()
 returns boolean
@@ -83,30 +108,29 @@ set search_path = ''
 as $$
   select exists (
     select 1
-    from public.cartogo_admin_config
-    where singleton = true
-      and lower(admin_email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+    from public.cartogo_admin_accounts
+    where admin_email = lower(coalesce(auth.jwt() ->> 'email', ''))
       and auth.jwt() -> 'app_metadata' ->> 'provider' = 'google'
       and auth.jwt() -> 'user_metadata' ->> 'email_verified' = 'true'
   );
 $$;
 
-create or replace function public.get_cartogo_admin_email()
-returns text
-language plpgsql
+drop function if exists public.get_cartogo_admin_email();
+drop function if exists public.set_cartogo_admin_email(text);
+
+create or replace function public.get_cartogo_admin_emails()
+returns text[]
+language sql
 stable
 security definer
 set search_path = ''
 as $$
-begin
-  if not public.is_cartogo_admin() then
-    raise exception 'Not authorized' using errcode = '42501';
-  end if;
-  return (select admin_email from public.cartogo_admin_config where singleton = true);
-end;
+  select coalesce(array_agg(admin_email order by admin_email), array[]::text[])
+  from public.cartogo_admin_accounts
+  where public.is_cartogo_admin();
 $$;
 
-create or replace function public.set_cartogo_admin_email(p_email text)
+create or replace function public.add_cartogo_admin_email(p_email text)
 returns text
 language plpgsql
 security definer
@@ -130,42 +154,56 @@ begin
   ) then
     raise exception 'The new administrator must complete Google sign-in before being added.' using errcode = '22023';
   end if;
-  update public.cartogo_admin_config
-  set admin_email = normalized_email
-  where singleton = true;
+  insert into public.cartogo_admin_accounts (admin_email)
+  values (normalized_email)
+  on conflict (admin_email) do nothing;
+  return normalized_email;
+end;
+$$;
+
+create or replace function public.remove_cartogo_admin_email(p_email text)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  normalized_email text := lower(trim(coalesce(p_email, '')));
+  admin_count integer;
+begin
+  if not public.is_cartogo_admin() then
+    raise exception 'Not authorized' using errcode = '42501';
+  end if;
+  if normalized_email = lower(coalesce(auth.jwt() ->> 'email', '')) then
+    raise exception 'You cannot remove the account you are currently using.' using errcode = '22023';
+  end if;
+
+  lock table public.cartogo_admin_accounts in exclusive mode;
+  select count(*) into admin_count from public.cartogo_admin_accounts;
+  if admin_count <= 1 then
+    raise exception 'At least one administrator account must remain.' using errcode = '22023';
+  end if;
+  delete from public.cartogo_admin_accounts where admin_email = normalized_email;
+  if not found then
+    raise exception 'That administrator account was not found.' using errcode = '22023';
+  end if;
   return normalized_email;
 end;
 $$;
 
 revoke all on function public.is_cartogo_admin() from public;
-revoke all on function public.get_cartogo_admin_email() from public;
-revoke all on function public.set_cartogo_admin_email(text) from public;
+revoke all on function public.get_cartogo_admin_emails() from public;
+revoke all on function public.add_cartogo_admin_email(text) from public;
+revoke all on function public.remove_cartogo_admin_email(text) from public;
 grant execute on function public.is_cartogo_admin() to authenticated;
-grant execute on function public.get_cartogo_admin_email() to authenticated;
-grant execute on function public.set_cartogo_admin_email(text) to authenticated;
+grant execute on function public.get_cartogo_admin_emails() to authenticated;
+grant execute on function public.add_cartogo_admin_email(text) to authenticated;
+grant execute on function public.remove_cartogo_admin_email(text) to authenticated;
 
-alter table public.cartogo_admin_config enable row level security;
-drop policy if exists cartogo_admin_config_read on public.cartogo_admin_config;
-create policy cartogo_admin_config_read
-  on public.cartogo_admin_config for select to authenticated
-  using (public.is_cartogo_admin());
-revoke all on public.cartogo_admin_config from public, anon, authenticated;
-grant select on public.cartogo_admin_config to authenticated;
+alter table public.cartogo_admin_accounts enable row level security;
+revoke all on public.cartogo_admin_accounts from public, anon, authenticated;
 
 alter table public.inquiries enable row level security;
-do $$
-declare
-  existing_policy record;
-begin
-  for existing_policy in
-    select policyname
-    from pg_policies
-    where schemaname = 'public' and tablename = 'inquiries'
-  loop
-    execute format('drop policy %I on public.inquiries', existing_policy.policyname);
-  end loop;
-end;
-$$;
 drop policy if exists cartogo_inquiries_admin_read on public.inquiries;
 drop policy if exists cartogo_inquiries_admin_update on public.inquiries;
 drop policy if exists cartogo_inquiries_admin_delete on public.inquiries;

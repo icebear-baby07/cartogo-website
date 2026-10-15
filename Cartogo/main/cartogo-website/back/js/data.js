@@ -216,13 +216,18 @@ const DB = {
     return true;
   },
 
-  async getAdminEmail() {
-    const { data, error } = await supa.rpc("get_cartogo_admin_email");
+  async getAdminEmails() {
+    const { data, error } = await supa.rpc("get_cartogo_admin_emails");
     if (error) throw error;
     return data;
   },
-  async setAdminEmail(email) {
-    const { data, error } = await supa.rpc("set_cartogo_admin_email", { p_email: email });
+  async addAdminEmail(email) {
+    const { data, error } = await supa.rpc("add_cartogo_admin_email", { p_email: email });
+    if (error) throw error;
+    return data;
+  },
+  async removeAdminEmail(email) {
+    const { data, error } = await supa.rpc("remove_cartogo_admin_email", { p_email: email });
     if (error) throw error;
     return data;
   },

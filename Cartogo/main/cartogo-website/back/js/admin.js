@@ -1,4 +1,4 @@
-/* ==========================================================================
+/* ===========================================================================
    carTOGO.mnl — ADMIN PANEL LOGIC (js/admin.js)
    Everything here reads/writes through DB (js/data.js). Changes made here
    are picked up by index.html the next time it loads, because both pages
@@ -16,6 +16,7 @@ let CARS = [];
 let INQUIRIES = [];
 let CHAT_SESSIONS = [];
 let SELECTED_INQUIRY = null;
+let CURRENT_ADMIN_EMAIL = "";
 const ADMIN_SIGN_IN_PENDING_KEY = "cartogo.adminGoogleSignInPending";
 
 document.addEventListener("DOMContentLoaded", initAdmin);
@@ -35,6 +36,7 @@ async function initAdmin() {
     return;
   }
   if (data.session) {
+    CURRENT_ADMIN_EMAIL = String(data.session.user?.email || "").toLowerCase();
     await enterAdmin();
     if (document.getElementById("adminShell").classList.contains("visible")
       && sessionStorage.getItem(ADMIN_SIGN_IN_PENDING_KEY) === "true") {
@@ -87,7 +89,7 @@ async function enterAdmin() {
       await supa.auth.signOut();
       throw new Error("This Google account is not authorized to access the admin panel.");
     }
-    SETTINGS.adminEmail = await DB.getAdminEmail();
+    SETTINGS.adminEmails = await DB.getAdminEmails();
     await loadAll();
     document.getElementById("loginScreen").style.display = "none";
     document.getElementById("adminShell").classList.add("visible");
@@ -777,8 +779,7 @@ function isAutomaticFleetStat(item) {
   return /^(cars? in our fleet|vehicle options)$/i.test(String(item.label).trim());
 }
 
-/* ==========================================================================
-   SETTINGS TAB — company info, currency, fees, admin password
+/* SETTINGS TAB — company info, currency, fees, admin accounts
    ========================================================================== */
 function renderSettingsTab() {
   const wrap = document.getElementById("settingsForm");
@@ -790,7 +791,15 @@ function renderSettingsTab() {
       <div class="label-field"><label for="setExtraDriver">Extra driver fee</label><input id="setExtraDriver" type="number" value="${SETTINGS.extraDriverFee}"></div>
       <div class="label-field"><label for="setChildSeat">Child seat fee</label><input id="setChildSeat" type="number" value="${SETTINGS.childSeatFee}"></div>
       <div class="label-field"><label for="setLateFee">Late return fee (per hour)</label><input id="setLateFee" type="number" value="${SETTINGS.lateFeePerHour}"></div>
-      <div class="label-field settings-admin-email"><label for="setAdminEmail">Authorized admin Google email</label><input id="setAdminEmail" type="email" value="${attr(SETTINGS.adminEmail || "")}" required></div>
+      <div class="settings-admin-email">
+        <h2>Administrator accounts</h2>
+        <p class="sub">Each account must sign in with Google once before it can be added.</p>
+        <ul class="admin-account-list" id="adminAccountsList"></ul>
+        <div class="admin-account-add">
+          <label class="label-field" for="newAdminEmail">Google account email<input id="newAdminEmail" type="email" autocomplete="email" required></label>
+          <button type="button" class="btn btn-dark" id="addAdminEmailBtn"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add account</button>
+        </div>
+      </div>
     </div>
     <div class="settings-actions"><button type="button" class="btn btn-primary" id="saveSettingsBtn">Save settings</button></div>
 
@@ -799,15 +808,40 @@ function renderSettingsTab() {
       <button type="button" class="btn btn-ghost btn-sm" id="resetAllBtn">Reset everything to defaults</button>
     </section>
   `;
+  renderAdminAccounts();
+
+  document.getElementById("addAdminEmailBtn").addEventListener("click", async () => {
+    const input = document.getElementById("newAdminEmail");
+    const email = input.value.trim().toLowerCase();
+    if (!input.reportValidity()) return;
+    try {
+      await DB.addAdminEmail(email);
+      SETTINGS.adminEmails = await DB.getAdminEmails();
+      input.value = "";
+      renderAdminAccounts();
+      toast("Administrator account added.");
+    } catch (error) {
+      toast(`Could not add administrator: ${error.message}`);
+    }
+  });
+
+  document.getElementById("adminAccountsList").addEventListener("click", async event => {
+    const button = event.target.closest("[data-remove-admin]");
+    if (!button) return;
+    const email = button.dataset.removeAdmin;
+    if (!confirm(`Remove ${email} from administrator accounts?`)) return;
+    try {
+      await DB.removeAdminEmail(email);
+      SETTINGS.adminEmails = await DB.getAdminEmails();
+      renderAdminAccounts();
+      toast("Administrator account removed.");
+    } catch (error) {
+      toast(`Could not remove administrator: ${error.message}`);
+    }
+  });
 
   document.getElementById("saveSettingsBtn").addEventListener("click", async () => {
-    const nextAdminEmail = document.getElementById("setAdminEmail").value.trim().toLowerCase();
     try {
-      if (!nextAdminEmail) throw new Error("Enter an administrator email.");
-      if (nextAdminEmail !== SETTINGS.adminEmail) {
-        await DB.setAdminEmail(nextAdminEmail);
-        SETTINGS.adminEmail = nextAdminEmail;
-      }
       await DB.saveSettings({
       companyName: document.getElementById("setCompanyName").value.trim(),
       currency: document.getElementById("setCurrency").value.trim() || "$",
@@ -817,7 +851,7 @@ function renderSettingsTab() {
         lateFeePerHour: Number(document.getElementById("setLateFee").value) || 0
       });
       SETTINGS = { ...SETTINGS, ...await DB.getSettings() };
-      toast("Settings saved. The new admin email takes effect on the next sign-in.");
+      toast("Settings saved.");
     } catch (error) {
       toast(`Could not save settings: ${error.message}`);
     }
@@ -827,7 +861,7 @@ function renderSettingsTab() {
     if (!confirm("Reset local fleet, labels, and site preferences? Customer inquiries will remain in Supabase.")) return;
     await DB.resetAll();
     await loadAll();
-    SETTINGS.adminEmail = await DB.getAdminEmail();
+    SETTINGS.adminEmails = await DB.getAdminEmails();
     renderFleetTab();
     renderLabelsTab();
     await renderInquiriesTab();
@@ -835,6 +869,18 @@ function renderSettingsTab() {
     renderSettingsTab();
     toast("Everything reset to defaults.");
   });
+}
+
+function renderAdminAccounts() {
+  const list = document.getElementById("adminAccountsList");
+  if (!list) return;
+  const emails = SETTINGS.adminEmails || [];
+  list.innerHTML = emails.map(email => `
+    <li>
+      <span>${text(email)}${email.toLowerCase() === CURRENT_ADMIN_EMAIL ? " (you)" : ""}</span>
+      <button type="button" class="icon-btn danger" data-remove-admin="${attr(email)}" title="Remove ${attr(email)}" aria-label="Remove ${attr(email)}" ${email.toLowerCase() === CURRENT_ADMIN_EMAIL ? "disabled" : ""}><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
+    </li>
+  `).join("");
 }
 
 /* ---------- Utility ---------- */
