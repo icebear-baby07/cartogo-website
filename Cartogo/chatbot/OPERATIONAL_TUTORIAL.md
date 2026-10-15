@@ -40,6 +40,8 @@ Add documents to the knowledge collection with a text `content` field. The keywo
 
 The bot provides up to four matching records to Amazon Bedrock as reference context. If a Cartogo-specific question has no matching content, it will say it cannot verify the answer. This first version uses keyword matching, which is best suited to a relatively small knowledge collection. Only store information approved for processing by the configured Bedrock model, and ensure the MongoDB user can read the knowledge database as well as perform the existing chat-log operations.
 
+The assistant profile is loaded separately from `kb.bot_identity` (configurable with `MONGODB_IDENTITY_COLLECTION`) using the stable `record_id` `cartogo-bot-identity` and `record_type` `bot_identity`. Proprietary company facts remain in `kb.PROPRIETARY_INFO_COLLECTION`. The profile is included as context on each request. Safety boundaries remain in the local `assets/data/bot_data/identity.json` fallback and are not loaded from MongoDB; profile data cannot override them. If the MongoDB profile is absent, the local identity file also supplies the profile fallback. Changes to the MongoDB profile take effect on the next chat request.
+
 ## Contact Recommendation
 
 Select **Talk to an expert** in the chat footer to see the agent-queue preview, then open the agent-chat preview. Use the **Assistant** and **Agent** controls to switch views. The agent flow is a local UI preview only; it is not connected to a staffed queue, and its messages are not saved or delivered. You can hide the expert prompt with its X button.
