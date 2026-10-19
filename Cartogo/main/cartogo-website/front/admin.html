@@ -11,7 +11,7 @@
 
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-<link rel="stylesheet" href="css/admin.css?v=unit-inventory-1">
+<link rel="stylesheet" href="css/admin.css?v=otp-loading-2">
 </head>
 <body class="admin-body">
 
@@ -184,12 +184,38 @@
       <div class="inquiry-details" id="inquiryDetails"></div>
     </div>
   </div>
+  <div class="admin-modal unit-approval-modal" id="unitApprovalModal" hidden role="dialog" aria-modal="true" aria-labelledby="unitApprovalTitle" aria-describedby="unitApprovalDescription">
+    <div class="admin-modal-panel unit-approval-panel">
+      <header class="admin-modal-header">
+        <div>
+          <p class="eyebrow">Email approval</p>
+          <h2 id="unitApprovalTitle" tabindex="-1">Enter approval code</h2>
+          <p class="admin-modal-meta" id="unitApprovalDescription"></p>
+        </div>
+        <button class="icon-btn" id="closeUnitApproval" type="button" title="Cancel approval" aria-label="Cancel approval"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+      </header>
+      <div class="unit-approval-loading" id="unitApprovalLoading" role="status" aria-live="polite" hidden>
+        <span class="unit-approval-spinner" aria-hidden="true"></span>
+        <p id="unitApprovalLoadingText">Sending approval code...</p>
+      </div>
+      <form id="unitApprovalForm" class="unit-approval-form">
+        <label class="label-field" for="unitApprovalCode">Six-digit code
+          <input id="unitApprovalCode" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" required>
+        </label>
+        <p class="unit-approval-error" id="unitApprovalError" role="alert" hidden></p>
+        <div class="unit-approval-actions">
+          <button class="btn btn-ghost" id="cancelUnitApproval" type="button">Cancel</button>
+          <button class="btn btn-dark" id="submitUnitApproval" type="submit">Approve change</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </div>
 
 <div class="auth-toast" id="adminToast" role="status" aria-live="polite"></div>
 <script src="../config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../back/js/data.js?v=unit-rates-2"></script>
-<script src="../back/js/admin.js?v=unit-rates-2"></script>
+<script src="../back/js/admin.js?v=otp-loading-1"></script>
 </body>
 </html>

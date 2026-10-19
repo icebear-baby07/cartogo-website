@@ -17,6 +17,11 @@ let INQUIRIES = [];
 let CHAT_SESSIONS = [];
 let SELECTED_INQUIRY = null;
 let CURRENT_ADMIN_EMAIL = "";
+let UNIT_APPROVAL_CHALLENGE_ID = "";
+let UNIT_APPROVAL_RESOLVE = null;
+let UNIT_APPROVAL_RETURN_FOCUS = null;
+let UNIT_APPROVAL_REQUEST_PENDING = false;
+let UNIT_APPROVAL_SUBMITTING = false;
 const ADMIN_SIGN_IN_PENDING_KEY = "cartogo.adminGoogleSignInPending";
 
 document.addEventListener("DOMContentLoaded", initAdmin);
@@ -63,9 +68,10 @@ function bindLogin() {
     errorBox.style.display = "none";
     try {
       sessionStorage.setItem(ADMIN_SIGN_IN_PENDING_KEY, "true");
+      const redirectTo = new URL(window.location.pathname, window.location.origin);
       const { error } = await supa.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: window.location.href.split("#")[0] }
+        options: { redirectTo: redirectTo.href }
       });
       if (error) throw error;
     } catch (error) {
@@ -175,6 +181,16 @@ function renderFleetTab() {
     </article>
   `).join("");
 
+  list.querySelectorAll(".fleet-field input, .fleet-field select").forEach(control => {
+    const field = control.closest(".fleet-field");
+    control.dataset.originalValue = control.value;
+    const updateDirtyState = () => {
+      field.classList.toggle("is-dirty", control.value !== control.dataset.originalValue);
+    };
+    control.addEventListener("input", updateDirtyState);
+    control.addEventListener("change", updateDirtyState);
+  });
+
   list.querySelectorAll(".save-unit").forEach(btn => {
     btn.addEventListener("click", async (e) => {
       const row = e.currentTarget.closest(".fleet-item");
@@ -221,10 +237,121 @@ function renderFleetTab() {
 }
 
 async function requestAndApproveUnitChange(action, unit) {
-  const { challengeId } = await DB.requestUnitChange(action, unit);
-  const code = window.prompt(`A six-digit approval code was sent to ${CURRENT_ADMIN_EMAIL}. Enter it to apply this change.`);
-  if (!code) throw new Error("Approval cancelled. The code will expire in five minutes.");
-  await DB.approveUnitChange(challengeId, code.trim());
+  const operation = action === "add" ? "Add" : action === "update" ? "Update" : "Delete";
+  showUnitApprovalLoading(operation, unit.display_name);
+  try {
+    const { challengeId } = await DB.requestUnitChange(action, unit);
+    const approved = await openUnitApprovalDialog(challengeId, operation, unit.display_name);
+    if (!approved) throw new Error("Approval cancelled. The code will expire in five minutes.");
+  } catch (error) {
+    UNIT_APPROVAL_REQUEST_PENDING = false;
+    closeUnitApprovalDialog(false);
+    throw error;
+  }
+}
+
+function showUnitApprovalLoading(operation, unitName) {
+  const modal = document.getElementById("unitApprovalModal");
+  const closeButtons = [document.getElementById("closeUnitApproval"), document.getElementById("cancelUnitApproval")];
+  document.getElementById("unitApprovalTitle").textContent = `${operation} unit`;
+  document.getElementById("unitApprovalDescription").textContent = `Requesting an approval code for ${unitName}. It will be sent to ${CURRENT_ADMIN_EMAIL}.`;
+  document.getElementById("unitApprovalLoadingText").textContent = "Sending approval code...";
+  document.getElementById("unitApprovalLoading").hidden = false;
+  document.getElementById("unitApprovalForm").hidden = true;
+  document.getElementById("unitApprovalError").hidden = true;
+  document.getElementById("unitApprovalError").textContent = "";
+  UNIT_APPROVAL_REQUEST_PENDING = true;
+  UNIT_APPROVAL_SUBMITTING = false;
+  UNIT_APPROVAL_RETURN_FOCUS = document.activeElement;
+  closeButtons.forEach(button => { button.disabled = true; });
+  modal.hidden = false;
+  document.getElementById("unitApprovalTitle").focus();
+}
+
+function openUnitApprovalDialog(challengeId, operation, unitName) {
+  const modal = document.getElementById("unitApprovalModal");
+  const codeInput = document.getElementById("unitApprovalCode");
+  const closeButtons = [document.getElementById("closeUnitApproval"), document.getElementById("cancelUnitApproval")];
+  document.getElementById("unitApprovalTitle").textContent = `${operation} ${unitName}`;
+  document.getElementById("unitApprovalDescription").textContent = `Enter the six-digit code sent to ${CURRENT_ADMIN_EMAIL}. The code expires in five minutes.`;
+  document.getElementById("unitApprovalLoading").hidden = true;
+  document.getElementById("unitApprovalForm").hidden = false;
+  document.getElementById("unitApprovalError").hidden = true;
+  document.getElementById("unitApprovalError").textContent = "";
+  codeInput.value = "";
+  UNIT_APPROVAL_CHALLENGE_ID = challengeId;
+  UNIT_APPROVAL_REQUEST_PENDING = false;
+  UNIT_APPROVAL_SUBMITTING = false;
+  closeButtons.forEach(button => { button.disabled = false; });
+  UNIT_APPROVAL_RETURN_FOCUS = document.activeElement;
+  modal.hidden = false;
+  codeInput.focus();
+  return new Promise(resolve => {
+    UNIT_APPROVAL_RESOLVE = resolve;
+  });
+}
+
+function closeUnitApprovalDialog(approved) {
+  const modal = document.getElementById("unitApprovalModal");
+  if (modal.hidden || ((UNIT_APPROVAL_REQUEST_PENDING || UNIT_APPROVAL_SUBMITTING) && !approved)) return;
+  modal.hidden = true;
+  UNIT_APPROVAL_CHALLENGE_ID = "";
+  UNIT_APPROVAL_REQUEST_PENDING = false;
+  UNIT_APPROVAL_SUBMITTING = false;
+  const resolve = UNIT_APPROVAL_RESOLVE;
+  UNIT_APPROVAL_RESOLVE = null;
+  if (UNIT_APPROVAL_RETURN_FOCUS?.isConnected) UNIT_APPROVAL_RETURN_FOCUS.focus();
+  UNIT_APPROVAL_RETURN_FOCUS = null;
+  resolve?.(approved);
+}
+
+function bindUnitApprovalDialog() {
+  const modal = document.getElementById("unitApprovalModal");
+  const form = document.getElementById("unitApprovalForm");
+  const codeInput = document.getElementById("unitApprovalCode");
+  const submitButton = document.getElementById("submitUnitApproval");
+  const closeButtons = [document.getElementById("closeUnitApproval"), document.getElementById("cancelUnitApproval")];
+
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (UNIT_APPROVAL_SUBMITTING) return;
+    const code = codeInput.value.trim();
+    const error = document.getElementById("unitApprovalError");
+    if (!/^\d{6}$/.test(code)) {
+      error.textContent = "Enter the six-digit code from your email.";
+      error.hidden = false;
+      codeInput.focus();
+      return;
+    }
+
+    UNIT_APPROVAL_SUBMITTING = true;
+    submitButton.disabled = true;
+    submitButton.textContent = "Verifying...";
+    closeButtons.forEach(button => { button.disabled = true; });
+    error.hidden = true;
+    try {
+      await DB.approveUnitChange(UNIT_APPROVAL_CHALLENGE_ID, code);
+      closeUnitApprovalDialog(true);
+    } catch (approvalError) {
+      error.textContent = approvalError.message;
+      error.hidden = false;
+      codeInput.select();
+    } finally {
+      UNIT_APPROVAL_SUBMITTING = false;
+      submitButton.disabled = false;
+      submitButton.textContent = "Approve change";
+      closeButtons.forEach(button => { button.disabled = false; });
+    }
+  });
+
+  document.getElementById("closeUnitApproval").addEventListener("click", () => closeUnitApprovalDialog(false));
+  document.getElementById("cancelUnitApproval").addEventListener("click", () => closeUnitApprovalDialog(false));
+  modal.addEventListener("click", event => {
+    if (event.target === modal) closeUnitApprovalDialog(false);
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && !modal.hidden) closeUnitApprovalDialog(false);
+  });
 }
 
 function bindAddCarForm() {
@@ -849,6 +976,7 @@ function escapeHtml(str) {
 /* Bind one-time UI hooks that don't depend on rendered content */
 document.addEventListener("DOMContentLoaded", () => {
   bindAddCarForm();
+  bindUnitApprovalDialog();
   bindInquiryTools();
   bindChatMonitor();
 });
