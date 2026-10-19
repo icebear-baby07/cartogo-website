@@ -35,7 +35,7 @@ if ($SupabaseUrl -notmatch '^https://[a-z0-9-]+\.supabase\.co$' -or -not $Supaba
 	throw "Set a valid SUPABASE_URL and SUPABASE_ANON_KEY in $EnvironmentFile. Use only a publishable/anon key here."
 }
 
-$HostName = if ($Settings["HOST"]) { $Settings["HOST"] } else { "127.0.0.1" }
+$HostName = if ($Settings["HOST"]) { $Settings["HOST"] } else { "0.0.0.0" }
 try {
 	$Port = [int]$Settings["PORT"]
 }

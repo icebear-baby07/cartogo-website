@@ -56,5 +56,3 @@ ANIMATIONS, DESIGN, AND LAYOUT:
 
 4. Make this available outside of localhost (127.0.0.1) address
 - I want to see this from 192.168... address
-
-

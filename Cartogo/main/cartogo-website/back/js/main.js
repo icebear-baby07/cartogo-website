@@ -19,6 +19,7 @@ let BOOKING_TARGET_MARKER = null;
 let BOOKING_PREVIEW_MARKER = null;
 let BOOKING_RATE_QUOTE = null;
 let BOOKING_MAP_FULLSCREEN = false;
+let BOOKING_DURATION_SELECTED = false;
 let BOOKING_GEOCODE_CONTROLLER = null;
 let BOOKING_LAST_GEOCODE_AT = 0;
 const BOOKING_GEOCODE_CACHE = new Map();
@@ -167,10 +168,7 @@ function renderFleet() {
         </div>
         <p class="car-blurb">${car.features?.length ? "Unit features" : "Contact us for unit details."}</p>
         <div class="car-foot">
-          <div class="car-rate">
-            <b>${formatCurrency(car.in24_rate, SETTINGS.currency)}</b>
-            <span>IN / 24 hr</span>
-          </div>
+          <div class="car-rate"><span>Choose this unit in the booking form to view rates.</span></div>
           <button class="btn btn-dark btn-sm" ${car.available ? "" : "disabled"} data-reserve="${escapeHtml(car.id)}">
             ${car.available ? "Reserve" : "Unavailable"}
           </button>
@@ -182,7 +180,13 @@ function renderFleet() {
   grid.querySelectorAll("[data-reserve]").forEach(btn => {
     btn.addEventListener("click", () => {
       const carSelect = document.getElementById("bookingCar");
-      carSelect.value = btn.dataset.reserve;
+      const car = CARS.find(item => item.id === btn.dataset.reserve);
+      if (car) {
+        document.getElementById("bookingCapacity").value = String(car.seats);
+        populateCarSelect(car.id);
+        renderRates();
+        renderBookingEstimate();
+      }
       document.getElementById("booking").scrollIntoView({ behavior: "smooth", block: "start" });
       document.getElementById("bookingFirstName").focus({ preventScroll: true });
     });
@@ -218,17 +222,23 @@ function renderWhyChooseUs() {
 /* ---------- Rates table ---------- */
 function renderRates() {
   const tbody = document.getElementById("ratesBody");
-  tbody.innerHTML = CARS.map(car => `
-    <tr>
-      <td>${escapeHtml(car.name)}</td>
-      <td>${escapeHtml(car.category)}</td>
-      <td class="num">${formatCurrency(car.in12_rate, SETTINGS.currency)}</td>
-      <td class="num">${formatCurrency(car.in24_rate, SETTINGS.currency)}</td>
-      <td class="num">${formatCurrency(car.out12_rate, SETTINGS.currency)}</td>
-      <td class="num">${formatCurrency(car.out24_rate, SETTINGS.currency)}</td>
-      <td class="num">${formatCurrency(car.luzon_rate, SETTINGS.currency)}</td>
-    </tr>
-  `).join("");
+  const selectedId = document.getElementById("bookingCar")?.value;
+  const car = CARS.find(item => item.id === selectedId);
+  if (!car) {
+    tbody.innerHTML = `<tr><td class="rates-empty" colspan="7">Choose a unit in Booking Details to view its rates.</td></tr>`;
+  } else {
+    tbody.innerHTML = `
+      <tr>
+        <td>${escapeHtml(car.name)}</td>
+        <td>${escapeHtml(car.category)}</td>
+        <td class="num">${formatCurrency(car.in12_rate, SETTINGS.currency)}</td>
+        <td class="num">${formatCurrency(car.in24_rate, SETTINGS.currency)}</td>
+        <td class="num">${formatCurrency(car.out12_rate, SETTINGS.currency)}</td>
+        <td class="num">${formatCurrency(car.out24_rate, SETTINGS.currency)}</td>
+        <td class="num">${formatCurrency(car.luzon_rate, SETTINGS.currency)}</td>
+      </tr>
+    `;
+  }
   finishLoading(tbody);
 
   const feesGrid = document.getElementById("feesGrid");
@@ -306,13 +316,23 @@ function renderFooter() {
 }
 
 /* ---------- Booking form select ---------- */
-function populateCarSelect() {
+function populateCarSelect(preferredId = null) {
   const select = document.getElementById("bookingCar");
+  const selectedId = preferredId || select.value;
+  const requestedCapacity = Number(document.getElementById("bookingCapacity").value);
+  const matchingCars = Number.isInteger(requestedCapacity) && requestedCapacity > 0
+    ? CARS.filter(car => Number(car.seats) >= requestedCapacity)
+    : CARS;
   select.innerHTML = `<option value="">Select a car</option>` +
-    CARS.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
+    matchingCars.map(car => `<option value="${escapeHtml(car.id)}">${escapeHtml(car.name)}</option>`).join("");
+  if (matchingCars.some(car => car.id === selectedId)) select.value = selectedId;
+  if (matchingCars.length === 0) {
+    select.options[0].textContent = "No units available";
+  }
   select.disabled = false;
   select.classList.remove("skeleton-select");
   finishLoading(select);
+  if (!select.value) renderRates();
 }
 
 function distanceBetweenKilometers(first, second) {
@@ -383,7 +403,9 @@ function setBookingTarget(location) {
   document.getElementById("bookingNearestPickupName").value = nearest.name;
   document.getElementById("bookingNearestPickupDistance").value = nearest.distanceKm.toFixed(3);
   document.getElementById("bookingTargetStatus").textContent = "Looking up the destination and pricing region...";
-  updateMapDistance(location);
+  updateMapDistance(location, "Selected: ");
+  BOOKING_PREVIEW_MARKER?.remove();
+  BOOKING_PREVIEW_MARKER = null;
   if (BOOKING_TARGET_MARKER) BOOKING_TARGET_MARKER.setLatLng([location.lat, location.lng]);
   else BOOKING_TARGET_MARKER = window.L.marker([location.lat, location.lng]).addTo(BOOKING_MAP);
   renderBookingEstimate();
@@ -442,12 +464,19 @@ async function resolveBookingTargetRegion(target) {
 }
 
 function updateBookingPeriodOptions(region) {
-  const twelveHourOption = document.querySelector('input[name="bookingPeriod"][value="12"]');
+  const periodField = document.getElementById("bookingPeriodField");
+  const periodOptions = document.querySelectorAll('input[name="bookingPeriod"]');
   const note = document.getElementById("bookingPeriodNote");
-  twelveHourOption.disabled = region === "luzon";
-  if (region === "luzon") {
-    document.querySelector('input[name="bookingPeriod"][value="24"]').checked = true;
-    note.textContent = "The Luzon rate is set as a 24-hour rate.";
+  const isLuzon = region === "luzon";
+  periodField.hidden = false;
+  periodField.classList.toggle("luzon-rate", isLuzon);
+  periodOptions.forEach(option => {
+    option.required = !isLuzon;
+    option.disabled = false;
+    if (isLuzon) option.checked = false;
+  });
+  if (isLuzon) {
+    note.textContent = "Luzon pricing uses a 24-hour rate; choose a rental duration below.";
     note.hidden = false;
   } else {
     note.hidden = true;
@@ -470,7 +499,7 @@ function restoreBookingTargetFromDraft() {
   };
   BOOKING_MAP.setView([latitude, longitude], Math.max(BOOKING_MAP.getZoom(), 13));
   BOOKING_TARGET_MARKER = window.L.marker([latitude, longitude]).addTo(BOOKING_MAP);
-  updateMapDistance(BOOKING_TARGET);
+  updateMapDistance(BOOKING_TARGET, "Selected: ");
   document.getElementById("bookingTargetStatus").textContent = `${BOOKING_TARGET.label} · ${regionDisplayName(BOOKING_TARGET.rateRegion)} rates`;
   updateBookingPeriodOptions(BOOKING_TARGET.rateRegion);
 }
@@ -499,6 +528,7 @@ function bindBookingMap() {
   });
 
   BOOKING_MAP.on("mousemove", event => {
+    if (BOOKING_TARGET) return;
     const position = { lat: event.latlng.lat, lng: event.latlng.lng };
     const nearest = findNearestPickup(position);
     document.getElementById("bookingMapDistance").textContent = `${nearest.distanceKm.toFixed(2)} km distance from the nearest pickup location (${nearest.name})`;
@@ -512,19 +542,30 @@ function bindBookingMap() {
     }).addTo(BOOKING_MAP);
   });
   BOOKING_MAP.on("mouseout", () => {
-    if (BOOKING_TARGET) updateMapDistance(BOOKING_TARGET);
+    if (BOOKING_TARGET) updateMapDistance(BOOKING_TARGET, "Selected: ");
     else document.getElementById("bookingMapDistance").textContent = "Move the cursor over the map to preview distance from the nearest pickup point.";
   });
   BOOKING_MAP.on("click", event => setBookingTarget({ lat: event.latlng.lat, lng: event.latlng.lng }));
 
   const fullscreenButton = document.getElementById("bookingMapFullscreen");
+  const bookingPanel = document.querySelector(".booking-panel");
+  let fullscreenAnimationTimer = null;
   const setFullscreen = enabled => {
     BOOKING_MAP_FULLSCREEN = enabled;
-    document.querySelector(".booking-panel").classList.toggle("is-map-fullscreen", enabled);
+    clearTimeout(fullscreenAnimationTimer);
+    bookingPanel.classList.remove("is-map-fullscreen-closing");
+    bookingPanel.classList.toggle("is-map-fullscreen", enabled);
+    if (!enabled) {
+      bookingPanel.classList.add("is-map-fullscreen-closing");
+      fullscreenAnimationTimer = window.setTimeout(() => {
+        bookingPanel.classList.remove("is-map-fullscreen-closing");
+      }, 240);
+    }
     document.body.classList.toggle("has-map-fullscreen", enabled);
     fullscreenButton.setAttribute("aria-pressed", String(enabled));
     fullscreenButton.setAttribute("aria-label", enabled ? "Exit map fullscreen" : "Expand target map to fullscreen");
     fullscreenButton.title = enabled ? "Exit fullscreen" : "Expand map";
+    fullscreenButton.classList.toggle("is-expanded", enabled);
     fullscreenButton.innerHTML = `<i class="fa-solid ${enabled ? "fa-compress" : "fa-expand"}" aria-hidden="true"></i>`;
     window.requestAnimationFrame(() => BOOKING_MAP.invalidateSize());
   };
@@ -546,6 +587,8 @@ function bindBookingMap() {
       document.getElementById("bookingTargetStatus").textContent = "Click the map to choose your target location.";
       document.getElementById("bookingMapDistance").textContent = "Move the cursor over the map to preview distance from the nearest pickup point.";
       updateBookingPeriodOptions(null);
+      document.getElementById("bookingRentalDaysValue").textContent = `${document.getElementById("bookingRentalDays").value} days`;
+      document.getElementById("bookingPromoMessage").textContent = `Enjoy ${Number(document.getElementById("bookingRentalDays").value) >= 8 ? 10 : 5}% off by selecting ${document.getElementById("bookingRentalDays").value} days.`;
       BOOKING_MAP.setView([14.716, 121.041], 12);
       renderBookingEstimate();
     }, 0);
@@ -565,21 +608,44 @@ function renderBookingEstimate() {
   const summary = document.getElementById("bookingEstimateSummary");
   const subtotal = document.getElementById("bookingRentalSubtotal");
   const deposit = document.getElementById("bookingDepositEstimate");
+  const discountRow = document.getElementById("bookingDiscountRow");
+  const discountAmount = document.getElementById("bookingDiscountAmount");
   const depositPercent = Number(SETTINGS.depositPercent) || 0;
   document.getElementById("bookingDepositPercent").textContent = depositPercent;
+  if (!BOOKING_DURATION_SELECTED) {
+    summary.textContent = "Choose a rental contract length to see your quote.";
+    subtotal.textContent = "—";
+    deposit.textContent = "—";
+    discountRow.hidden = true;
+    return;
+  }
   const toUtcDay = value => {
     const [year, month, day] = value.split("-").map(Number);
     return Date.UTC(year, month - 1, day);
   };
-  const elapsedDays = Math.ceil((toUtcDay(returnDate) - toUtcDay(pickup)) / 86400000);
-  if (elapsedDays < 0) {
-    summary.textContent = "Return date must be the same day or later than pickup.";
+  const elapsedDays = (toUtcDay(returnDate) - toUtcDay(pickup)) / 86400000;
+  const rentalDays = Number(document.getElementById("bookingRentalDays").value);
+  if (!Number.isInteger(elapsedDays) || elapsedDays !== rentalDays || rentalDays < 4 || rentalDays > 15) {
+    summary.textContent = "Set a valid pickup date and 4–15 day rental duration.";
     subtotal.textContent = "—";
     deposit.textContent = "—";
+    discountRow.hidden = true;
     return;
   }
 
-  const selectedPeriod = Number(document.querySelector('input[name="bookingPeriod"]:checked')?.value || 24);
+  const selectedPeriod = Number(document.querySelector('input[name="bookingPeriod"]:checked')?.value || 0);
+  if (region !== "luzon" && selectedPeriod !== 12 && selectedPeriod !== 24) {
+    estimate.hidden = false;
+    summary.textContent = "Choose a 12- or 24-hour rental period to see your quote.";
+    subtotal.textContent = "—";
+    deposit.textContent = "—";
+    discountRow.hidden = true;
+    return;
+  }
+  const promoPercent = rentalDays >= 8 ? 10 : 5;
+  document.getElementById("bookingPromoMessage").textContent = region !== "luzon" && selectedPeriod === 12
+    ? `Enjoy ${promoPercent}% off by selecting ${rentalDays} days on 24-hour rates.`
+    : `Enjoy ${promoPercent}% off by selecting ${rentalDays} days.`;
   const periodHours = region === "luzon" ? 24 : selectedPeriod;
   const rateField = region === "in"
     ? periodHours === 12 ? "in12_rate" : "in24_rate"
@@ -587,27 +653,164 @@ function renderBookingEstimate() {
       ? periodHours === 12 ? "out12_rate" : "out24_rate"
       : "luzon_rate";
   const rate = Number(car[rateField]);
-  const rentalHours = Math.max(periodHours, elapsedDays * 24);
-  const rateBlocks = Math.max(1, Math.ceil(rentalHours / periodHours));
-  const rentalSubtotal = rate * rateBlocks;
-  BOOKING_RATE_QUOTE = { rateRegion: region, periodHours, rentalHours, rateBlocks, unitRate: rate, total: rentalSubtotal };
+  const rentalHours = rentalDays * 24;
+  const rateBlocks = rentalHours / periodHours;
+  const undiscountedSubtotal = rate * rateBlocks;
+  const discountPercent = periodHours === 24 ? (rentalDays >= 8 ? 10 : 5) : 0;
+  const promoDiscount = Math.round(undiscountedSubtotal * discountPercent) / 100;
+  const rentalSubtotal = undiscountedSubtotal - promoDiscount;
+  BOOKING_RATE_QUOTE = {
+    rateRegion: region,
+    periodHours,
+    rentalHours,
+    rentalDays,
+    rateBlocks,
+    unitRate: rate,
+    discountPercent,
+    discountAmount: promoDiscount,
+    total: rentalSubtotal
+  };
   const regionLabel = region === "in" ? "IN" : region === "out" ? "OUT" : "Luzon";
-  summary.textContent = `${rateBlocks} × ${periodHours}-hour ${regionLabel} rate · ${BOOKING_TARGET.nearestPickupDistanceKm.toFixed(2)} km from ${BOOKING_TARGET.nearestPickupName}`;
+  summary.textContent = `${rentalDays} days · ${rateBlocks} × ${periodHours}-hour ${regionLabel} rate at ${formatCurrency(rate, SETTINGS.currency)}${discountPercent ? ` · ${discountPercent}% promo` : ""}`;
   subtotal.textContent = formatCurrency(rentalSubtotal, SETTINGS.currency);
+  discountRow.hidden = discountPercent === 0;
+  discountAmount.textContent = `−${formatCurrency(promoDiscount, SETTINGS.currency)}`;
   deposit.textContent = formatCurrency(Math.round(rentalSubtotal * depositPercent / 100), SETTINGS.currency);
 }
 
 function bindBookingEstimate() {
-  ["bookingCar", "bookingPickup", "bookingReturn"].forEach(id => {
-    document.getElementById(id).addEventListener("change", renderBookingEstimate);
+  const capacityInput = document.getElementById("bookingCapacity");
+  const carSelect = document.getElementById("bookingCar");
+  const pickupInput = document.getElementById("bookingPickup");
+  const returnInput = document.getElementById("bookingReturn");
+  const daysInput = document.getElementById("bookingRentalDays");
+  const daysOutput = document.getElementById("bookingRentalDaysValue");
+  const promoMessage = document.getElementById("bookingPromoMessage");
+  const durationDetails = document.getElementById("bookingDurationDetails");
+  const durationSummary = document.getElementById("bookingDurationSummary");
+  const hoverCanExpand = window.matchMedia("(hover: hover) and (pointer: fine)");
+  let durationPinnedOpen = false;
+  let durationHovering = false;
+
+  const setDurationOpen = open => {
+    durationDetails.open = open;
+    durationSummary.setAttribute("aria-expanded", String(open));
+  };
+  const closeDuration = () => {
+    durationPinnedOpen = false;
+    durationHovering = false;
+    document.getElementById("bookingPeriodField").classList.remove("duration-touch-open");
+    setDurationOpen(false);
+  };
+  const updateDurationPromo = () => {
+    const days = Number(daysInput.value);
+    const percentage = days >= 8 ? 10 : 5;
+    const selectedPeriod = document.querySelector('input[name="bookingPeriod"]:checked')?.value;
+    durationDetails.classList.toggle("duration-unselected", !BOOKING_DURATION_SELECTED);
+    daysOutput.textContent = BOOKING_DURATION_SELECTED ? `${days} days` : "--";
+    promoMessage.textContent = selectedPeriod === "12"
+      ? `Enjoy ${percentage}% off by selecting ${days} days on 24-hour rates.`
+      : BOOKING_DURATION_SELECTED
+        ? `Enjoy ${percentage}% off by selecting ${days} days.`
+        : "Choose 4–7 days for 5% off or 8–15 days for 10% off.";
+  };
+  const clearSelectedPeriod = () => {
+    const checkedPeriod = document.querySelector('input[name="bookingPeriod"]:checked');
+    if (!checkedPeriod) return;
+    checkedPeriod.checked = false;
+    updateDurationPromo();
+    renderBookingEstimate();
+  };
+  const resetDurationForPeriodChange = () => {
+    daysInput.value = "4";
+    BOOKING_DURATION_SELECTED = false;
+    closeDuration();
+    syncReturnDate();
+  };
+
+  durationSummary.setAttribute("aria-expanded", "false");
+  durationSummary.addEventListener("click", event => {
+    event.preventDefault();
+    clearSelectedPeriod();
+    durationPinnedOpen = !durationPinnedOpen;
+    const durationOpen = durationPinnedOpen || durationHovering;
+    if (!hoverCanExpand.matches) {
+      document.getElementById("bookingPeriodField").classList.toggle("duration-touch-open", durationOpen);
+    }
+    setDurationOpen(durationOpen);
   });
-  document.querySelectorAll('input[name="bookingPeriod"]').forEach(input => input.addEventListener("change", renderBookingEstimate));
+  durationDetails.addEventListener("pointerenter", event => {
+    if (!hoverCanExpand.matches || event.pointerType === "touch") return;
+    durationHovering = true;
+    document.getElementById("bookingPeriodField").classList.add("duration-hovering");
+    setDurationOpen(true);
+  });
+  durationDetails.addEventListener("pointerleave", () => {
+    durationHovering = false;
+    document.getElementById("bookingPeriodField").classList.remove("duration-hovering");
+    if (!durationPinnedOpen) setDurationOpen(false);
+  });
+
+  capacityInput.addEventListener("input", () => {
+    const selectedId = carSelect.value;
+    populateCarSelect();
+    if (carSelect.value !== selectedId) renderBookingEstimate();
+  });
+  carSelect.addEventListener("change", () => {
+    renderRates();
+    renderBookingEstimate();
+  });
+  const syncReturnDate = () => {
+    const pickup = pickupInput.value;
+    const days = Number(daysInput.value);
+    updateDurationPromo();
+    if (pickup) {
+      const [year, month, day] = pickup.split("-").map(Number);
+      const returnDate = new Date(Date.UTC(year, month - 1, day + days));
+      returnInput.value = returnDate.toISOString().slice(0, 10);
+      returnInput.min = pickup;
+    } else {
+      returnInput.value = "";
+    }
+    renderBookingEstimate();
+  };
+  pickupInput.addEventListener("change", syncReturnDate);
+  daysInput.addEventListener("input", () => {
+    BOOKING_DURATION_SELECTED = true;
+    syncReturnDate();
+  });
+  daysInput.addEventListener("click", () => {
+    clearSelectedPeriod();
+    BOOKING_DURATION_SELECTED = true;
+    updateDurationPromo();
+    renderBookingEstimate();
+  });
+  document.querySelectorAll('input[name="bookingPeriod"]').forEach(input => {
+    input.addEventListener("change", resetDurationForPeriodChange);
+    input.addEventListener("click", () => {
+      if (input.checked) {
+        window.setTimeout(() => {
+          if (input.checked) resetDurationForPeriodChange();
+        }, 0);
+      }
+    });
+  });
   ["bookingLastName", "bookingFirstName"].forEach(id => {
     document.getElementById(id).addEventListener("input", renderBookingEstimate);
   });
   document.getElementById("bookingForm").addEventListener("reset", () => {
-    window.setTimeout(renderBookingEstimate, 0);
+    window.setTimeout(() => {
+      BOOKING_DURATION_SELECTED = false;
+      updateDurationPromo();
+      closeDuration();
+      updateBookingPeriodOptions(null);
+      populateCarSelect();
+      renderRates();
+      renderBookingEstimate();
+    }, 0);
   });
+  BOOKING_DURATION_SELECTED = false;
+  syncReturnDate();
   renderBookingEstimate();
 }
 
@@ -629,7 +832,14 @@ function bindQuickSearch() {
     const pickup = document.getElementById("qsPickup").value;
     const ret = document.getElementById("qsReturn").value;
     if (pickup) document.getElementById("bookingPickup").value = pickup;
-    if (ret) document.getElementById("bookingReturn").value = ret;
+    const daysInput = document.getElementById("bookingRentalDays");
+    if (pickup && ret) {
+      const [startYear, startMonth, startDay] = pickup.split("-").map(Number);
+      const [endYear, endMonth, endDay] = ret.split("-").map(Number);
+      const days = (Date.UTC(endYear, endMonth - 1, endDay) - Date.UTC(startYear, startMonth - 1, startDay)) / 86400000;
+      if (Number.isInteger(days) && days >= 4 && days <= 15) daysInput.value = String(days);
+    }
+    daysInput.dispatchEvent(new Event("input", { bubbles: true }));
     renderBookingEstimate();
     document.getElementById("fleet").scrollIntoView({ behavior: "smooth", block: "start" });
   });
@@ -679,12 +889,19 @@ function bindBookingForm() {
     try {
       const draft = JSON.parse(rawDraft);
       for (const [id, value] of Object.entries(draft)) {
+        if (id === "bookingDurationChosen") {
+          BOOKING_DURATION_SELECTED = value === true;
+          continue;
+        }
         const input = document.getElementById(id);
         if (!input) continue;
         if (input.type === "radio") input.checked = value === true;
         else if (typeof value === "string") input.value = value;
       }
+      populateCarSelect();
+      renderRates();
       restoreBookingTargetFromDraft();
+      renderBookingEstimate();
     } catch {
       sessionStorage.removeItem(draftKey);
     }
@@ -695,6 +912,7 @@ function bindBookingForm() {
     form.querySelectorAll("input, select, textarea").forEach(input => {
       if (input.id) draft[input.id] = input.type === "radio" ? input.checked : input.value;
     });
+    draft.bookingDurationChosen = BOOKING_DURATION_SELECTED;
     sessionStorage.setItem(draftKey, JSON.stringify(draft));
   };
 
@@ -715,6 +933,7 @@ function bindBookingForm() {
       capacity: document.getElementById("bookingCapacity").value ? Number(document.getElementById("bookingCapacity").value) : null,
       pickupDate: document.getElementById("bookingPickup").value,
       returnDate: document.getElementById("bookingReturn").value,
+      pickupTime: document.getElementById("bookingPickupTime").value,
       location: BOOKING_TARGET?.label || "",
       targetLatitude: BOOKING_TARGET?.lat ?? null,
       targetLongitude: BOOKING_TARGET?.lng ?? null,
@@ -724,6 +943,9 @@ function bindBookingForm() {
       rentalPeriodHours: BOOKING_RATE_QUOTE?.periodHours ?? null,
       estimatedRentalHours: BOOKING_RATE_QUOTE?.rentalHours ?? null,
       ratePerPeriod: BOOKING_RATE_QUOTE?.unitRate ?? null,
+      rentalDays: BOOKING_RATE_QUOTE?.rentalDays ?? null,
+      discountPercent: BOOKING_RATE_QUOTE?.discountPercent ?? null,
+      discountAmount: BOOKING_RATE_QUOTE?.discountAmount ?? null,
       quotedRate: BOOKING_RATE_QUOTE?.total ?? null,
       notes: document.getElementById("bookingNotes").value.trim()
     };
@@ -750,10 +972,16 @@ function bindBookingForm() {
     document.getElementById("recapCar").textContent = inquiry.carName;
     document.getElementById("recapCapacity").textContent = inquiry.capacity ?? "—";
     document.getElementById("recapPickupDate").textContent = formatRecapDate(inquiry.pickupDate);
+    document.getElementById("recapPickupTime").textContent = inquiry.pickupTime;
     document.getElementById("recapReturnDate").textContent = formatRecapDate(inquiry.returnDate);
     document.getElementById("recapTargetLocation").textContent = inquiry.location;
     document.getElementById("recapNearestPickup").textContent = `${inquiry.nearestPickupDistanceKm.toFixed(2)} km from ${inquiry.nearestPickupName}`;
     document.getElementById("recapRateBasis").textContent = `${regionDisplayName(inquiry.rateRegion)} · ${inquiry.rentalPeriodHours}-hour blocks at ${formatCurrency(inquiry.ratePerPeriod, SETTINGS.currency)}`;
+    document.getElementById("recapRentalDays").textContent = `${inquiry.rentalDays} days`;
+    document.getElementById("recapDiscountRow").hidden = !inquiry.discountPercent;
+    document.getElementById("recapDiscount").textContent = inquiry.discountPercent
+      ? `${inquiry.discountPercent}% · −${formatCurrency(inquiry.discountAmount, SETTINGS.currency)}`
+      : "No discount for 12-hour pricing";
     document.getElementById("recapSubtotal").textContent = document.getElementById("bookingRentalSubtotal").textContent;
     document.getElementById("recapDeposit").textContent = document.getElementById("bookingDepositEstimate").textContent;
     document.getElementById("recapNotes").textContent = inquiry.notes;
@@ -864,9 +1092,9 @@ function bindBookingForm() {
     const lastName = document.getElementById("bookingLastName").value.trim();
     const firstName = document.getElementById("bookingFirstName").value.trim();
 
-    if (!lastName || !firstName || !inquiry.carId || !inquiry.pickupDate || !inquiry.returnDate) {
+    if (!lastName || !firstName || !inquiry.carId || !inquiry.pickupDate || !inquiry.pickupTime || !inquiry.returnDate) {
       msg.className = "form-msg error";
-      msg.textContent = "Please fill in your name, car, and both dates.";
+      msg.textContent = "Please fill in your name, car, pickup date, pickup time, and rental duration.";
       return;
     }
     if (!BOOKING_TARGET) {
@@ -888,6 +1116,13 @@ function bindBookingForm() {
     if (inquiry.capacity !== null && (!Number.isInteger(inquiry.capacity) || inquiry.capacity < 1)) {
       msg.className = "form-msg error";
       msg.textContent = "Capacity must be a whole number greater than zero.";
+      return;
+    }
+    if (BOOKING_TARGET.rateRegion !== "luzon"
+      && !document.querySelector('input[name="bookingPeriod"]:checked')) {
+      msg.className = "form-msg error";
+      msg.textContent = "Choose either the 12-hour or 24-hour rental period.";
+      document.getElementById("bookingPeriodField").scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
     if (!hasVerifiedGoogleAccount(currentUser)) {
@@ -920,4 +1155,3 @@ function iconClass(name) {
   };
   return icons[name] || "fa-circle-info";
 }
-

@@ -13,7 +13,7 @@
 <!-- Styles -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="css/style.css?v=booking-map-4">
+<link rel="stylesheet" href="css/style.css?v=period-duration-merge-5">
 </head>
 <body>
 
@@ -165,7 +165,7 @@
       <div class="section-head">
         <p class="eyebrow">Pricing</p>
         <h2>Rates &amp; deposits</h2>
-        <p>IN rates cover Metro Manila, OUT rates cover neighboring areas, and the Luzon rate covers the Luzon vicinity. Confirm the final rental price, deposit, and requirements with carTOGO.mnl before booking.</p>
+        <p>Choose a unit in Booking Details to view its rates. IN covers Metro Manila, OUT covers neighboring areas, and the Luzon rate covers supported Luzon destinations.</p>
       </div>
       <div class="rates-table-wrap">
         <table class="rates">
@@ -222,16 +222,25 @@
                   <input type="date" id="bookingPickup" required>
                 </div>
                 <div class="field">
-                  <label for="bookingReturn">Return date</label>
-                  <input type="date" id="bookingReturn" required>
+                  <label for="bookingPickupTime">Pickup time</label>
+                  <input type="time" id="bookingPickupTime" required>
+                  <input type="hidden" id="bookingReturn">
                 </div>
-                <fieldset class="field span-2 booking-period-field">
+                <fieldset class="field span-2 booking-period-field" id="bookingPeriodField">
                   <legend>Rental period</legend>
                   <div class="booking-period-toggle">
-                    <label><input type="radio" name="bookingPeriod" value="12"><span>12 hours</span></label>
-                    <label><input type="radio" name="bookingPeriod" value="24" checked><span>24 hours</span></label>
+                    <label><input type="radio" id="bookingPeriod12" name="bookingPeriod" value="12" required><span><i class="fa-regular fa-clock" aria-hidden="true"></i> 12 hours</span></label>
+                    <label><input type="radio" id="bookingPeriod24" name="bookingPeriod" value="24" required><span><i class="fa-solid fa-calendar-day" aria-hidden="true"></i> 24 hours</span></label>
                   </div>
                   <p class="booking-period-note" id="bookingPeriodNote" hidden></p>
+                  <details class="booking-duration-details" id="bookingDurationDetails">
+                    <summary id="bookingDurationSummary">Rental contract length <output id="bookingRentalDaysValue" for="bookingRentalDays">--</output></summary>
+                    <div class="booking-duration-content">
+                      <input type="range" id="bookingRentalDays" min="4" max="15" step="1" value="4" aria-label="Rental contract length in days" aria-describedby="bookingPromoMessage">
+                      <div class="booking-duration-scale" aria-hidden="true"><span>4 days</span><span>15 days</span></div>
+                      <p class="booking-promo" id="bookingPromoMessage" role="status" aria-live="polite">Choose 4–7 days for 5% off or 8–15 days for 10% off.</p>
+                    </div>
+                  </details>
                 </fieldset>
                 <div class="field span-2 booking-map-field">
                   <div class="booking-map-heading">
@@ -253,6 +262,10 @@
                     <div class="booking-estimate-row">
                       <dt>Estimated rental subtotal <span class="booking-estimate-context" id="bookingEstimateSummary">Choose a unit, destination, and dates.</span></dt>
                       <dd id="bookingRentalSubtotal">—</dd>
+                    </div>
+                    <div class="booking-estimate-row booking-discount-row" id="bookingDiscountRow" hidden>
+                      <dt>Long-rental discount</dt>
+                      <dd id="bookingDiscountAmount">—</dd>
                     </div>
                     <div class="booking-estimate-row deposit-row">
                       <dt>Refundable deposit estimate (<span id="bookingDepositPercent">20</span>% of subtotal)</dt>
@@ -312,10 +325,13 @@
               <div class="recap-row"><dt>Unit</dt><dd id="recapCar"></dd></div>
               <div class="recap-row"><dt>Capacity</dt><dd id="recapCapacity"></dd></div>
               <div class="recap-row"><dt>Pickup date</dt><dd id="recapPickupDate"></dd></div>
+              <div class="recap-row"><dt>Pickup time</dt><dd id="recapPickupTime"></dd></div>
               <div class="recap-row"><dt>Return date</dt><dd id="recapReturnDate"></dd></div>
               <div class="recap-row"><dt>Target location</dt><dd id="recapTargetLocation"></dd></div>
               <div class="recap-row"><dt>Nearest pickup</dt><dd id="recapNearestPickup"></dd></div>
               <div class="recap-row"><dt>Rate basis</dt><dd id="recapRateBasis"></dd></div>
+              <div class="recap-row"><dt>Rental contract</dt><dd id="recapRentalDays"></dd></div>
+              <div class="recap-row" id="recapDiscountRow" hidden><dt>Promo discount</dt><dd id="recapDiscount"></dd></div>
               <div class="recap-row recap-price-row"><dt>Estimated rental subtotal</dt><dd id="recapSubtotal"></dd></div>
               <div class="recap-row recap-price-row"><dt>Refundable deposit estimate</dt><dd id="recapDeposit"></dd></div>
               <div class="recap-row" id="recapNotesRow" hidden><dt>Notes</dt><dd id="recapNotes"></dd></div>
@@ -458,8 +474,8 @@
 <script src="../config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="../back/js/data.js?v=unit-rates-2"></script>
-<script src="../back/js/main.js?v=booking-map-2"></script>
+<script src="../back/js/data.js?v=pickup-time-1"></script>
+<script src="../back/js/main.js?v=capacity-min-seats-2"></script>
 <script src="../back/js/chatbot.js"></script>
 </body>
 </html>
