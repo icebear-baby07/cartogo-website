@@ -12,7 +12,7 @@
 
 let SETTINGS = {};
 let LABELS = {};
-let CARS = [];
+let UNITS = [];
 let INQUIRIES = [];
 let CHAT_SESSIONS = [];
 let SELECTED_INQUIRY = null;
@@ -116,7 +116,7 @@ async function enterAdmin() {
 async function loadAll() {
   SETTINGS = await DB.getSettings();
   LABELS = await DB.getLabels();
-  CARS = await DB.getCars();
+  UNITS = await DB.getUnits();
   INQUIRIES = await DB.getInquiries();
 }
 
@@ -141,167 +141,118 @@ function toast(message) {
 }
 
 /* ==========================================================================
-   FLEET TAB — add / edit / delete cars and their rates
+  FLEET TAB — add / edit / delete units and their rates
    ========================================================================== */
 function renderFleetTab() {
   const list = document.getElementById("fleetList");
-  if (CARS.length === 0) {
-    list.innerHTML = `<div class="empty-state">No cars yet. Add your first one below.</div>`;
+  if (UNITS.length === 0) {
+    list.innerHTML = `<div class="empty-state">No units yet. Add your first one below.</div>`;
     return;
   }
-  list.innerHTML = CARS.map(car => `
-    <article class="fleet-item" data-id="${attr(car.id)}">
-      <div class="fleet-photo">
-        <img class="fleet-photo-preview" src="${attr(car.image || "")}" alt="${attr(car.name)}" ${car.image ? "" : "hidden"}>
-        <div class="fleet-photo-empty" ${car.image ? "hidden" : ""}><i class="fa-solid fa-car-side" aria-hidden="true"></i><span>No photo</span></div>
-        <label class="fleet-image-picker"><i class="fa-solid fa-image" aria-hidden="true"></i> Choose image<input class="f-image" type="file" accept="image/*" aria-label="Choose image for ${attr(car.name)}"></label>
-      </div>
+  list.innerHTML = UNITS.map(unit => `
+    <article class="fleet-item" data-id="${attr(unit.id)}">
       <div class="fleet-editor">
         <div class="fleet-fields">
-          <label class="fleet-field">Name<input type="text" class="f-name" value="${attr(car.name)}"></label>
-          <label class="fleet-field">Category<input type="text" class="f-category" value="${attr(car.category)}"></label>
-          <label class="fleet-field">Rate / day<input type="number" class="f-rate" value="${car.rate}" min="0" step="50"></label>
-          <label class="fleet-field">Seats<input type="number" class="f-seats" value="${car.seats}" min="1" max="30"></label>
-          <label class="fleet-field">Transmission<input type="text" class="f-transmission" value="${attr(car.transmission)}"></label>
-          <label class="fleet-field">Fuel<input type="text" class="f-fuel" value="${attr(car.fuel)}"></label>
-          <label class="fleet-field">Availability<select class="f-available">
-            <option value="true" ${car.available ? "selected" : ""}>Available</option>
-            <option value="false" ${!car.available ? "selected" : ""}>Booked out</option>
+          <label class="fleet-field">Brand<input type="text" class="f-brand" value="${attr(unit.brand)}" maxlength="160" required></label>
+          <label class="fleet-field">Model<input type="text" class="f-model" value="${attr(unit.model)}" maxlength="160" required></label>
+          <label class="fleet-field">Display name<input type="text" class="f-display-name" value="${attr(unit.display_name)}" maxlength="160" required></label>
+          <label class="fleet-field">Capacity<input type="number" class="f-capacity" value="${unit.capacity}" min="1" step="1" required></label>
+          <label class="fleet-field">IN / 12 hr (Metro Manila)<input type="number" class="f-in12-rate" value="${unit.in12_rate}" min="0" step="0.01" required></label>
+          <label class="fleet-field">IN / 24 hr (Metro Manila)<input type="number" class="f-in24-rate" value="${unit.in24_rate}" min="0" step="0.01" required></label>
+          <label class="fleet-field">OUT / 12 hr (neighboring areas)<input type="number" class="f-out12-rate" value="${unit.out12_rate}" min="0" step="0.01" required></label>
+          <label class="fleet-field">OUT / 24 hr (neighboring areas)<input type="number" class="f-out24-rate" value="${unit.out24_rate}" min="0" step="0.01" required></label>
+          <label class="fleet-field">Luzon rate<input type="number" class="f-luzon-rate" value="${unit.luzon_rate}" min="0" step="0.01" required></label>
+          <label class="fleet-field">Status<select class="f-status">
+            ${["Available", "Rented", "Maintenance", "Inactive"].map(status => `<option ${unit.status === status ? "selected" : ""}>${status}</option>`).join("")}
           </select></label>
+          <label class="fleet-field">Features<input type="text" class="f-features" value="${attr((unit.features || []).join(", "))}" placeholder="Comma-separated"></label>
         </div>
         <div class="fleet-actions">
-          <button class="btn btn-dark btn-sm save-car" type="button"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Save changes</button>
-          <button class="icon-btn danger delete-car" type="button" title="Delete car" aria-label="Delete ${attr(car.name)}"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
+          <button class="btn btn-dark btn-sm save-unit" type="button"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Save changes</button>
+          <button class="icon-btn danger delete-unit" type="button" title="Delete unit" aria-label="Delete ${attr(unit.display_name)}"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
         </div>
       </div>
     </article>
   `).join("");
 
-  list.querySelectorAll(".fleet-photo-preview").forEach(image => {
-    image.addEventListener("error", () => {
-      image.hidden = true;
-      image.nextElementSibling.hidden = false;
-    });
-  });
-
-  list.querySelectorAll(".f-image").forEach(input => {
-    input.addEventListener("change", async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const row = input.closest(".fleet-item");
+  list.querySelectorAll(".save-unit").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      const row = e.currentTarget.closest(".fleet-item");
+      const unit = {
+        id: Number(row.dataset.id),
+        brand: row.querySelector(".f-brand").value.trim(),
+        model: row.querySelector(".f-model").value.trim(),
+        display_name: row.querySelector(".f-display-name").value.trim(),
+        capacity: Number(row.querySelector(".f-capacity").value),
+        in12_rate: Number(row.querySelector(".f-in12-rate").value),
+        in24_rate: Number(row.querySelector(".f-in24-rate").value),
+        out12_rate: Number(row.querySelector(".f-out12-rate").value),
+        out24_rate: Number(row.querySelector(".f-out24-rate").value),
+        luzon_rate: Number(row.querySelector(".f-luzon-rate").value),
+        status: row.querySelector(".f-status").value,
+        features: row.querySelector(".f-features").value.split(",").map(feature => feature.trim()).filter(Boolean)
+      };
       try {
-        const imageData = await prepareCarImage(file);
-        row.dataset.pendingImage = imageData;
-        row.querySelector(".fleet-photo-preview").src = imageData;
-        row.querySelector(".fleet-photo-preview").hidden = false;
-        row.querySelector(".fleet-photo-empty").hidden = true;
+        await requestAndApproveUnitChange("update", unit);
+        UNITS = await DB.getUnits();
+        renderFleetTab();
+        toast(`Saved changes to ${unit.display_name}.`);
       } catch (error) {
-        input.value = "";
-        toast(`Could not use that image: ${error.message}`);
+        toast(error.message);
       }
     });
   });
 
-  list.querySelectorAll(".save-car").forEach(btn => {
+  list.querySelectorAll(".delete-unit").forEach(btn => {
     btn.addEventListener("click", async (e) => {
       const row = e.currentTarget.closest(".fleet-item");
-      const id = row.dataset.id;
-      const car = CARS.find(c => c.id === id);
-      const updated = {
-        ...car,
-        name: row.querySelector(".f-name").value.trim(),
-        category: row.querySelector(".f-category").value.trim(),
-        seats: Number(row.querySelector(".f-seats").value) || 1,
-        transmission: row.querySelector(".f-transmission").value.trim(),
-        fuel: row.querySelector(".f-fuel").value.trim(),
-        rate: Number(row.querySelector(".f-rate").value) || 0,
-        image: row.dataset.pendingImage || car.image,
-        available: row.querySelector(".f-available").value === "true"
-      };
-      await DB.saveCar(updated);
-      CARS = await DB.getCars();
-      renderFleetTab();
-      toast(`Saved changes to ${updated.name}.`);
-    });
-  });
-
-  list.querySelectorAll(".delete-car").forEach(btn => {
-    btn.addEventListener("click", async (e) => {
-      const row = e.currentTarget.closest(".fleet-item");
-      const id = row.dataset.id;
-      const car = CARS.find(c => c.id === id);
-      if (!confirm(`Delete "${car.name}" from the fleet? This can't be undone.`)) return;
-      await DB.deleteCar(id);
-      CARS = await DB.getCars();
-      renderFleetTab();
-      toast(`Deleted ${car.name}.`);
+      const unit = UNITS.find(item => item.id === Number(row.dataset.id));
+      if (!confirm(`Delete "${unit.display_name}" from the unit data? This can't be undone.`)) return;
+      try {
+        await requestAndApproveUnitChange("delete", { id: unit.id, display_name: unit.display_name });
+        UNITS = await DB.getUnits();
+        renderFleetTab();
+        toast(`Deleted ${unit.display_name}.`);
+      } catch (error) {
+        toast(error.message);
+      }
     });
   });
 }
 
-async function prepareCarImage(file) {
-  if (!file.type.startsWith("image/")) throw new Error("Choose an image file.");
-  if (file.size > 15 * 1024 * 1024) throw new Error("Image must be smaller than 15 MB.");
-
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, 1400 / bitmap.width, 1000 / bitmap.height);
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("Your browser could not process this image.");
-  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
-
-  let imageData = canvas.toDataURL("image/webp", 0.82);
-  if (!imageData.startsWith("data:image/webp")) imageData = canvas.toDataURL("image/jpeg", 0.82);
-  return imageData;
+async function requestAndApproveUnitChange(action, unit) {
+  const { challengeId } = await DB.requestUnitChange(action, unit);
+  const code = window.prompt(`A six-digit approval code was sent to ${CURRENT_ADMIN_EMAIL}. Enter it to apply this change.`);
+  if (!code) throw new Error("Approval cancelled. The code will expire in five minutes.");
+  await DB.approveUnitChange(challengeId, code.trim());
 }
 
 function bindAddCarForm() {
   const form = document.getElementById("addCarForm");
-  const imageInput = document.getElementById("newCarImage");
-  const imagePreview = document.getElementById("newCarImagePreview");
-  let newCarImageData = "";
-
-  imageInput.addEventListener("change", async () => {
-    const file = imageInput.files?.[0];
-    if (!file) return;
-    try {
-      newCarImageData = await prepareCarImage(file);
-      imagePreview.innerHTML = `<img src="${newCarImageData}" alt="Selected car photo">`;
-    } catch (error) {
-      imageInput.value = "";
-      newCarImageData = "";
-      imagePreview.innerHTML = `<div class="new-car-photo-empty"><i class="fa-solid fa-car-side" aria-hidden="true"></i><span>Photo preview</span></div>`;
-      toast(`Could not use that image: ${error.message}`);
-    }
-  });
-
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const newCar = {
-      name: document.getElementById("newCarName").value.trim(),
-      category: document.getElementById("newCarCategory").value.trim(),
-      seats: Number(document.getElementById("newCarSeats").value) || 4,
-      transmission: document.getElementById("newCarTransmission").value.trim() || "Automatic",
-      fuel: document.getElementById("newCarFuel").value.trim() || "Gasoline",
-      rate: Number(document.getElementById("newCarRate").value) || 0,
-      blurb: document.getElementById("newCarBlurb").value.trim() || "A great pick for your next trip.",
-      image: newCarImageData,
-      available: true
+    const unit = {
+      brand: document.getElementById("newCarBrand").value.trim(),
+      model: document.getElementById("newCarModel").value.trim(),
+      display_name: document.getElementById("newCarDisplayName").value.trim(),
+      capacity: Number(document.getElementById("newCarCapacity").value),
+      in12_rate: Number(document.getElementById("newCarIn12Rate").value),
+      in24_rate: Number(document.getElementById("newCarIn24Rate").value),
+      out12_rate: Number(document.getElementById("newCarOut12Rate").value),
+      out24_rate: Number(document.getElementById("newCarOut24Rate").value),
+      luzon_rate: Number(document.getElementById("newCarLuzonRate").value),
+      status: document.getElementById("newCarStatus").value,
+      features: document.getElementById("newCarFeatures").value.split(",").map(feature => feature.trim()).filter(Boolean)
     };
-    if (!newCar.name || !newCar.category) {
-      toast("Please fill in at least a name and category.");
-      return;
+    try {
+      await requestAndApproveUnitChange("add", unit);
+      UNITS = await DB.getUnits();
+      renderFleetTab();
+      form.reset();
+      toast(`Added ${unit.display_name} to the unit data.`);
+    } catch (error) {
+      toast(error.message);
     }
-    await DB.saveCar(newCar);
-    CARS = await DB.getCars();
-    renderFleetTab();
-    form.reset();
-    newCarImageData = "";
-    imagePreview.innerHTML = `<div class="new-car-photo-empty"><i class="fa-solid fa-car-side" aria-hidden="true"></i><span>Photo preview</span></div>`;
-    toast(`Added ${newCar.name} to the fleet.`);
   });
 }
 
@@ -643,7 +594,8 @@ function showInquiryDetails(id) {
       <div><dt>Secondary phone</dt><dd>${text(inquiry.secondary_phone || "—")}</dd></div>
       <div><dt>Verified by</dt><dd>${text(inquiry.verification_method || "—")}</dd></div>
       <div><dt>Verified at</dt><dd>${inquiry.verified_at ? text(formatDate(inquiry.verified_at)) : "—"}</dd></div>
-      <div><dt>Vehicle</dt><dd>${text(inquiry.car_name || inquiry.carName || "—")}</dd></div>
+      <div><dt>Unit</dt><dd>${text(inquiry.car_name || inquiry.carName || "—")}</dd></div>
+      <div><dt>Capacity</dt><dd>${text(inquiry.capacity ?? "—")}</dd></div>
       <div><dt>Pickup date</dt><dd>${text(inquiry.pickup_date || inquiry.pickupDate || "—")}</dd></div>
       <div><dt>Return date</dt><dd>${text(inquiry.return_date || inquiry.returnDate || "—")}</dd></div>
       <div><dt>Pickup point</dt><dd>${text(inquiry.location || "—")}</dd></div>
@@ -662,9 +614,9 @@ function bindInquiryTools() {
 
   document.getElementById("exportCsvBtn").addEventListener("click", () => {
     if (INQUIRIES.length === 0) { toast("No inquiries to export yet."); return; }
-    const headers = ["Submitted", "Name", "Email", "Phone", "Car", "Pickup Date", "Return Date", "Location", "Status", "Notes"];
+    const headers = ["Submitted", "Name", "Email", "Phone", "Unit", "Capacity", "Pickup Date", "Return Date", "Location", "Status", "Notes"];
     const rows = INQUIRIES.map(i => [
-      i.submittedAt, i.name, i.email, i.phone, i.carName, i.pickupDate, i.returnDate, i.location || "", i.status, (i.notes || "").replace(/\n/g, " ")
+      i.submittedAt, i.name, i.email, i.phone, i.carName, i.capacity ?? "", i.pickupDate, i.returnDate, i.location || "", i.status, (i.notes || "").replace(/\n/g, " ")
     ]);
     const csv = [headers, ...rows]
       .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(","))
@@ -787,7 +739,7 @@ function renderSettingsTab() {
     <div class="settings-grid">
       <div class="label-field"><label for="setCompanyName">Company name</label><input id="setCompanyName" value="${attr(SETTINGS.companyName)}"></div>
       <div class="label-field"><label for="setCurrency">Currency symbol</label><input id="setCurrency" value="${attr(SETTINGS.currency)}" maxlength="3"></div>
-      <div class="label-field"><label for="setDeposit">Deposit percentage (% of daily rate)</label><input id="setDeposit" type="number" value="${SETTINGS.depositPercent}"></div>
+      <div class="label-field"><label for="setDeposit">Deposit percentage (% of estimated rental total)</label><input id="setDeposit" type="number" value="${SETTINGS.depositPercent}"></div>
       <div class="label-field"><label for="setExtraDriver">Extra driver fee</label><input id="setExtraDriver" type="number" value="${SETTINGS.extraDriverFee}"></div>
       <div class="label-field"><label for="setChildSeat">Child seat fee</label><input id="setChildSeat" type="number" value="${SETTINGS.childSeatFee}"></div>
       <div class="label-field"><label for="setLateFee">Late return fee (per hour)</label><input id="setLateFee" type="number" value="${SETTINGS.lateFeePerHour}"></div>

@@ -11,7 +11,7 @@
 
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-<link rel="stylesheet" href="css/admin.css?v=centered-inquiry-modal-1">
+<link rel="stylesheet" href="css/admin.css?v=unit-inventory-1">
 </head>
 <body class="admin-body">
 
@@ -48,35 +48,33 @@
       <div class="admin-header">
         <div>
           <h1>Fleet &amp; rates</h1>
-          <p>Edit any field and click the save icon on that row. Rates update on the public site immediately.</p>
+          <p>Unit changes are written to Supabase after email approval.</p>
         </div>
       </div>
 
       <div class="admin-card">
         <h2>Current fleet</h2>
-        <p class="sub">Rate is per day, in your configured currency.</p>
+        <p class="sub">Only available units can be selected by clients. Enter all five regional and duration rates.</p>
         <div class="fleet-list" id="fleetList"></div>
       </div>
 
       <div class="admin-card">
-        <h2>Add a new car</h2>
-        <p class="sub">New cars appear on the public fleet grid right away.</p>
+        <h2>Add a unit</h2>
+        <p class="sub">An approval code will be sent to your authorized administrator email.</p>
         <form id="addCarForm" class="add-car-form">
-          <div class="add-car-layout">
-            <div class="new-car-photo">
-              <div class="image-upload-preview" id="newCarImagePreview"><div class="new-car-photo-empty"><i class="fa-solid fa-car-side" aria-hidden="true"></i><span>Photo preview</span></div></div>
-              <label class="fleet-image-picker"><i class="fa-solid fa-image" aria-hidden="true"></i> Choose image<input id="newCarImage" type="file" accept="image/*" aria-label="Choose a photo for the new car"></label>
-            </div>
-            <div class="add-car-fields">
-              <div class="label-field"><label for="newCarName">Name</label><input id="newCarName" placeholder="e.g. Toyota Wigo" required></div>
-              <div class="label-field"><label for="newCarCategory">Category</label><input id="newCarCategory" placeholder="e.g. Economy" required></div>
-              <div class="label-field"><label for="newCarSeats">Seats</label><input id="newCarSeats" type="number" value="5" min="1" max="30"></div>
-              <div class="label-field"><label for="newCarTransmission">Transmission</label><input id="newCarTransmission" placeholder="Automatic"></div>
-              <div class="label-field"><label for="newCarFuel">Fuel</label><input id="newCarFuel" placeholder="Gasoline"></div>
-              <div class="label-field"><label for="newCarRate">Rate / day</label><input id="newCarRate" type="number" min="0" step="50" required></div>
-              <div class="label-field add-car-description"><label for="newCarBlurb">Short description</label><input id="newCarBlurb" placeholder="One line on why someone would rent this car"></div>
-              <div class="add-car-submit"><button type="submit" class="btn btn-dark"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add car to fleet</button></div>
-            </div>
+          <div class="add-car-fields">
+            <div class="label-field"><label for="newCarBrand">Brand</label><input id="newCarBrand" placeholder="e.g. Toyota" required maxlength="160"></div>
+            <div class="label-field"><label for="newCarModel">Model</label><input id="newCarModel" placeholder="e.g. Wigo G" required maxlength="160"></div>
+            <div class="label-field"><label for="newCarDisplayName">Display name</label><input id="newCarDisplayName" placeholder="e.g. Toyota Wigo G" required maxlength="160"></div>
+            <div class="label-field"><label for="newCarCapacity">Capacity</label><input id="newCarCapacity" type="number" min="1" step="1" required></div>
+            <div class="label-field"><label for="newCarIn12Rate">IN / 12 hr (Metro Manila)</label><input id="newCarIn12Rate" type="number" min="0" step="0.01" required></div>
+            <div class="label-field"><label for="newCarIn24Rate">IN / 24 hr (Metro Manila)</label><input id="newCarIn24Rate" type="number" min="0" step="0.01" required></div>
+            <div class="label-field"><label for="newCarOut12Rate">OUT / 12 hr (neighboring areas)</label><input id="newCarOut12Rate" type="number" min="0" step="0.01" required></div>
+            <div class="label-field"><label for="newCarOut24Rate">OUT / 24 hr (neighboring areas)</label><input id="newCarOut24Rate" type="number" min="0" step="0.01" required></div>
+            <div class="label-field"><label for="newCarLuzonRate">Luzon rate</label><input id="newCarLuzonRate" type="number" min="0" step="0.01" required></div>
+            <div class="label-field"><label for="newCarStatus">Status</label><select id="newCarStatus" required><option>Available</option><option>Rented</option><option>Maintenance</option><option>Inactive</option></select></div>
+            <div class="label-field add-car-description"><label for="newCarFeatures">Features</label><input id="newCarFeatures" placeholder="e.g. Automatic, 4 doors, Bluetooth"></div>
+            <div class="add-car-submit"><button type="submit" class="btn btn-dark"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add unit</button></div>
           </div>
         </form>
       </div>
@@ -191,7 +189,7 @@
 <div class="auth-toast" id="adminToast" role="status" aria-live="polite"></div>
 <script src="../config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="../back/js/data.js?v=labels-storage-1"></script>
-<script src="../back/js/admin.js?v=auto-fleet-stats-1"></script>
+<script src="../back/js/data.js?v=unit-rates-2"></script>
+<script src="../back/js/admin.js?v=unit-rates-2"></script>
 </body>
 </html>

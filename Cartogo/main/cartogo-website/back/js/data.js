@@ -27,7 +27,7 @@ const SEED_DATA = {
   labels: {
     hero: {
       title: "Your trip starts with <em>carTOGO.mnl</em>.",
-      subtitle: "Clean, well-maintained cars, clear daily rates, and easy reservations. Get on the road with carTOGO.mnl."
+      subtitle: "Clean, well-maintained cars, clear rental rates, and easy reservations. Get on the road with carTOGO.mnl."
     },
     trustStrip: [
       { value: "4", label: "Cars in our fleet" },
@@ -44,7 +44,7 @@ const SEED_DATA = {
     whyChooseUs: [
       { icon: "car", title: "Choice of vehicles", description: "Pick from compact sedans or a spacious SUV based on your trip." },
       { icon: "clipboard", title: "Simple inquiry", description: "Send your preferred dates and vehicle through the online form." },
-      { icon: "card", title: "Clear pricing", description: "Daily rates and deposit estimates are shown before you inquire." },
+      { icon: "card", title: "Clear pricing", description: "Rental rates and deposit estimates are shown before you inquire." },
       { icon: "location", title: "Metro Manila pickup", description: "Choose a pickup area that works for your schedule." },
       { icon: "phone", title: "Direct assistance", description: "Our contact details are available for questions and booking confirmation." },
       { icon: "key", title: "Ready to drive", description: "Once your reservation is confirmed, complete the required pickup documents and go." }
@@ -117,6 +117,24 @@ function _uid(prefix) {
   return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
+async function unitApprovalRequest(path, payload) {
+  const { data, error } = await supa.auth.getSession();
+  if (error) throw error;
+  const accessToken = data.session?.access_token;
+  if (!accessToken) throw new Error("Sign in again to manage unit inventory.");
+  const response = await fetch(path, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`
+    },
+    body: JSON.stringify(payload)
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || "The unit change could not be approved.");
+  return result;
+}
+
 /* ---------- Public DB API ---------- */
 const DB = {
   // --- Settings (company name, currency, fees) ---
@@ -142,29 +160,43 @@ const DB = {
     return data.labels;
   },
 
-  // --- Cars / fleet + rates ---
+  // --- Units / public fleet + rates ---
+  async getUnits() {
+    const { data, error } = await supa
+      .from("unit_data")
+      .select("*")
+      .order("id", { ascending: true });
+    if (error) throw error;
+    return data || [];
+  },
   async getCars() {
-    const cars = _readAll().cars;
-    return Array.isArray(cars) ? cars : JSON.parse(JSON.stringify(SEED_DATA.cars));
+    const units = await this.getUnits();
+    return units.map(unit => {
+      const features = Array.isArray(unit.features) ? unit.features : [];
+      return {
+        id: String(unit.id),
+        name: unit.display_name,
+        category: unit.brand,
+        model: unit.model,
+        seats: unit.capacity,
+        in12_rate: Number(unit.in12_rate),
+        in24_rate: Number(unit.in24_rate),
+        out12_rate: Number(unit.out12_rate),
+        out24_rate: Number(unit.out24_rate),
+        luzon_rate: Number(unit.luzon_rate),
+        status: unit.status,
+        available: unit.status === "Available",
+        features,
+        image: "",
+        blurb: features.join(" · ") || `${unit.brand} ${unit.model}`
+      };
+    });
   },
-  async saveCar(car) {
-    const data = _readAll();
-    if (car.id) {
-      const idx = data.cars.findIndex(c => c.id === car.id);
-      if (idx > -1) { data.cars[idx] = { ...data.cars[idx], ...car }; }
-      else { data.cars.push(car); }
-    } else {
-      car.id = _uid("c");
-      data.cars.push(car);
-    }
-    _writeAll(data);
-    return car;
+  async requestUnitChange(action, unit) {
+    return unitApprovalRequest("/api/unit-data/request", { action, unit });
   },
-  async deleteCar(carId) {
-    const data = _readAll();
-    data.cars = data.cars.filter(c => c.id !== carId);
-    _writeAll(data);
-    return true;
+  async approveUnitChange(challengeId, code) {
+    return unitApprovalRequest("/api/unit-data/approve", { challengeId, code });
   },
 
   // --- Inquiries (this is the "client information" store) ---
@@ -184,6 +216,7 @@ const DB = {
       secondary_phone: inquiry.secondaryPhone || null,
       car_id: inquiry.carId,
       car_name: inquiry.carName,
+      capacity: inquiry.capacity,
       pickup_date: inquiry.pickupDate,
       return_date: inquiry.returnDate,
       location: inquiry.location,

@@ -25,7 +25,7 @@ Use one Supabase project consistently for the site URL, public key, Google provi
 1. In Supabase Authentication, enable Google. Create a Web application OAuth client in Google Cloud, then add the callback URL shown in Supabase's Google provider settings to Google's Authorized redirect URIs. Put the Google client ID and secret in Supabase, not in this repository.
 2. In the same Supabase project, set the Site URL to the normal deployed site URL. For local LAN testing, it can be set to the current LAN site URL, such as `http://<lan-ip>:<port>/front/`.
 3. Add the exact return pages under Supabase Authentication → URL Configuration → Redirect URLs. Include `/front/index.html` and `/front/admin.html` for every address used: `localhost`, `127.0.0.1`, the current LAN IP, and the deployed HTTPS domain as applicable. The app requests a return to the page where sign-in started. The Google Cloud callback remains the Supabase callback URL; it is not a site page.
-4. Run [supabase-inquiry-migration.sql](back/db/supabase-inquiry-migration.sql) in the SQL editor for inquiry storage, row-level security, and admin authorization. It does not contain an initial administrator email. Run [supabase-chat-schema.sql](back/db/supabase-chat-schema.sql) only if using the Supabase Chat Monitor.
+4. Run [supabase-inquiry-migration.sql](back/db/supabase-inquiry-migration.sql) in the SQL editor for inquiry storage, row-level security, and admin authorization. It does not contain an initial administrator email. Run or rerun [unit_data.sql](back/db/unit_data.sql) after it to create or migrate the shared inventory table and public read policy. Existing `daily_rate` values are copied into `in24_rate`; the other four rate columns start at 0, then the old column is dropped. Run [supabase-chat-schema.sql](back/db/supabase-chat-schema.sql) only if using the Supabase Chat Monitor.
 5. Bootstrap the first administrator: sign in once at `front/admin.html` with the chosen Google account (access will be denied until it is added), then run this in the same project's SQL editor after replacing the placeholder with that account's email:
 
 	 ```sql
@@ -52,10 +52,14 @@ Use one Supabase project consistently for the site URL, public key, Google provi
 
 	 Return to the admin page and sign in again. To add further administrators, have each account complete Google sign-in once, then add its email in Admin Settings. Existing installations migrate their current admin account automatically; if you already ran an earlier version that seeded an email into `cartogo_admin_accounts`, remove that account after adding your intended one.
 
+Unit changes in Admin → Fleet & Rates require a one-time approval code sent to the signed-in authorized administrator. In the website server's ignored `main/cartogo-website/.env`, set `SUPABASE_SERVICE_ROLE_KEY` to the service-role key for the same project and configure `SMTP_USER`, `SMTP_APP_PASSWORD`, `SMTP_HOST=smtp.gmail.com`, and `SMTP_PORT=587`. Use a Gmail app password (with 2-Step Verification enabled), not the account password. The service-role key stays on the website server and must never be added to browser config or chatbot settings. Restart the website server after changing `.env`.
+
+The customer fleet and rates now read from `public.unit_data`; add inventory through the authorized admin panel after running the SQL file. `IN` rates are for Metro Manila, `OUT` rates are for neighboring areas, and `luzon_rate` covers the Luzon vicinity. The existing booking estimate uses `in24_rate` because the booking form has no duration or destination rate selector yet. Public visitors cannot read rows marked `Inactive`. To ground chatbot answers in live units, set the same project's `SUPABASE_URL` and `SUPABASE_ANON_KEY` in the ignored `chatbot/.env`, then restart the chatbot. The chatbot uses only its read-only key for inventory lookup; if no matching row can be verified, it says so instead of guessing.
+
 Customer inquiries require a verified Google account. Row-level security restricts inquiry access; do not disable it or grant anonymous access to inquiries. If a token request returns `UNAUTHORIZED_INVALID_API_KEY`, verify that the Supabase URL and public key belong to the same project.
 
 ## Data and security notes
 
-Inquiries and chat sessions use Supabase. Fleet content is seeded in `back/js/data.js`; site settings use browser-local storage and are not shared across devices.
+Inquiries, unit inventory, and chat sessions use Supabase. Site settings and labels still use browser-local storage and are not shared across devices.
 
 The supplied chat schema currently grants anonymous clients broad access to `public.chat_sessions`, including read and delete. Review and tighten those policies before using that schema with real or sensitive conversations in production. The chatbot service and its optional MongoDB request logging are separate from inquiry storage.

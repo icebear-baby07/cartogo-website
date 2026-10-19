@@ -141,20 +141,20 @@ function renderFleet() {
           : `<img src="https://placehold.co/480x360/141414/FFFFFF?text=${encodeURIComponent(car.name)}" alt="${escapeHtml(car.name)}">`
         }
         <span class="tag">${escapeHtml(car.category)}</span>
-        <span class="avail ${car.available ? "" : "out"}">${car.available ? "Available" : "Booked out"}</span>
+        <span class="avail ${car.available ? "" : "out"}">${escapeHtml(car.status || (car.available ? "Available" : "Unavailable"))}</span>
       </div>
       <div class="car-body">
         <h3>${escapeHtml(car.name)}</h3>
         <div class="car-specs">
           <span><i class="fa-solid fa-user" aria-hidden="true"></i> ${escapeHtml(String(car.seats))} seats</span>
-          <span><i class="fa-solid fa-gear" aria-hidden="true"></i> ${escapeHtml(car.transmission)}</span>
-          <span><i class="fa-solid fa-gas-pump" aria-hidden="true"></i> ${escapeHtml(car.fuel)}</span>
+          <span><i class="fa-solid fa-car-side" aria-hidden="true"></i> ${escapeHtml(car.model)}</span>
+          ${(car.features || []).map(feature => `<span>${escapeHtml(feature)}</span>`).join("")}
         </div>
-        <p class="car-blurb">${escapeHtml(car.blurb)}</p>
+        <p class="car-blurb">${car.features?.length ? "Unit features" : "Contact us for unit details."}</p>
         <div class="car-foot">
           <div class="car-rate">
-            <b>${formatCurrency(car.rate, SETTINGS.currency)}</b>
-            <span>per day</span>
+            <b>${formatCurrency(car.in24_rate, SETTINGS.currency)}</b>
+            <span>IN / 24 hr</span>
           </div>
           <button class="btn btn-dark btn-sm" ${car.available ? "" : "disabled"} data-reserve="${escapeHtml(car.id)}">
             ${car.available ? "Reserve" : "Unavailable"}
@@ -207,9 +207,11 @@ function renderRates() {
     <tr>
       <td>${escapeHtml(car.name)}</td>
       <td>${escapeHtml(car.category)}</td>
-      <td class="num">${formatCurrency(car.rate, SETTINGS.currency)}</td>
-      <td class="num">${formatCurrency(car.rate * 7 * 0.9, SETTINGS.currency)}</td>
-      <td class="num">${formatCurrency(Math.round(car.rate * SETTINGS.depositPercent / 100), SETTINGS.currency)}</td>
+      <td class="num">${formatCurrency(car.in12_rate, SETTINGS.currency)}</td>
+      <td class="num">${formatCurrency(car.in24_rate, SETTINGS.currency)}</td>
+      <td class="num">${formatCurrency(car.out12_rate, SETTINGS.currency)}</td>
+      <td class="num">${formatCurrency(car.out24_rate, SETTINGS.currency)}</td>
+      <td class="num">${formatCurrency(car.luzon_rate, SETTINGS.currency)}</td>
     </tr>
   `).join("");
   finishLoading(tbody);
@@ -292,7 +294,7 @@ function renderFooter() {
 function populateCarSelect() {
   const select = document.getElementById("bookingCar");
   select.innerHTML = `<option value="">Select a car</option>` +
-    CARS.map(c => `<option value="${c.id}">${escapeHtml(c.name)} — ${formatCurrency(c.rate, SETTINGS.currency)}/day</option>`).join("");
+    CARS.map(c => `<option value="${c.id}">${escapeHtml(c.name)} — ${formatCurrency(c.in24_rate, SETTINGS.currency)}/24 hr IN</option>`).join("");
   select.disabled = false;
   select.classList.remove("skeleton-select");
   finishLoading(select);
@@ -336,7 +338,7 @@ function renderBookingEstimate() {
   }
 
   const rentalDays = Math.max(1, elapsedDays);
-  const rentalSubtotal = car.rate * rentalDays;
+  const rentalSubtotal = car.in24_rate * rentalDays;
   summary.textContent = `${rentalDays} ${rentalDays === 1 ? "day" : "days"} · ${location || "Pickup point not selected"} · ${rentalDays * 24} hours`;
   subtotal.textContent = formatCurrency(rentalSubtotal, SETTINGS.currency);
   deposit.textContent = formatCurrency(Math.round(rentalSubtotal * depositPercent / 100), SETTINGS.currency);
@@ -453,6 +455,7 @@ function bindBookingForm() {
       name,
       carId,
       carName: car ? car.name : "Unknown",
+      capacity: document.getElementById("bookingCapacity").value ? Number(document.getElementById("bookingCapacity").value) : null,
       pickupDate: document.getElementById("bookingPickup").value,
       returnDate: document.getElementById("bookingReturn").value,
       location: document.getElementById("bookingLocation").value,
@@ -479,6 +482,7 @@ function bindBookingForm() {
     document.getElementById("recapName").textContent = inquiry.name;
     document.getElementById("recapEmail").textContent = currentUser.email;
     document.getElementById("recapCar").textContent = inquiry.carName;
+    document.getElementById("recapCapacity").textContent = inquiry.capacity ?? "—";
     document.getElementById("recapPickupDate").textContent = formatRecapDate(inquiry.pickupDate);
     document.getElementById("recapReturnDate").textContent = formatRecapDate(inquiry.returnDate);
     document.getElementById("recapPickupPoint").textContent = inquiry.location;
@@ -600,6 +604,11 @@ function bindBookingForm() {
     if (new Date(inquiry.returnDate) < new Date(inquiry.pickupDate)) {
       msg.className = "form-msg error";
       msg.textContent = "Return date can't be earlier than the pickup date.";
+      return;
+    }
+    if (inquiry.capacity !== null && (!Number.isInteger(inquiry.capacity) || inquiry.capacity < 1)) {
+      msg.className = "form-msg error";
+      msg.textContent = "Capacity must be a whole number greater than zero.";
       return;
     }
     if (!hasVerifiedGoogleAccount(currentUser)) {

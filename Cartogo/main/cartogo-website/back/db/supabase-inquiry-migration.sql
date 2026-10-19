@@ -6,6 +6,7 @@ create table if not exists public.inquiries (
   secondary_phone text,
   car_id text not null,
   car_name text not null,
+  capacity integer,
   pickup_date date not null,
   return_date date not null,
   location text,
@@ -34,6 +35,7 @@ end;
 $$;
 
 alter table public.inquiries add column if not exists secondary_phone text;
+alter table public.inquiries add column if not exists capacity integer;
 alter table public.inquiries alter column email drop not null;
 alter table public.inquiries alter column phone drop not null;
 alter table public.inquiries add column if not exists status text not null default 'pending_review';

@@ -172,18 +172,18 @@
       <div class="section-head">
         <p class="eyebrow">Pricing</p>
         <h2>Rates &amp; deposits</h2>
-        <p>Rates shown are starting rates for the current fleet. Confirm the final rental price, deposit, and requirements with carTOGO.mnl before booking.</p>
+        <p>IN rates cover Metro Manila, OUT rates cover neighboring areas, and the Luzon rate covers the Luzon vicinity. Confirm the final rental price, deposit, and requirements with carTOGO.mnl before booking.</p>
       </div>
       <div class="rates-table-wrap">
         <table class="rates">
           <thead>
-            <tr><th>Car</th><th>Category</th><th>Per day</th><th>Per week</th><th>Deposit</th></tr>
+            <tr><th>Unit</th><th>Brand</th><th>IN / 12 hr</th><th>IN / 24 hr</th><th>OUT / 12 hr</th><th>OUT / 24 hr</th><th>Luzon</th></tr>
           </thead>
           <tbody id="ratesBody" aria-busy="true">
-            <tr aria-hidden="true"><td><span class="skeleton skeleton-line line-wide"></span></td><td><span class="skeleton skeleton-line line-short"></span></td><td><span class="skeleton skeleton-line"></span></td><td><span class="skeleton skeleton-line"></span></td><td><span class="skeleton skeleton-line line-medium"></span></td></tr>
-            <tr aria-hidden="true"><td><span class="skeleton skeleton-line line-wide"></span></td><td><span class="skeleton skeleton-line line-short"></span></td><td><span class="skeleton skeleton-line"></span></td><td><span class="skeleton skeleton-line"></span></td><td><span class="skeleton skeleton-line line-medium"></span></td></tr>
-            <tr aria-hidden="true"><td><span class="skeleton skeleton-line line-wide"></span></td><td><span class="skeleton skeleton-line line-short"></span></td><td><span class="skeleton skeleton-line"></span></td><td><span class="skeleton skeleton-line"></span></td><td><span class="skeleton skeleton-line line-medium"></span></td></tr>
-            <tr aria-hidden="true"><td><span class="skeleton skeleton-line line-wide"></span></td><td><span class="skeleton skeleton-line line-short"></span></td><td><span class="skeleton skeleton-line"></span></td><td><span class="skeleton skeleton-line"></span></td><td><span class="skeleton skeleton-line line-medium"></span></td></tr>
+            <tr aria-hidden="true"><td colspan="7"><span class="skeleton skeleton-line line-wide"></span></td></tr>
+            <tr aria-hidden="true"><td colspan="7"><span class="skeleton skeleton-line line-wide"></span></td></tr>
+            <tr aria-hidden="true"><td colspan="7"><span class="skeleton skeleton-line line-wide"></span></td></tr>
+            <tr aria-hidden="true"><td colspan="7"><span class="skeleton skeleton-line line-wide"></span></td></tr>
           </tbody>
         </table>
       </div>
@@ -213,6 +213,44 @@
 
         <form id="bookingForm" novalidate>
           <div class="form-grid">
+            <details class="booking-details span-2" open>
+              <summary>1. Booking details</summary>
+              <div class="form-grid">
+                <div class="field span-2">
+                  <label for="bookingCar">Unit</label>
+                  <select id="bookingCar" class="skeleton-select" aria-busy="true" required disabled><option value="">Loading cars...</option></select>
+                </div>
+                <div class="field">
+                  <label for="bookingPickup">Pickup date</label>
+                  <input type="date" id="bookingPickup" required>
+                </div>
+                <div class="field">
+                  <label for="bookingReturn">Return date</label>
+                  <input type="date" id="bookingReturn" required>
+                </div>
+                <div class="field span-2">
+                  <label for="bookingLocation">Pickup point</label>
+                  <select id="bookingLocation" class="skeleton-select" aria-busy="true" disabled><option value="">Loading pickup points...</option></select>
+                </div>
+                <div class="field">
+                  <label for="bookingCapacity">Capacity</label>
+                  <input type="number" id="bookingCapacity" min="1" step="1" inputmode="numeric">
+                </div>
+                <section class="booking-estimate span-2" aria-label="Estimated rental pricing" aria-live="polite" hidden>
+                  <dl>
+                    <div class="booking-estimate-row">
+                      <dt>Estimated rental subtotal <span class="booking-estimate-context" id="bookingEstimateSummary">Choose pickup and return dates.</span></dt>
+                      <dd id="bookingRentalSubtotal">—</dd>
+                    </div>
+                    <div class="booking-estimate-row deposit-row">
+                      <dt>Refundable deposit estimate (<span id="bookingDepositPercent">20</span>% of subtotal)</dt>
+                      <dd id="bookingDepositEstimate">—</dd>
+                    </div>
+                  </dl>
+                  <p class="booking-estimate-note">The refundable deposit is separate from the rental subtotal. Final pricing is confirmed by our team.</p>
+                </section>
+              </div>
+            </details>
             <div class="field">
               <label for="bookingLastName">Last name</label>
               <input type="text" id="bookingLastName" autocomplete="family-name" required>
@@ -238,35 +276,6 @@
                 </div>
               </div>
             </details>
-            <div class="field span-2">
-              <label for="bookingCar">Car</label>
-              <select id="bookingCar" class="skeleton-select" aria-busy="true" required disabled><option value="">Loading cars...</option></select>
-            </div>
-            <div class="field">
-              <label for="bookingPickup">Pickup date</label>
-              <input type="date" id="bookingPickup" required>
-            </div>
-            <div class="field">
-              <label for="bookingReturn">Return date</label>
-              <input type="date" id="bookingReturn" required>
-            </div>
-            <div class="field span-2">
-              <label for="bookingLocation">Pickup point</label>
-              <select id="bookingLocation" class="skeleton-select" aria-busy="true" disabled><option value="">Loading pickup points...</option></select>
-            </div>
-            <section class="booking-estimate span-2" aria-label="Estimated rental pricing" aria-live="polite" hidden>
-              <dl>
-                <div class="booking-estimate-row">
-                  <dt>Estimated rental subtotal <span class="booking-estimate-context" id="bookingEstimateSummary">Choose pickup and return dates.</span></dt>
-                  <dd id="bookingRentalSubtotal">—</dd>
-                </div>
-                <div class="booking-estimate-row deposit-row">
-                  <dt>Refundable deposit estimate (<span id="bookingDepositPercent">20</span>% of subtotal)</dt>
-                  <dd id="bookingDepositEstimate">—</dd>
-                </div>
-              </dl>
-              <p class="booking-estimate-note">The refundable deposit is separate from the rental subtotal. Final pricing is confirmed by our team.</p>
-            </section>
           </div>
           <fieldset class="verification-options">
             <legend>Google sign-in</legend>
@@ -288,7 +297,8 @@
             <dl class="recap-list">
               <div class="recap-row"><dt>Name</dt><dd id="recapName"></dd></div>
               <div class="recap-row"><dt>Email</dt><dd id="recapEmail"></dd></div>
-              <div class="recap-row"><dt>Car</dt><dd id="recapCar"></dd></div>
+              <div class="recap-row"><dt>Unit</dt><dd id="recapCar"></dd></div>
+              <div class="recap-row"><dt>Capacity</dt><dd id="recapCapacity"></dd></div>
               <div class="recap-row"><dt>Pickup date</dt><dd id="recapPickupDate"></dd></div>
               <div class="recap-row"><dt>Return date</dt><dd id="recapReturnDate"></dd></div>
               <div class="recap-row"><dt>Pickup point</dt><dd id="recapPickupPoint"></dd></div>
@@ -433,8 +443,8 @@
 <div class="auth-toast" id="authToast" role="status" aria-live="polite"></div>
 <script src="../config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="../back/js/data.js?v=labels-storage-1"></script>
-<script src="../back/js/main.js?v=reservation-recap-1"></script>
+<script src="../back/js/data.js?v=unit-rates-2"></script>
+<script src="../back/js/main.js?v=unit-rates-2"></script>
 <script src="../back/js/chatbot.js"></script>
 </body>
 </html>

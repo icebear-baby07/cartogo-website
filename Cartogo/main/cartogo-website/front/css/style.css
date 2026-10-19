@@ -531,6 +531,12 @@ table.rates .skeleton-line{ height:0.7rem; }
 .booking-list b{ color: var(--asphalt); }
 .form-grid{ display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.1rem; }
 .form-grid .span-2{ grid-column: 1 / -1; }
+.booking-details{ min-width:0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+.booking-details summary{ display:flex; align-items:center; gap:0.5rem; padding:0.85rem 0; color:var(--asphalt); font-size:1rem; font-weight:700; cursor:pointer; list-style:none; }
+.booking-details summary::-webkit-details-marker{ display:none; }
+.booking-details summary::before{ content:""; width:0; height:0; border-top:4px solid transparent; border-bottom:4px solid transparent; border-left:5px solid var(--slate); transition:transform 0.2s ease; }
+.booking-details[open] summary::before{ transform:rotate(90deg); }
+.booking-details > .form-grid{ padding:0.35rem 0 1rem; }
 .booking-estimate{ min-width:0; padding:0.8rem 1rem; background:var(--concrete); border-left:3px solid var(--signal); border-radius:0 var(--radius-sm) var(--radius-sm) 0; }
 .booking-estimate[hidden]{ display:none; }
 .booking-estimate dl{ margin:0; }

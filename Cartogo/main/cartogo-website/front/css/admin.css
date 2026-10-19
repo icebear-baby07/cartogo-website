@@ -86,7 +86,7 @@ table.admin-table input:focus, table.admin-table select:focus{ outline:none; bor
 .row-actions{ display:flex; gap:0.4rem; white-space:nowrap; }
 
 .fleet-list{ display:grid; gap:0.85rem; }
-.fleet-item{ display:grid; grid-template-columns: 170px minmax(0, 1fr); gap:1.1rem; padding:1rem; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--paper); }
+.fleet-item{ display:grid; grid-template-columns:minmax(0, 1fr); gap:1.1rem; padding:1rem; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--paper); }
 .fleet-photo{ display:flex; flex-direction:column; gap:0.65rem; min-width:0; }
 .fleet-photo-preview,.fleet-photo-empty{ width:100%; aspect-ratio:4 / 3; border-radius:var(--radius-sm); object-fit:cover; background:var(--concrete); }
 .fleet-photo-empty{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.45rem; color:var(--slate-light); border:1px dashed var(--line); }
@@ -135,11 +135,11 @@ table.admin-table input:focus, table.admin-table select:focus{ outline:none; bor
   display:block; font-family: var(--font-mono); font-size:0.72rem; text-transform:uppercase;
   letter-spacing:0.05em; color: var(--slate); margin-bottom:0.35rem;
 }
-.label-field input, .label-field textarea{
+.label-field input, .label-field textarea, .label-field select{
   width:100%; border: 1.5px solid var(--line); border-radius: var(--radius-sm);
   padding: 0.6em 0.75em; background: var(--concrete);
 }
-.label-field input:focus, .label-field textarea:focus{ outline:none; border-color: var(--route-blue); background: var(--paper); }
+.label-field input:focus, .label-field textarea:focus, .label-field select:focus{ outline:none; border-color: var(--route-blue); background: var(--paper); }
 .repeat-item{
   display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap:0.75rem;
   border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0.9rem 3rem 0.9rem 0.9rem; margin-bottom: 0.75rem;
@@ -223,7 +223,7 @@ table.admin-table input:focus, table.admin-table select:focus{ outline:none; bor
 }
 
 @media (max-width: 980px){
-  .fleet-item{ grid-template-columns:140px minmax(0, 1fr); }
+  .fleet-item{ grid-template-columns:minmax(0, 1fr); }
   .fleet-fields{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
 }
 
