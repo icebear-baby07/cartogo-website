@@ -548,7 +548,7 @@ function renderLabelsTab() {
       .filter(Boolean);
 
     if (locations.length === 0) {
-      toast("Keep at least one pickup point — the booking form needs one to work.");
+      toast("Keep at least one company location for the contact section.");
       return;
     }
 
@@ -678,7 +678,7 @@ async function renderInquiriesTab() {
 
 function exportInquiryCsv(inquiry) {
   const row = [
-    ["Submitted", "Name", "Email", "Phone", "Secondary phone", "Car", "Car ID", "Pickup date", "Return date", "Pickup point", "Status", "Notes"],
+    ["Submitted", "Name", "Email", "Phone", "Secondary phone", "Unit", "Unit ID", "Capacity", "Pickup date", "Return date", "Target location", "Target latitude", "Target longitude", "Nearest pickup", "Distance km", "Rate region", "Rate period hours", "Estimated hours", "Rate per period", "Quoted rate", "Status", "Notes"],
     [
       inquiry.created_at || inquiry.submittedAt || "",
       inquiry.name || "",
@@ -687,9 +687,19 @@ function exportInquiryCsv(inquiry) {
       inquiry.secondary_phone || "",
       inquiry.car_name || inquiry.carName || "",
       inquiry.car_id || inquiry.carId || "",
+      inquiry.capacity ?? "",
       inquiry.pickup_date || inquiry.pickupDate || "",
       inquiry.return_date || inquiry.returnDate || "",
       inquiry.location || "",
+      inquiry.target_latitude ?? "",
+      inquiry.target_longitude ?? "",
+      inquiry.nearest_pickup_name || "",
+      inquiry.nearest_pickup_distance_km ?? "",
+      inquiry.rate_region || "",
+      inquiry.rental_period_hours ?? "",
+      inquiry.estimated_rental_hours ?? "",
+      inquiry.rate_per_period ?? "",
+      inquiry.quoted_rate ?? "",
       inquiry.status || "New",
       inquiry.notes || ""
     ]
@@ -725,7 +735,10 @@ function showInquiryDetails(id) {
       <div><dt>Capacity</dt><dd>${text(inquiry.capacity ?? "—")}</dd></div>
       <div><dt>Pickup date</dt><dd>${text(inquiry.pickup_date || inquiry.pickupDate || "—")}</dd></div>
       <div><dt>Return date</dt><dd>${text(inquiry.return_date || inquiry.returnDate || "—")}</dd></div>
-      <div><dt>Pickup point</dt><dd>${text(inquiry.location || "—")}</dd></div>
+      <div><dt>Target location</dt><dd>${text(inquiry.location || "—")}</dd></div>
+      <div><dt>Target coordinates</dt><dd>${text(inquiry.target_latitude ?? "—")}, ${text(inquiry.target_longitude ?? "—")}</dd></div>
+      <div><dt>Nearest pickup</dt><dd>${text(inquiry.nearest_pickup_name || "—")} · ${text(inquiry.nearest_pickup_distance_km ?? "—")} km</dd></div>
+      <div><dt>Quoted rate</dt><dd>${text(inquiry.rate_region || "—")} · ${text(inquiry.rental_period_hours ?? "—")} hrs · ${text(inquiry.quoted_rate ?? "—")}</dd></div>
       <div class="inquiry-detail-wide"><dt>Notes</dt><dd class="preserve-lines">${text(inquiry.notes || "—")}</dd></div>
     </div>
   `;

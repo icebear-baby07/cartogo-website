@@ -12,7 +12,8 @@
 
 <!-- Styles -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-<link rel="stylesheet" href="css/style.css?v=reservation-recap-1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="css/style.css?v=booking-map-4">
 </head>
 <body>
 
@@ -70,14 +71,6 @@
   <!-- ============ QUICK SEARCH (overlaps hero/road) ============ -->
   <div class="wrap">
     <form class="quick-search" id="quickSearchForm">
-      <div class="field">
-        <label for="qsLocation">Pickup point</label>
-        <select id="qsLocation">
-          <option>Quezon City — Fairview</option>
-          <option>Airport Area — Pasay</option>
-          <option>Quezon City — Commonwealth Ave</option>
-        </select>
-      </div>
       <div class="field">
         <label for="qsPickup">Pickup date</label>
         <input type="date" id="qsPickup">
@@ -214,11 +207,15 @@
         <form id="bookingForm" novalidate>
           <div class="form-grid">
             <details class="booking-details span-2" open>
-              <summary>1. Booking details</summary>
+              <summary>Booking Details</summary>
               <div class="form-grid">
-                <div class="field span-2">
+                <div class="field">
+                  <label for="bookingCapacity">Capacity</label>
+                  <input type="number" id="bookingCapacity" min="1" step="1" inputmode="numeric">
+                </div>
+                <div class="field">
                   <label for="bookingCar">Unit</label>
-                  <select id="bookingCar" class="skeleton-select" aria-busy="true" required disabled><option value="">Loading cars...</option></select>
+                  <select id="bookingCar" class="skeleton-select" aria-busy="true" required disabled><option value="">Loading units...</option></select>
                 </div>
                 <div class="field">
                   <label for="bookingPickup">Pickup date</label>
@@ -228,18 +225,33 @@
                   <label for="bookingReturn">Return date</label>
                   <input type="date" id="bookingReturn" required>
                 </div>
-                <div class="field span-2">
-                  <label for="bookingLocation">Pickup point</label>
-                  <select id="bookingLocation" class="skeleton-select" aria-busy="true" disabled><option value="">Loading pickup points...</option></select>
-                </div>
-                <div class="field">
-                  <label for="bookingCapacity">Capacity</label>
-                  <input type="number" id="bookingCapacity" min="1" step="1" inputmode="numeric">
+                <fieldset class="field span-2 booking-period-field">
+                  <legend>Rental period</legend>
+                  <div class="booking-period-toggle">
+                    <label><input type="radio" name="bookingPeriod" value="12"><span>12 hours</span></label>
+                    <label><input type="radio" name="bookingPeriod" value="24" checked><span>24 hours</span></label>
+                  </div>
+                  <p class="booking-period-note" id="bookingPeriodNote" hidden></p>
+                </fieldset>
+                <div class="field span-2 booking-map-field">
+                  <div class="booking-map-heading">
+                    <span class="booking-map-label">Target location</span>
+                    <button class="icon-btn booking-map-fullscreen" id="bookingMapFullscreen" type="button" aria-label="Expand target map to fullscreen" aria-pressed="false" title="Expand map"><i class="fa-solid fa-expand" aria-hidden="true"></i></button>
+                  </div>
+                  <div id="bookingMap" class="booking-map" role="application" aria-label="Map. Move the cursor to preview distance, click to select your target location."></div>
+                  <p class="booking-map-distance" id="bookingMapDistance" role="status" aria-live="polite">Move the cursor over the map to preview distance from the nearest pickup point.</p>
+                  <p class="booking-map-target" id="bookingTargetStatus" role="status" aria-live="polite">Click the map to choose your target location.</p>
+                  <input type="hidden" id="bookingTargetLat">
+                  <input type="hidden" id="bookingTargetLng">
+                  <input type="hidden" id="bookingTargetLabel">
+                  <input type="hidden" id="bookingTargetRegion">
+                  <input type="hidden" id="bookingNearestPickupName">
+                  <input type="hidden" id="bookingNearestPickupDistance">
                 </div>
                 <section class="booking-estimate span-2" aria-label="Estimated rental pricing" aria-live="polite" hidden>
                   <dl>
                     <div class="booking-estimate-row">
-                      <dt>Estimated rental subtotal <span class="booking-estimate-context" id="bookingEstimateSummary">Choose pickup and return dates.</span></dt>
+                      <dt>Estimated rental subtotal <span class="booking-estimate-context" id="bookingEstimateSummary">Choose a unit, destination, and dates.</span></dt>
                       <dd id="bookingRentalSubtotal">—</dd>
                     </div>
                     <div class="booking-estimate-row deposit-row">
@@ -301,7 +313,9 @@
               <div class="recap-row"><dt>Capacity</dt><dd id="recapCapacity"></dd></div>
               <div class="recap-row"><dt>Pickup date</dt><dd id="recapPickupDate"></dd></div>
               <div class="recap-row"><dt>Return date</dt><dd id="recapReturnDate"></dd></div>
-              <div class="recap-row"><dt>Pickup point</dt><dd id="recapPickupPoint"></dd></div>
+              <div class="recap-row"><dt>Target location</dt><dd id="recapTargetLocation"></dd></div>
+              <div class="recap-row"><dt>Nearest pickup</dt><dd id="recapNearestPickup"></dd></div>
+              <div class="recap-row"><dt>Rate basis</dt><dd id="recapRateBasis"></dd></div>
               <div class="recap-row recap-price-row"><dt>Estimated rental subtotal</dt><dd id="recapSubtotal"></dd></div>
               <div class="recap-row recap-price-row"><dt>Refundable deposit estimate</dt><dd id="recapDeposit"></dd></div>
               <div class="recap-row" id="recapNotesRow" hidden><dt>Notes</dt><dd id="recapNotes"></dd></div>
@@ -443,8 +457,9 @@
 <div class="auth-toast" id="authToast" role="status" aria-live="polite"></div>
 <script src="../config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="../back/js/data.js?v=unit-rates-2"></script>
-<script src="../back/js/main.js?v=unit-rates-2"></script>
+<script src="../back/js/main.js?v=booking-map-2"></script>
 <script src="../back/js/chatbot.js"></script>
 </body>
 </html>

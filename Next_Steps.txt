@@ -20,6 +20,7 @@ And this will guide us to the next part
 1.2. Extend the admin's capabilities to add fetch data from the sql, add unit, and modify or delete existing data if necessary. This section should be connected to an authenticator (can use gmail) that sends an OTP to an authorized address, implying the changes to be made. Once approved, the action will be executed automatically.
 1.3. Extend the capabilites of the bot to use RAG from the existing records from the sql to accurately answer client inquiries.
 
+
 2. I want you to apply this changes once the first part is considered complete (if I got satisfied and got no further improvements for that part.)
 
 2.1. Remove the pickup point field.
@@ -37,3 +38,23 @@ ANIMATIONS, DESIGN, AND LAYOUT:
 - Next to the capacity field (will be placed at the right) should be the "Unit" field, that displays only the display_name of each unit (still using spinner).
 - I need you to wipe out all the fields (but not the instructions text at the left) once the client click the fullscreen feature of the mini-map. Must be dynamic based on the user's screen (some might be using phones, while others might be using PCs)
 - Turn the text color of "Booking details" into red and turn it into proper "Booking Details"
+
+
+3. I want the header to take over the map when scrolled down or up
+3.1. An automated picker should interact with inputted capacity (e.g. when 7 is typed, the units with maximum of 7 seats should appear from the choices, when 5, units with more than 5 seats should not appear on the list)
+3.2. When clicked, the distance indicator should be now focused on the clicked location and the nearest pickup point and not in the hovered cursor.
+3.3. People (especially those in boomer generation) might get confused with the rental period toggle, kindly turn the design into eye-catching style to not get ignored or neglect. Turn it into radio with default as not selected 
+3.4. Include a slider (starting with 4-15 (implying 4-15 days of unit rental contract.) include a promo that goes with the slider (4-7 days should get a 5% discount less, 8-15 days should get a 10% discount less). The discount should be deducted from 24-hour rate price)
+3.5. Luzon rate should not have a 12/24 hour option when clicked. But both still inherit the 4-15-day discount promo and should be deducted from the actual price rate.
+3.6. IN or OUT rates should not get displayed unless a unit is chosen from the list
+3.7. Remove the "SIGN IN WITH GOOGLE" once an account is already signed in.
+
+ANIMATIONS, DESIGN, AND LAYOUT:
+- have the animation of choices from 12 or 24 hours smoothly, same with fullscreen toggle button of the map
+- If possible, remove the credits at the bottom "Leaflet | @OpenStreetMap contributors"
+
+
+4. Make this available outside of localhost (127.0.0.1) address
+- I want to see this from 192.168... address
+
+

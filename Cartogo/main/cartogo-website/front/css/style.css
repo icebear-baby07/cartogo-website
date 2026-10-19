@@ -325,7 +325,7 @@ input, select, textarea{ font-family: inherit; font-size: 1rem; }
   box-shadow: var(--shadow-lift);
   padding: 1.5rem;
   display: grid;
-  grid-template-columns: repeat(4, 1fr) auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
   gap: 1rem;
   align-items: end;
   transform: translateY(-46%);
@@ -532,11 +532,44 @@ table.rates .skeleton-line{ height:0.7rem; }
 .form-grid{ display:grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.1rem; }
 .form-grid .span-2{ grid-column: 1 / -1; }
 .booking-details{ min-width:0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
-.booking-details summary{ display:flex; align-items:center; gap:0.5rem; padding:0.85rem 0; color:var(--asphalt); font-size:1rem; font-weight:700; cursor:pointer; list-style:none; }
+.booking-details summary{ display:flex; align-items:center; gap:0.5rem; padding:0.85rem 0; color:var(--danger); font-size:1rem; font-weight:700; cursor:pointer; list-style:none; }
 .booking-details summary::-webkit-details-marker{ display:none; }
 .booking-details summary::before{ content:""; width:0; height:0; border-top:4px solid transparent; border-bottom:4px solid transparent; border-left:5px solid var(--slate); transition:transform 0.2s ease; }
 .booking-details[open] summary::before{ transform:rotate(90deg); }
 .booking-details > .form-grid{ padding:0.35rem 0 1rem; }
+.booking-period-field{ min-width:0; margin:0; padding:0; border:0; }
+.booking-period-field legend{ margin-bottom:0.45rem; color:var(--slate); font-size:0.78rem; font-weight:600; }
+.booking-period-toggle{ display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); overflow:hidden; border:1px solid var(--line); border-radius:var(--radius-sm); }
+.booking-period-toggle label{ position:relative; min-width:0; cursor:pointer; }
+.booking-period-toggle label+label{ border-left:1px solid var(--line); }
+.booking-period-toggle input{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
+.booking-period-toggle span{ display:grid; min-height:42px; place-items:center; padding:0.5rem; background:var(--paper); color:var(--ink); font-size:0.88rem; font-weight:600; }
+.booking-period-toggle input:checked+span{ background:var(--signal); color:var(--asphalt); }
+.booking-period-toggle input:focus-visible+span{ outline:2px solid var(--route-blue); outline-offset:-3px; }
+.booking-period-toggle input:disabled+span{ color:var(--slate-light); background:var(--concrete); cursor:not-allowed; }
+.booking-period-note{ margin:0.4rem 0 0; color:var(--slate); font-size:0.76rem; }
+.booking-map-field{ min-width:0; }
+.booking-map-heading{ display:flex; align-items:center; justify-content:space-between; gap:0.75rem; margin-bottom:0.45rem; }
+.booking-map-label{ color:var(--slate); font-size:0.78rem; font-weight:600; }
+.booking-map-fullscreen{ flex:none; display:grid; width:38px; height:38px; place-items:center; padding:0; }
+.booking-map{ width:100%; height:280px; min-height:220px; overflow:hidden; border:1px solid var(--line); border-radius:var(--radius-sm); background:#e8eceb; }
+.booking-map .leaflet-container{ width:100%; height:100%; font:inherit; }
+.booking-map-distance,.booking-map-target{ margin:0.4rem 0 0; color:var(--slate); font-size:0.78rem; }
+.booking-map-distance{ color:var(--danger); font-weight:600; }
+.booking-panel.is-map-fullscreen{ position:fixed; inset:0; z-index:1100; width:100vw; height:100vh; height:100dvh; max-height:100dvh; grid-template-columns:minmax(240px, 0.36fr) minmax(0, 1fr); align-items:stretch; gap:clamp(1rem, 3vw, 2.5rem); overflow:hidden; border-radius:0; padding:clamp(1rem, 3vw, 2.25rem); }
+.booking-panel.is-map-fullscreen .booking-info{ min-width:0; max-height:calc(100dvh - 2 * clamp(1rem, 3vw, 2.25rem)); overflow:auto; }
+.booking-panel.is-map-fullscreen #bookingForm{ min-width:0; min-height:0; overflow:hidden; }
+.booking-panel.is-map-fullscreen #bookingForm>.form-grid{ display:block; height:100%; }
+.booking-panel.is-map-fullscreen #bookingForm>.form-grid>:not(.booking-details){ display:none!important; }
+.booking-panel.is-map-fullscreen .booking-details{ position:relative; height:100%; border:0; }
+.booking-panel.is-map-fullscreen .booking-details>summary{ display:none; }
+.booking-panel.is-map-fullscreen .booking-details>.form-grid{ display:block; height:100%; padding:0; }
+.booking-panel.is-map-fullscreen .booking-details>.form-grid>:not(.booking-map-field){ display:none!important; }
+.booking-panel.is-map-fullscreen #bookingForm>:not(.form-grid){ display:none!important; }
+.booking-panel.is-map-fullscreen .booking-map-field{ position:absolute; inset:0; display:flex; height:auto; min-height:0; flex-direction:column; }
+.booking-panel.is-map-fullscreen .booking-map{ height:auto; min-height:0; flex:1; }
+.booking-panel.is-map-fullscreen .booking-map-fullscreen{ color:var(--danger); }
+body.has-map-fullscreen{ overflow:hidden; }
 .booking-estimate{ min-width:0; padding:0.8rem 1rem; background:var(--concrete); border-left:3px solid var(--signal); border-radius:0 var(--radius-sm) var(--radius-sm) 0; }
 .booking-estimate[hidden]{ display:none; }
 .booking-estimate dl{ margin:0; }
@@ -683,6 +716,10 @@ table.rates .skeleton-line{ height:0.7rem; }
   .why-grid, .trust-grid, .testi-grid, .fees-note{ grid-template-columns: 1fr; }
   .markers{ grid-template-columns: 1fr; }
   .form-grid{ grid-template-columns: minmax(0, 1fr); }
+  .booking-panel.is-map-fullscreen{ grid-template-columns:minmax(0, 1fr); grid-template-rows:auto minmax(0, 1fr); gap:0.75rem; padding:0.75rem; }
+  .booking-panel.is-map-fullscreen .booking-info{ max-height:25dvh; overflow:auto; padding:0.75rem; }
+  .booking-panel.is-map-fullscreen .booking-list{ gap:0.35rem; margin-top:0.5rem; }
+  .booking-panel.is-map-fullscreen #bookingForm,.booking-panel.is-map-fullscreen .booking-details,.booking-panel.is-map-fullscreen .booking-map-field{ min-height:0; }
   .footer-grid{ grid-template-columns: 1fr; gap:1.75rem; }
   .recap-row{ grid-template-columns:minmax(5.5rem, 0.65fr) minmax(0, 1.35fr); gap:0.75rem; }
   .recap-actions{ display:grid; grid-template-columns:1fr; }
