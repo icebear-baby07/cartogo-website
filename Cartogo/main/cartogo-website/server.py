@@ -2,6 +2,7 @@ import json
 import hashlib
 import hmac
 import os
+import re
 import secrets
 import socket
 import smtplib
@@ -81,6 +82,10 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			self.request_unit_change()
 		elif request_path == "/api/unit-data/approve":
 			self.approve_unit_change()
+		elif request_path == "/api/site-assets/request":
+			self.request_site_asset_change()
+		elif request_path == "/api/site-assets/approve":
+			self.approve_site_asset_change()
 		else:
 			self.send_json(404, {"error": "Not found."})
 
@@ -205,6 +210,84 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			normalized["id"] = unit_id
 		return action, normalized
 
+	@staticmethod
+	def normalize_site_asset_change(payload):
+		action = payload.get("action")
+		asset = payload.get("asset")
+		if not isinstance(action, str) or action not in {"add", "update", "delete"} or not isinstance(asset, dict):
+			raise ValueError("Choose a valid site asset change.")
+		asset_type = asset.get("asset_type")
+		if not isinstance(asset_type, str) or asset_type not in {"location", "contact"}:
+			raise ValueError("Choose a location or contact record.")
+		if asset_type == "contact" and action != "update":
+			raise ValueError("The live-agent contact record can only be updated.")
+		if action in {"update", "delete"}:
+			asset_id = asset.get("id")
+			if isinstance(asset_id, bool) or not isinstance(asset_id, int) or asset_id < 1:
+				raise ValueError("A valid site asset ID is required.")
+		else:
+			asset_id = None
+		if action == "delete":
+			if asset_type != "location":
+				raise ValueError("The live-agent contact record cannot be deleted.")
+			return action, {"id": asset_id, "asset_type": asset_type, "display_name": "site location"}
+
+		display_name = asset.get("display_name")
+		if not isinstance(display_name, str) or not display_name.strip() or len(display_name.strip()) > 160:
+			raise ValueError("Enter a display name up to 160 characters.")
+		normalized = {
+			"asset_type": asset_type,
+			"display_name": display_name.strip(),
+			"description": str(asset.get("description") or "").strip(),
+			"status": asset.get("status", "open"),
+		}
+		if len(normalized["description"]) > 600:
+			raise ValueError("Description must be 600 characters or fewer.")
+		if not isinstance(normalized["status"], str) or normalized["status"] not in {"open", "closed"}:
+			raise ValueError("Status must be open or closed.")
+		if asset_type == "contact":
+			phone = str(asset.get("phone") or "").strip()
+			email = str(asset.get("email") or "").strip()
+			operational_hours = str(asset.get("operational_hours") or "").strip()
+			if len(phone) > 80 or len(email) > 254 or (email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email)):
+				raise ValueError("Enter a valid contact phone and email.")
+			if len(operational_hours) > 160:
+				raise ValueError("Operational hours must be 160 characters or fewer.")
+			normalized.update({
+				"id": asset_id,
+				"phone": phone,
+				"email": email,
+				"operational_hours": operational_hours,
+			})
+			return action, normalized
+
+		loc_name = asset.get("loc_name")
+		if not isinstance(loc_name, str) or not loc_name.strip() or len(loc_name.strip()) > 120:
+			raise ValueError("Enter a location name up to 120 characters.")
+		coordinates = asset.get("coordinates")
+		if not isinstance(coordinates, dict):
+			raise ValueError("Location coordinates must include latitude and longitude.")
+		latitude = coordinates.get("lat")
+		longitude = coordinates.get("lng")
+		if isinstance(latitude, bool) or not isinstance(latitude, (int, float)) or not -90 <= latitude <= 90:
+			raise ValueError("Latitude must be between -90 and 90.")
+		if isinstance(longitude, bool) or not isinstance(longitude, (int, float)) or not -180 <= longitude <= 180:
+			raise ValueError("Longitude must be between -180 and 180.")
+		opening = str(asset.get("opening_hours") or "").strip()
+		closing = str(asset.get("closing_hours") or "").strip()
+		for time_value in (opening, closing):
+			if time_value and not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", time_value):
+				raise ValueError("Opening and closing hours must use 24-hour HH:MM format.")
+		normalized.update({
+			"loc_name": loc_name.strip(),
+			"coordinates": {"lat": round(float(latitude), 7), "lng": round(float(longitude), 7)},
+			"opening_hours": opening or None,
+			"closing_hours": closing or None,
+		})
+		if asset_id is not None:
+			normalized["id"] = asset_id
+		return action, normalized
+
 	def request_unit_change(self):
 		try:
 			payload = self.read_json()
@@ -263,6 +346,65 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 		except RuntimeError as error:
 			self.send_json(503, {"error": str(error)})
 
+	def request_site_asset_change(self):
+		try:
+			payload = self.read_json()
+			action, asset = self.normalize_site_asset_change(payload)
+			admin = self.get_authorized_admin()
+			if not os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip():
+				raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY is not configured on the website server.")
+			if not os.environ.get("SMTP_USER", "").strip() or not os.environ.get("SMTP_APP_PASSWORD", "").strip():
+				raise RuntimeError("Configure Gmail SMTP credentials in the website server environment first.")
+			with OTP_REQUESTS_LOCK:
+				last_request = OTP_REQUESTS.get(admin["id"], 0)
+				if time.time() - last_request < 60:
+					raise RuntimeError("Wait one minute before requesting another approval code.")
+				OTP_REQUESTS[admin["id"]] = time.time()
+			challenge_id = secrets.token_urlsafe(24)
+			code = f"{secrets.randbelow(1000000):06d}"
+			asset_name = asset.get("display_name", asset.get("loc_name", "contact details"))
+			operation = {"add": "Add", "update": "Update", "delete": "Delete"}[action]
+			message = EmailMessage()
+			message["Subject"] = f"carTOGO site asset approval: {operation} {asset_name}"
+			message["From"] = os.environ.get("SMTP_FROM", "").strip() or os.environ["SMTP_USER"].strip()
+			message["To"] = admin["email"]
+			message.set_content(
+				f"A carTOGO administrator requested this site asset change: {operation} {asset_name}.\n\n"
+				f"Requested values:\n{json.dumps(asset, ensure_ascii=False, indent=2)}\n\n"
+				f"Approval code: {code}\n\nThis code expires in 5 minutes and can approve only this requested change."
+			)
+			with UNIT_APPROVALS_LOCK:
+				UNIT_APPROVALS[challenge_id] = {
+					"resource": "site_assets",
+					"user_id": admin["id"],
+					"email": admin["email"],
+					"action": action,
+					"unit": asset,
+					"code_hash": hashlib.sha256(f"{challenge_id}:{code}".encode()).hexdigest(),
+					"expires_at": time.time() + 300,
+					"attempts": 0,
+				}
+			try:
+				with smtplib.SMTP(
+					os.environ.get("SMTP_HOST", "smtp.gmail.com").strip(),
+					int(os.environ.get("SMTP_PORT", "587")),
+					timeout=10,
+				) as mail_server:
+					mail_server.starttls(context=ssl.create_default_context())
+					mail_server.login(os.environ["SMTP_USER"].strip(), os.environ["SMTP_APP_PASSWORD"].strip())
+					mail_server.send_message(message)
+			except (OSError, smtplib.SMTPException, ValueError):
+				with UNIT_APPROVALS_LOCK:
+					UNIT_APPROVALS.pop(challenge_id, None)
+				raise RuntimeError("Gmail could not send the approval code. Check the SMTP settings.") from None
+			self.send_json(200, {"challengeId": challenge_id, "expiresIn": 300})
+		except ValueError as error:
+			self.send_json(400, {"error": str(error)})
+		except PermissionError as error:
+			self.send_json(403, {"error": str(error)})
+		except RuntimeError as error:
+			self.send_json(503, {"error": str(error)})
+
 	def approve_unit_change(self):
 		try:
 			payload = self.read_json()
@@ -273,7 +415,7 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			admin = self.get_authorized_admin()
 			with UNIT_APPROVALS_LOCK:
 				challenge = UNIT_APPROVALS.get(challenge_id)
-				if not challenge or challenge["expires_at"] < time.time():
+				if not challenge or challenge.get("resource", "unit") != "unit" or challenge["expires_at"] < time.time():
 					UNIT_APPROVALS.pop(challenge_id, None)
 					raise PermissionError("That approval code expired. Request a new one.")
 				if challenge["user_id"] != admin["id"]:
@@ -287,6 +429,38 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 					raise PermissionError("The approval code is invalid or has expired.")
 				UNIT_APPROVALS.pop(challenge_id, None)
 			result = self.execute_unit_change(challenge["action"], challenge["unit"])
+			self.send_json(200, {"data": result})
+		except ValueError as error:
+			self.send_json(400, {"error": str(error)})
+		except PermissionError as error:
+			self.send_json(403, {"error": str(error)})
+		except RuntimeError as error:
+			self.send_json(503, {"error": str(error)})
+
+	def approve_site_asset_change(self):
+		try:
+			payload = self.read_json()
+			challenge_id = payload.get("challengeId")
+			code = payload.get("code")
+			if not isinstance(challenge_id, str) or not isinstance(code, str) or not code.isdigit() or len(code) != 6:
+				raise ValueError("Enter the six-digit approval code.")
+			admin = self.get_authorized_admin()
+			with UNIT_APPROVALS_LOCK:
+				challenge = UNIT_APPROVALS.get(challenge_id)
+				if not challenge or challenge.get("resource") != "site_assets" or challenge["expires_at"] < time.time():
+					UNIT_APPROVALS.pop(challenge_id, None)
+					raise PermissionError("That approval code expired. Request a new one.")
+				if challenge["user_id"] != admin["id"]:
+					raise PermissionError("This approval code belongs to a different account.")
+				challenge["attempts"] += 1
+				expected_hash = challenge["code_hash"]
+				provided_hash = hashlib.sha256(f"{challenge_id}:{code}".encode()).hexdigest()
+				if challenge["attempts"] > 5 or not hmac.compare_digest(expected_hash, provided_hash):
+					if challenge["attempts"] >= 5:
+						UNIT_APPROVALS.pop(challenge_id, None)
+					raise PermissionError("The approval code is invalid or has expired.")
+				UNIT_APPROVALS.pop(challenge_id, None)
+			result = self.execute_site_asset_change(challenge["action"], challenge["unit"])
 			self.send_json(200, {"data": result})
 		except ValueError as error:
 			self.send_json(400, {"error": str(error)})
@@ -324,6 +498,37 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			return None
 		if action != "add" and (not isinstance(result, list) or not result):
 			raise RuntimeError("That unit no longer exists. Refresh the inventory and try again.")
+		return result
+
+	@staticmethod
+	def execute_site_asset_change(action, asset):
+		base_url = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+		service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+		query = "?" + urlencode({"id": "eq." + str(asset["id"])}) if action != "add" else ""
+		url = f"{base_url}/rest/v1/site_assets{query}"
+		method = {"add": "POST", "update": "PATCH", "delete": "DELETE"}[action]
+		body = None if action == "delete" else json.dumps(asset).encode()
+		request = Request(url, data=body, method=method, headers={
+			"apikey": service_key,
+			"Authorization": f"Bearer {service_key}",
+			"Content-Type": "application/json",
+			"Prefer": "return=representation",
+		})
+		try:
+			with urlopen(request, timeout=10) as response:
+				content = response.read()
+		except HTTPError:
+			raise RuntimeError("Supabase could not apply the approved site asset change.") from None
+		except (URLError, TimeoutError):
+			raise RuntimeError("Could not connect to Supabase to apply the approved change.") from None
+		if not content:
+			return None
+		try:
+			result = json.loads(content)
+		except json.JSONDecodeError:
+			return None
+		if action != "add" and (not isinstance(result, list) or not result):
+			raise RuntimeError("That site asset no longer exists. Refresh the list and try again.")
 		return result
 
 	def send_json(self, status, payload):

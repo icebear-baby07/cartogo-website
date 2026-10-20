@@ -7,13 +7,21 @@
 let CARS = [];
 let SETTINGS = {};
 let LABELS = {};
+let SITE_ASSETS = [];
+let SITE_ASSETS_LOAD_FAILED = false;
+let CONTACT_MAP = null;
+let CONTACT_MAP_MARKERS = [];
+let CONTACT_MAP_FULLSCREEN = false;
 let activeFilter = "All";
-const PICKUP_POINTS = [
-  { name: "Pickup point A", lat: 14.718069, lng: 121.040101 },
-  { name: "Pickup point B", lat: 14.713487, lng: 121.040112 },
-  { name: "Pickup point C", lat: 14.716368, lng: 121.042589 }
+const DEFAULT_PICKUP_POINTS = [
+  { name: "Pickup point A", lat: 14.7267518, lng: 120.9392327, color: "#d62828" },
+  { name: "Pickup point B", lat: 14.6271442, lng: 121.0115951, color: "#277da1" },
+  { name: "Pickup point C", lat: 14.760287, lng: 121.153861, color: "#2f7d46" }
 ];
+const PICKUP_MARKER_COLORS = ["#d62828", "#277da1", "#2f7d46", "#a45a18", "#7556a8", "#087e8b", "#b33f62", "#5b6b27"];
+let PICKUP_POINTS = [...DEFAULT_PICKUP_POINTS];
 let BOOKING_MAP = null;
+let BOOKING_PICKUP_MARKERS = [];
 let BOOKING_TARGET = null;
 let BOOKING_TARGET_MARKER = null;
 let BOOKING_PREVIEW_MARKER = null;
@@ -30,6 +38,35 @@ async function init() {
   SETTINGS = await DB.getSettings();
   LABELS = await DB.getLabels();
   CARS = await DB.getCars();
+  try {
+    SITE_ASSETS = await DB.getSiteAssets();
+    SITE_ASSETS_LOAD_FAILED = false;
+  } catch (error) {
+    SITE_ASSETS_LOAD_FAILED = true;
+    console.error("Site assets could not be loaded; using the saved site labels.", error);
+  }
+  if (SITE_ASSETS_LOAD_FAILED) {
+    SITE_ASSETS = DEFAULT_PICKUP_POINTS.map((point, index) => ({
+      id: `fallback-${index}`,
+      asset_type: "location",
+      loc_name: point.name,
+      coordinates: { lat: point.lat, lng: point.lng },
+      display_name: LABELS.contact.locations[index] || point.name,
+      description: "Pickup location",
+      status: "open"
+    }));
+  }
+  const configuredPickupPoints = SITE_ASSETS
+    .filter(asset => asset.asset_type === "location")
+    .map((asset, index) => ({
+      name: asset.loc_name || asset.display_name,
+      lat: Number(asset.coordinates?.lat),
+      lng: Number(asset.coordinates?.lng),
+      status: asset.status || "open",
+      color: asset.status === "closed" ? "#71717a" : PICKUP_MARKER_COLORS[index % PICKUP_MARKER_COLORS.length]
+    }))
+    .filter(point => Number.isFinite(point.lat) && Number.isFinite(point.lng));
+  if (configuredPickupPoints.length) PICKUP_POINTS = configuredPickupPoints;
 
   document.title = SETTINGS.companyName + " — Car Rentals";
   renderBrand();
@@ -46,6 +83,7 @@ async function init() {
   renderFooter();
   populateCarSelect();
   bindBookingMap();
+  bindContactMap();
   bindNav();
   bindBookingForm();
   bindBookingEstimate();
@@ -188,7 +226,8 @@ function renderFleet() {
         renderBookingEstimate();
       }
       document.getElementById("booking").scrollIntoView({ behavior: "smooth", block: "start" });
-      document.getElementById("bookingFirstName").focus({ preventScroll: true });
+      const firstNameField = document.getElementById("bookingFirstNameField");
+      document.getElementById(firstNameField.hidden ? "bookingCar" : "bookingFirstName").focus({ preventScroll: true });
     });
   });
 }
@@ -222,32 +261,74 @@ function renderWhyChooseUs() {
 /* ---------- Rates table ---------- */
 function renderRates() {
   const tbody = document.getElementById("ratesBody");
-  const selectedId = document.getElementById("bookingCar")?.value;
-  const car = CARS.find(item => item.id === selectedId);
-  if (!car) {
-    tbody.innerHTML = `<tr><td class="rates-empty" colspan="7">Choose a unit in Booking Details to view its rates.</td></tr>`;
-  } else {
-    tbody.innerHTML = `
+  const publicCars = CARS.filter(car => car.status !== "Inactive");
+  tbody.innerHTML = publicCars.length
+    ? publicCars.map(car => `
       <tr>
         <td>${escapeHtml(car.name)}</td>
         <td>${escapeHtml(car.category)}</td>
-        <td class="num">${formatCurrency(car.in12_rate, SETTINGS.currency)}</td>
-        <td class="num">${formatCurrency(car.in24_rate, SETTINGS.currency)}</td>
-        <td class="num">${formatCurrency(car.out12_rate, SETTINGS.currency)}</td>
-        <td class="num">${formatCurrency(car.out24_rate, SETTINGS.currency)}</td>
-        <td class="num">${formatCurrency(car.luzon_rate, SETTINGS.currency)}</td>
+        <td class="num">${escapeHtml(formatCurrency(car.in12_rate, SETTINGS.currency))}</td>
+        <td class="num">${escapeHtml(formatCurrency(car.in24_rate, SETTINGS.currency))}</td>
+        <td class="num">${escapeHtml(formatCurrency(car.out12_rate, SETTINGS.currency))}</td>
+        <td class="num">${escapeHtml(formatCurrency(car.out24_rate, SETTINGS.currency))}</td>
+        <td class="num">${escapeHtml(formatCurrency(car.luzon_rate, SETTINGS.currency))}</td>
       </tr>
-    `;
-  }
+    `).join("")
+    : `<tr><td class="rates-empty" colspan="7">No units are currently listed. Contact our team for availability.</td></tr>`;
   finishLoading(tbody);
 
   const feesGrid = document.getElementById("feesGrid");
-  feesGrid.innerHTML = `
-    <div class="fee-chip"><b>${formatCurrency(SETTINGS.extraDriverFee, SETTINGS.currency)}</b><span>Extra driver / trip</span></div>
-    <div class="fee-chip"><b>${formatCurrency(SETTINGS.childSeatFee, SETTINGS.currency)}</b><span>Child seat / trip</span></div>
-    <div class="fee-chip"><b>${formatCurrency(SETTINGS.lateFeePerHour, SETTINGS.currency)}</b><span>Late return / hour</span></div>
-    <div class="fee-chip"><b>${SETTINGS.depositPercent}%</b><span>Refundable deposit</span></div>
-  `;
+  const feeItems = [
+    { value: formatCurrency(SETTINGS.extraDriverFee, SETTINGS.currency), label: "Extra driver / trip", detail: "A per-trip charge for adding an authorized driver." },
+    { value: formatCurrency(SETTINGS.childSeatFee, SETTINGS.currency), label: "Child seat / trip", detail: "A per-trip charge for a child seat; request one with your inquiry." },
+    { value: formatCurrency(SETTINGS.lateFeePerHour, SETTINGS.currency), label: "Late return / hour", detail: "Charged for each hour past the scheduled return time." },
+    { value: `${SETTINGS.depositPercent}%`, label: "Refundable deposit", detail: "The displayed percentage is an estimate of the refundable deposit." }
+  ];
+  feesGrid.innerHTML = feeItems.map((item, index) => `
+    <button class="fee-chip" type="button" aria-expanded="false" aria-controls="feeChipDetail${index}" aria-label="${escapeHtml(item.label)}: ${escapeHtml(item.value)}">
+      <b>${escapeHtml(item.value)}</b>
+      <span>${escapeHtml(item.label)}</span>
+      <span class="fee-chip-detail" id="feeChipDetail${index}" hidden>${escapeHtml(item.detail)}</span>
+    </button>
+  `).join("");
+  feesGrid.querySelectorAll(".fee-chip").forEach(chip => {
+    let pointerInside = false;
+    let clickState = null;
+    const updateExpandedState = () => {
+      const isExpanded = clickState === null ? pointerInside || chip.matches(":focus-visible") : clickState;
+      const detail = chip.querySelector(".fee-chip-detail");
+      chip.classList.toggle("is-expanded", isExpanded);
+      chip.setAttribute("aria-expanded", String(isExpanded));
+      chip.style.zIndex = isExpanded ? "20" : "";
+      detail.hidden = !isExpanded;
+      chip.style.borderColor = isExpanded ? "var(--signal)" : "";
+      chip.style.backgroundColor = isExpanded ? "#fff8f6" : "";
+    };
+    chip.addEventListener("pointerenter", () => {
+      pointerInside = true;
+      if (clickState === false) clickState = null;
+      updateExpandedState();
+    });
+    chip.addEventListener("pointerleave", () => {
+      pointerInside = false;
+      if (clickState === false) clickState = null;
+      updateExpandedState();
+    });
+    chip.addEventListener("focusin", () => {
+      if (clickState === false) clickState = null;
+      updateExpandedState();
+    });
+    chip.addEventListener("focusout", event => {
+      if (!(event.relatedTarget instanceof Element) || !chip.contains(event.relatedTarget)) {
+        if (clickState === false) clickState = null;
+        updateExpandedState();
+      }
+    });
+    chip.addEventListener("click", () => {
+      clickState = clickState === null ? true : !clickState;
+      updateExpandedState();
+    });
+  });
   finishLoading(feesGrid);
 }
 
@@ -290,14 +371,37 @@ function bindFaqToggles() {
 
 /* ---------- Contact ---------- */
 function renderContact() {
-  const c = LABELS.contact;
-  document.getElementById("contactPhone").textContent = c.phone;
-  document.getElementById("contactEmail").textContent = c.email;
-  document.getElementById("contactHours").textContent = c.hours;
+  const savedContact = SITE_ASSETS.find(asset => asset.asset_type === "contact");
+  const fallback = LABELS.contact;
+  const phone = savedContact ? savedContact.phone || "" : fallback.phone;
+  const email = savedContact ? savedContact.email || "" : fallback.email;
+  const hours = savedContact ? savedContact.operational_hours || "" : fallback.hours;
+  document.getElementById("contactHeading").textContent = `CHAT WITH ${savedContact?.display_name || "LIVE AGENT"}`.toUpperCase();
+  const description = document.getElementById("contactDescription");
+  description.textContent = savedContact?.description || "";
+  description.hidden = !savedContact?.description;
+  document.getElementById("contactPhone").textContent = phone;
+  document.getElementById("contactPhone").href = `tel:${phone.replace(/[^+\d]/g, "")}`;
+  document.getElementById("contactEmail").textContent = email;
+  document.getElementById("contactEmail").href = `mailto:${email}`;
+  document.getElementById("contactHours").textContent = hours;
+  document.getElementById("contactStatus").textContent = savedContact?.status === "closed" ? "Closed" : "Open";
+  document.querySelector(".live-agent-card").classList.toggle("is-closed", savedContact?.status === "closed");
   ["contactPhone", "contactEmail", "contactHours"].forEach(id => finishLoading(document.getElementById(id)));
   const locations = document.getElementById("contactLocations");
-  locations.innerHTML = c.locations.map(loc => `<li><i class="fa-solid fa-location-dot" aria-hidden="true"></i> ${escapeHtml(loc)}</li>`).join("");
+  const pickupLocations = SITE_ASSETS.filter(asset => asset.asset_type === "location");
+  locations.innerHTML = pickupLocations.length
+    ? pickupLocations.map(location => `
+      <li><button class="contact-location-option" type="button" data-location-id="${escapeHtml(String(location.id))}">
+        <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
+        <span>${escapeHtml(location.display_name)}</span>
+        <small class="${location.status === "closed" ? "is-closed" : ""}">${location.status === "closed" ? "Closed" : "Open"}</small>
+      </button></li>
+    `).join("")
+    : `<li class="contact-location-empty">No pickup locations configured.</li>`;
   finishLoading(locations);
+  document.getElementById("contactMapEmpty").hidden = pickupLocations.length > 0;
+  renderContactMapMarkers();
 }
 
 /* ---------- Footer ---------- */
@@ -309,10 +413,120 @@ function renderFooter() {
   aboutBody.textContent = LABELS.about.body;
   finishLoading(aboutBody);
   document.getElementById("footerYear").textContent = new Date().getFullYear();
-  const locations = document.getElementById("footerLocations");
-  locations.innerHTML = LABELS.contact.locations
-    .map(loc => `<li>${escapeHtml(loc.split("—")[0].trim())}</li>`).join("");
-  finishLoading(locations);
+}
+
+function contactLocationColor(location) {
+  const index = SITE_ASSETS.filter(asset => asset.asset_type === "location").findIndex(asset => asset.id === location.id);
+  return location.status === "closed" ? "#71717a" : PICKUP_MARKER_COLORS[Math.max(index, 0) % PICKUP_MARKER_COLORS.length];
+}
+
+function renderContactMapMarkers() {
+  if (!CONTACT_MAP) return;
+  CONTACT_MAP_MARKERS.forEach(({ marker }) => marker.remove());
+  CONTACT_MAP_MARKERS = [];
+  const locations = SITE_ASSETS.filter(asset => asset.asset_type === "location");
+  locations.forEach(location => {
+    const latitude = Number(location.coordinates?.lat);
+    const longitude = Number(location.coordinates?.lng);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+    const color = contactLocationColor(location);
+    const marker = window.L.marker([latitude, longitude], {
+      icon: window.L.divIcon({
+        className: "contact-location-marker",
+        html: `<i class="fa-solid fa-location-dot" style="--marker-color:${color}" aria-hidden="true"></i>`,
+        iconSize: [30, 34],
+        iconAnchor: [15, 34]
+      })
+    }).addTo(CONTACT_MAP);
+    const hours = location.opening_hours && location.closing_hours
+      ? `${String(location.opening_hours).slice(0, 5)} - ${String(location.closing_hours).slice(0, 5)}`
+      : "Hours not listed";
+    marker.bindPopup(`<strong>${escapeHtml(location.display_name)}</strong><br>${escapeHtml(location.description || "")}<br>${escapeHtml(hours)} · ${location.status === "closed" ? "Closed" : "Open"}`);
+    CONTACT_MAP_MARKERS.push({ location, marker });
+  });
+  if (CONTACT_MAP_MARKERS.length) {
+    CONTACT_MAP.fitBounds(window.L.featureGroup(CONTACT_MAP_MARKERS.map(({ marker }) => marker)).getBounds().pad(0.18), { maxZoom: 13 });
+  }
+}
+
+function bindContactMap() {
+  const mapElement = document.getElementById("contactMap");
+  if (!window.L) {
+    document.getElementById("contactMapEmpty").textContent = "The pickup map could not load.";
+    document.getElementById("contactMapEmpty").hidden = false;
+    return;
+  }
+  CONTACT_MAP = window.L.map(mapElement, { scrollWheelZoom: false }).setView([14.65, 121.0], 10);
+  window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(CONTACT_MAP);
+  renderContactMapMarkers();
+
+  const locationList = document.getElementById("contactLocations");
+  const highlightLocation = locationId => {
+    CONTACT_MAP_MARKERS.forEach(({ location, marker }) => {
+      const isActive = String(location.id) === locationId;
+      marker.setZIndexOffset(isActive ? 1200 : 0);
+      marker.getElement()?.classList.toggle("is-highlighted", isActive);
+      const option = locationList.querySelector(`[data-location-id="${CSS.escape(String(location.id))}"]`);
+      option?.classList.toggle("is-active", isActive);
+      if (isActive) marker.openPopup();
+      else marker.closePopup();
+    });
+  };
+  locationList.addEventListener("pointerover", event => {
+    const option = event.target.closest("[data-location-id]");
+    if (option) highlightLocation(option.dataset.locationId);
+  });
+  locationList.addEventListener("pointerout", event => {
+    const option = event.target.closest("[data-location-id]");
+    if (!option || (event.relatedTarget instanceof Element && option.contains(event.relatedTarget))) return;
+    highlightLocation("");
+  });
+  locationList.addEventListener("focusin", event => {
+    const option = event.target.closest("[data-location-id]");
+    if (option) highlightLocation(option.dataset.locationId);
+  });
+  locationList.addEventListener("focusout", event => {
+    const option = event.target.closest("[data-location-id]");
+    if (!option || (event.relatedTarget instanceof Element && option.contains(event.relatedTarget))) return;
+    highlightLocation("");
+  });
+  locationList.addEventListener("click", event => {
+    const option = event.target.closest("[data-location-id]");
+    if (!option) return;
+    const entry = CONTACT_MAP_MARKERS.find(({ location }) => String(location.id) === option.dataset.locationId);
+    if (!entry) return;
+    highlightLocation(option.dataset.locationId);
+    CONTACT_MAP.setView(entry.marker.getLatLng(), Math.max(CONTACT_MAP.getZoom(), 14), { animate: true });
+  });
+
+  const panel = document.getElementById("contactMapPanel");
+  const button = document.getElementById("contactMapFullscreen");
+  const header = document.getElementById("siteHeader");
+  const updateTop = () => {
+    if (!CONTACT_MAP_FULLSCREEN) return;
+    panel.style.setProperty("--contact-map-top", `${header.getBoundingClientRect().bottom}px`);
+    window.requestAnimationFrame(() => CONTACT_MAP.invalidateSize());
+  };
+  const setFullscreen = enabled => {
+    CONTACT_MAP_FULLSCREEN = enabled;
+    if (enabled) updateTop();
+    else panel.style.removeProperty("--contact-map-top");
+    panel.classList.toggle("is-fullscreen", enabled);
+    document.body.classList.toggle("has-contact-map-fullscreen", enabled);
+    button.setAttribute("aria-pressed", String(enabled));
+    button.setAttribute("aria-label", enabled ? "Exit pickup map fullscreen" : "Expand pickup locations map");
+    button.title = enabled ? "Exit fullscreen" : "Expand map";
+    button.innerHTML = `<i class="fa-solid ${enabled ? "fa-compress" : "fa-expand"}" aria-hidden="true"></i>`;
+    window.requestAnimationFrame(() => CONTACT_MAP.invalidateSize());
+  };
+  button.addEventListener("click", () => setFullscreen(!CONTACT_MAP_FULLSCREEN));
+  window.addEventListener("resize", updateTop);
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && CONTACT_MAP_FULLSCREEN) setFullscreen(false);
+  });
 }
 
 /* ---------- Booking form select ---------- */
@@ -345,15 +559,48 @@ function distanceBetweenKilometers(first, second) {
 }
 
 function findNearestPickup(location) {
-  return PICKUP_POINTS.map(point => ({
+  const openPickups = PICKUP_POINTS.filter(point => point.status !== "closed");
+  const candidates = openPickups.length ? openPickups : PICKUP_POINTS;
+  return candidates.map(point => ({
     ...point,
     distanceKm: distanceBetweenKilometers(location, point)
   })).sort((first, second) => first.distanceKm - second.distanceKm)[0];
 }
 
+function createBookingLocationIcon(color, isPreview = false) {
+  const iconSize = isPreview ? 24 : 34;
+  return window.L.divIcon({
+    className: `booking-location-marker${isPreview ? " booking-location-marker-preview" : ""}`,
+    html: `<i class="fa-solid fa-location-dot" style="--marker-color:${color}" aria-hidden="true"></i>`,
+    iconSize: [iconSize, iconSize],
+    iconAnchor: [iconSize / 2, iconSize]
+  });
+}
+
 function updateMapDistance(location, prefix = "") {
   const nearest = findNearestPickup(location);
-  document.getElementById("bookingMapDistance").textContent = `${prefix}${nearest.distanceKm.toFixed(2)} km distance from the nearest pickup location (${nearest.name})`;
+  document.getElementById("bookingMapDistancePrompt").hidden = true;
+  document.getElementById("bookingMapDistanceResult").hidden = false;
+  document.getElementById("bookingMapDistancePrefix").textContent = prefix;
+  document.getElementById("bookingMapDistanceValue").textContent = nearest.distanceKm.toFixed(2);
+  document.getElementById("bookingMapDistanceValue").style.color = nearest.color;
+  document.getElementById("bookingMapNearestPickup").textContent = nearest.name;
+  BOOKING_PICKUP_MARKERS.forEach(({ point, marker }) => {
+    const isNearest = point.name === nearest.name;
+    marker.setStyle({
+      radius: isNearest ? 9 : 7,
+      color: point.color,
+      fillColor: point.color,
+      fillOpacity: isNearest ? 1 : 0.78,
+      weight: isNearest ? 3 : 2
+    });
+  });
+  if (BOOKING_TARGET_MARKER) {
+    BOOKING_TARGET_MARKER.setIcon(createBookingLocationIcon(nearest.color));
+  }
+  if (BOOKING_PREVIEW_MARKER) {
+    BOOKING_PREVIEW_MARKER.setIcon(createBookingLocationIcon(nearest.color, true));
+  }
   return nearest;
 }
 
@@ -407,7 +654,9 @@ function setBookingTarget(location) {
   BOOKING_PREVIEW_MARKER?.remove();
   BOOKING_PREVIEW_MARKER = null;
   if (BOOKING_TARGET_MARKER) BOOKING_TARGET_MARKER.setLatLng([location.lat, location.lng]);
-  else BOOKING_TARGET_MARKER = window.L.marker([location.lat, location.lng]).addTo(BOOKING_MAP);
+  else BOOKING_TARGET_MARKER = window.L.marker([location.lat, location.lng], {
+    icon: createBookingLocationIcon(nearest.color)
+  }).addTo(BOOKING_MAP);
   renderBookingEstimate();
   resolveBookingTargetRegion(BOOKING_TARGET);
 }
@@ -498,7 +747,9 @@ function restoreBookingTargetFromDraft() {
     nearestPickupDistanceKm: Number(document.getElementById("bookingNearestPickupDistance").value) || nearest.distanceKm
   };
   BOOKING_MAP.setView([latitude, longitude], Math.max(BOOKING_MAP.getZoom(), 13));
-  BOOKING_TARGET_MARKER = window.L.marker([latitude, longitude]).addTo(BOOKING_MAP);
+  BOOKING_TARGET_MARKER = window.L.marker([latitude, longitude], {
+    icon: createBookingLocationIcon(nearest.color)
+  }).addTo(BOOKING_MAP);
   updateMapDistance(BOOKING_TARGET, "Selected: ");
   document.getElementById("bookingTargetStatus").textContent = `${BOOKING_TARGET.label} · ${regionDisplayName(BOOKING_TARGET.rateRegion)} rates`;
   updateBookingPeriodOptions(BOOKING_TARGET.rateRegion);
@@ -511,47 +762,66 @@ function bindBookingMap() {
     return;
   }
 
-  BOOKING_MAP = window.L.map(mapElement, { scrollWheelZoom: false }).setView([14.716, 121.041], 12);
+  BOOKING_MAP = window.L.map(mapElement, { scrollWheelZoom: false });
   window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(BOOKING_MAP);
 
-  PICKUP_POINTS.forEach(point => {
-    window.L.circleMarker([point.lat, point.lng], {
+  BOOKING_PICKUP_MARKERS = PICKUP_POINTS.map(point => {
+    const marker = window.L.circleMarker([point.lat, point.lng], {
       radius: 7,
-      color: "#7a1f1f",
+      color: point.color,
       weight: 2,
-      fillColor: "#d62828",
-      fillOpacity: 0.9
+      fillColor: point.color,
+      fillOpacity: 0.78
     }).addTo(BOOKING_MAP).bindTooltip(point.name);
+    return { point, marker };
   });
+  BOOKING_MAP.fitBounds(window.L.featureGroup(BOOKING_PICKUP_MARKERS.map(({ marker }) => marker)).getBounds().pad(0.18), { maxZoom: 11 });
 
   BOOKING_MAP.on("mousemove", event => {
     if (BOOKING_TARGET) return;
     const position = { lat: event.latlng.lat, lng: event.latlng.lng };
-    const nearest = findNearestPickup(position);
-    document.getElementById("bookingMapDistance").textContent = `${nearest.distanceKm.toFixed(2)} km distance from the nearest pickup location (${nearest.name})`;
+    const nearest = updateMapDistance(position);
     if (BOOKING_PREVIEW_MARKER) BOOKING_PREVIEW_MARKER.setLatLng(event.latlng);
-    else BOOKING_PREVIEW_MARKER = window.L.circleMarker(event.latlng, {
-      radius: 6,
-      color: "#1f5c78",
-      weight: 2,
-      fillColor: "#ffffff",
-      fillOpacity: 0.75
+    else BOOKING_PREVIEW_MARKER = window.L.marker(event.latlng, {
+      icon: createBookingLocationIcon(nearest.color, true),
+      interactive: false,
+      keyboard: false
     }).addTo(BOOKING_MAP);
   });
   BOOKING_MAP.on("mouseout", () => {
     if (BOOKING_TARGET) updateMapDistance(BOOKING_TARGET, "Selected: ");
-    else document.getElementById("bookingMapDistance").textContent = "Move the cursor over the map to preview distance from the nearest pickup point.";
+    else {
+      document.getElementById("bookingMapDistancePrompt").hidden = false;
+      document.getElementById("bookingMapDistanceResult").hidden = true;
+      BOOKING_PREVIEW_MARKER?.remove();
+      BOOKING_PREVIEW_MARKER = null;
+      BOOKING_PICKUP_MARKERS.forEach(({ point, marker }) => marker.setStyle({
+        radius: 7,
+        color: point.color,
+        fillColor: point.color,
+        fillOpacity: 0.78,
+        weight: 2
+      }));
+    }
   });
   BOOKING_MAP.on("click", event => setBookingTarget({ lat: event.latlng.lat, lng: event.latlng.lng }));
 
   const fullscreenButton = document.getElementById("bookingMapFullscreen");
   const bookingPanel = document.querySelector(".booking-panel");
+  const siteHeader = document.getElementById("siteHeader");
+  const updateFullscreenTop = () => {
+    if (!BOOKING_MAP_FULLSCREEN) return;
+    bookingPanel.style.setProperty("--booking-map-top", `${siteHeader.getBoundingClientRect().bottom}px`);
+    window.requestAnimationFrame(() => BOOKING_MAP.invalidateSize());
+  };
   let fullscreenAnimationTimer = null;
   const setFullscreen = enabled => {
     BOOKING_MAP_FULLSCREEN = enabled;
+    if (enabled) updateFullscreenTop();
+    else bookingPanel.style.removeProperty("--booking-map-top");
     clearTimeout(fullscreenAnimationTimer);
     bookingPanel.classList.remove("is-map-fullscreen-closing");
     bookingPanel.classList.toggle("is-map-fullscreen", enabled);
@@ -569,6 +839,7 @@ function bindBookingMap() {
     fullscreenButton.innerHTML = `<i class="fa-solid ${enabled ? "fa-compress" : "fa-expand"}" aria-hidden="true"></i>`;
     window.requestAnimationFrame(() => BOOKING_MAP.invalidateSize());
   };
+  window.addEventListener("resize", updateFullscreenTop);
   fullscreenButton.addEventListener("click", () => setFullscreen(!BOOKING_MAP_FULLSCREEN));
   document.addEventListener("keydown", event => {
     if (event.key === "Escape" && BOOKING_MAP_FULLSCREEN) setFullscreen(false);
@@ -585,11 +856,12 @@ function bindBookingMap() {
         document.getElementById(id).value = "";
       });
       document.getElementById("bookingTargetStatus").textContent = "Click the map to choose your target location.";
-      document.getElementById("bookingMapDistance").textContent = "Move the cursor over the map to preview distance from the nearest pickup point.";
+      document.getElementById("bookingMapDistancePrompt").hidden = false;
+      document.getElementById("bookingMapDistanceResult").hidden = true;
       updateBookingPeriodOptions(null);
       document.getElementById("bookingRentalDaysValue").textContent = `${document.getElementById("bookingRentalDays").value} days`;
       document.getElementById("bookingPromoMessage").textContent = `Enjoy ${Number(document.getElementById("bookingRentalDays").value) >= 8 ? 10 : 5}% off by selecting ${document.getElementById("bookingRentalDays").value} days.`;
-      BOOKING_MAP.setView([14.716, 121.041], 12);
+      BOOKING_MAP.fitBounds(window.L.featureGroup(BOOKING_PICKUP_MARKERS.map(({ marker }) => marker)).getBounds().pad(0.18), { maxZoom: 11 });
       renderBookingEstimate();
     }, 0);
   });
@@ -855,6 +1127,7 @@ function bindBookingForm() {
   const draftKey = "cartogo.bookingDraft";
   const signInPendingKey = "cartogo.customerGoogleSignInPending";
   const authToast = document.getElementById("authToast");
+  const nameFields = document.getElementById("bookingNameFields");
   const recapDialog = document.getElementById("reservationRecap");
   const recapCloseButton = document.getElementById("recapCloseButton");
   const recapEditButton = document.getElementById("recapEditButton");
@@ -866,11 +1139,24 @@ function bindBookingForm() {
 
   const hasVerifiedGoogleAccount = user => user?.app_metadata?.provider === "google"
     && (user.user_metadata?.email_verified === true || user.user_metadata?.email_verified === "true");
+  const getGoogleProfileName = user => {
+    const profile = user?.user_metadata || {};
+    const fullName = String(profile.full_name || profile.name || "").trim();
+    if (fullName) return fullName;
+    return [profile.given_name, profile.middle_name, profile.family_name]
+      .map(value => String(value || "").trim())
+      .filter(Boolean)
+      .join(" ");
+  };
   const updateVerificationUI = () => {
     const isGoogle = hasVerifiedGoogleAccount(currentUser);
     googleButton.hidden = isGoogle;
+    nameFields.hidden = false;
+    nameFields.querySelectorAll(".booking-profile-field").forEach(field => {
+      field.hidden = isGoogle;
+    });
     if (isGoogle) {
-      authStatus.textContent = `Signed in as ${currentUser.email}. Google verified this email.`;
+      authStatus.textContent = `Signed in as ${getGoogleProfileName(currentUser) || currentUser.email}. Google verified this email.`;
       if (sessionStorage.getItem(signInPendingKey) === "true") {
         sessionStorage.removeItem(signInPendingKey);
         authToast.textContent = "Signed in successfully.";
@@ -917,17 +1203,26 @@ function bindBookingForm() {
   };
 
   const collectInquiry = () => {
-    const lastName = document.getElementById("bookingLastName").value.trim();
-    const firstName = document.getElementById("bookingFirstName").value.trim();
-    const middleName = document.getElementById("bookingMiddleName").value.trim();
-    const nameExtension = document.getElementById("bookingSuffix").value.trim();
-    const nameParts = [lastName, firstName, middleName].filter(Boolean);
-    let name = `${nameParts[0]}, ${nameParts.slice(1).join(" ")}`;
-    if (nameExtension) name += `, ${nameExtension}`;
+    const name = hasVerifiedGoogleAccount(currentUser)
+      ? getGoogleProfileName(currentUser)
+      : (() => {
+        const lastName = document.getElementById("bookingLastName").value.trim();
+        const firstName = document.getElementById("bookingFirstName").value.trim();
+        const middleName = document.getElementById("bookingMiddleName").value.trim();
+        const nameExtension = document.getElementById("bookingSuffix").value.trim();
+        const nameParts = [lastName, firstName, middleName].filter(Boolean);
+        let submittedName = `${nameParts[0]}, ${nameParts.slice(1).join(" ")}`;
+        if (nameExtension) submittedName += `, ${nameExtension}`;
+        return submittedName;
+      })();
     const carId = document.getElementById("bookingCar").value;
     const car = CARS.find(item => item.id === carId);
+    const emailInput = document.getElementById("bookingEmail");
+    const enteredEmail = emailInput.value.trim();
     return {
       name,
+      email: enteredEmail && emailInput.validity.valid ? enteredEmail : currentUser?.email || "",
+      phone: document.getElementById("bookingPhone").value.trim(),
       carId,
       carName: car ? car.name : "Unknown",
       capacity: document.getElementById("bookingCapacity").value ? Number(document.getElementById("bookingCapacity").value) : null,
@@ -968,7 +1263,7 @@ function bindBookingForm() {
 
   const openReservationRecap = inquiry => {
     document.getElementById("recapName").textContent = inquiry.name;
-    document.getElementById("recapEmail").textContent = currentUser.email;
+    document.getElementById("recapEmail").textContent = inquiry.email || currentUser.email;
     document.getElementById("recapCar").textContent = inquiry.carName;
     document.getElementById("recapCapacity").textContent = inquiry.capacity ?? "—";
     document.getElementById("recapPickupDate").textContent = formatRecapDate(inquiry.pickupDate);
@@ -988,7 +1283,7 @@ function bindBookingForm() {
     document.getElementById("recapNotesRow").hidden = !inquiry.notes;
     recapError.hidden = true;
     recapError.textContent = "";
-    pendingInquiry = { ...inquiry, email: currentUser.email };
+    pendingInquiry = { ...inquiry, email: inquiry.email || currentUser.email };
     recapDialog.showModal();
   };
 
@@ -1091,10 +1386,27 @@ function bindBookingForm() {
     const inquiry = collectInquiry();
     const lastName = document.getElementById("bookingLastName").value.trim();
     const firstName = document.getElementById("bookingFirstName").value.trim();
+    const isGoogle = hasVerifiedGoogleAccount(currentUser);
 
-    if (!lastName || !firstName || !inquiry.carId || !inquiry.pickupDate || !inquiry.pickupTime || !inquiry.returnDate) {
+    if ((!isGoogle && (!lastName || !firstName)) || (isGoogle && !inquiry.name) || !inquiry.carId || !inquiry.pickupDate || !inquiry.pickupTime || !inquiry.returnDate) {
       msg.className = "form-msg error";
-      msg.textContent = "Please fill in your name, car, pickup date, pickup time, and rental duration.";
+      msg.textContent = isGoogle && !inquiry.name
+        ? "Your Google account did not provide a profile name. Add a name to your Google profile and sign in again."
+        : "Please fill in your name, car, pickup date, pickup time, and rental duration.";
+      return;
+    }
+    const phoneDigits = inquiry.phone.replace(/\D/g, "");
+    if (phoneDigits.length < 7 || phoneDigits.length > 15) {
+      msg.className = "form-msg error";
+      msg.textContent = "Enter a phone number with 7 to 15 digits, including the country code if applicable.";
+      document.getElementById("bookingPhone").focus();
+      return;
+    }
+    const emailInput = document.getElementById("bookingEmail");
+    if (!isGoogle && emailInput.value.trim() && !emailInput.validity.valid) {
+      msg.className = "form-msg error";
+      msg.textContent = "Enter a valid email address or leave the optional email field blank.";
+      emailInput.focus();
       return;
     }
     if (!BOOKING_TARGET) {

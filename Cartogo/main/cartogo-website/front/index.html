@@ -13,7 +13,7 @@
 <!-- Styles -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="css/style.css?v=period-duration-merge-5">
+<link rel="stylesheet" href="css/style.css?v=step6-14">
 </head>
 <body>
 
@@ -165,7 +165,7 @@
       <div class="section-head">
         <p class="eyebrow">Pricing</p>
         <h2>Rates &amp; deposits</h2>
-        <p>Choose a unit in Booking Details to view its rates. IN covers Metro Manila, OUT covers neighboring areas, and the Luzon rate covers supported Luzon destinations.</p>
+        <p>Browse current rates by unit. IN covers Metro Manila, OUT covers neighboring areas, and the Luzon rate covers supported Luzon destinations.</p>
       </div>
       <div class="rates-table-wrap">
         <table class="rates">
@@ -202,6 +202,12 @@
             <li><b>02</b>&nbsp; You pay the refundable deposit at pickup, not before.</li>
             <li><b>03</b>&nbsp; Bring your license, ID, and the confirmation reference.</li>
           </ul>
+          <div class="booking-auth-cta">
+            <p class="booking-auth-kicker">READY TO RESERVE?</p>
+            <p class="booking-auth-copy">Sign in with Google to send your inquiry.</p>
+            <button type="button" class="btn btn-ghost" id="googleOrderButton" hidden><i class="fa-brands fa-google" aria-hidden="true"></i> Continue with Google</button>
+            <p id="bookingAuthStatus" role="status" aria-live="polite"></p>
+          </div>
         </div>
 
         <form id="bookingForm" novalidate>
@@ -248,7 +254,10 @@
                     <button class="icon-btn booking-map-fullscreen" id="bookingMapFullscreen" type="button" aria-label="Expand target map to fullscreen" aria-pressed="false" title="Expand map"><i class="fa-solid fa-expand" aria-hidden="true"></i></button>
                   </div>
                   <div id="bookingMap" class="booking-map" role="application" aria-label="Map. Move the cursor to preview distance, click to select your target location."></div>
-                  <p class="booking-map-distance" id="bookingMapDistance" role="status" aria-live="polite">Move the cursor over the map to preview distance from the nearest pickup point.</p>
+                  <p class="booking-map-distance" id="bookingMapDistance" role="status" aria-live="polite">
+                    <span id="bookingMapDistancePrompt">Move the cursor over the map to preview distance from the nearest pickup point.</span>
+                    <span id="bookingMapDistanceResult" hidden><span id="bookingMapDistancePrefix"></span><strong id="bookingMapDistanceValue"></strong> km distance from the nearest pickup location (<span id="bookingMapNearestPickup"></span>)</span>
+                  </p>
                   <p class="booking-map-target" id="bookingTargetStatus" role="status" aria-live="polite">Click the map to choose your target location.</p>
                   <input type="hidden" id="bookingTargetLat">
                   <input type="hidden" id="bookingTargetLng">
@@ -276,37 +285,37 @@
                 </section>
               </div>
             </details>
-            <div class="field">
-              <label for="bookingLastName">Last name</label>
-              <input type="text" id="bookingLastName" autocomplete="family-name" required>
-            </div>
-            <div class="field">
-              <label for="bookingFirstName">First name</label>
-              <input type="text" id="bookingFirstName" autocomplete="given-name" required>
-            </div>
-            <details class="optional-details span-2">
-              <summary>Additional details <small class="field-note">optional</small></summary>
-              <div class="form-grid optional-details-grid">
-                <div class="field">
-                  <label for="bookingMiddleName">Middle name</label>
-                  <input type="text" id="bookingMiddleName" autocomplete="additional-name">
-                </div>
-                <div class="field">
-                  <label for="bookingSuffix">Suffix</label>
-                  <input type="text" id="bookingSuffix" autocomplete="honorific-suffix" placeholder="Jr., Sr., III">
-                </div>
-                <div class="field span-2">
-                  <label for="bookingNotes">Notes</label>
-                  <textarea id="bookingNotes" rows="3" placeholder="Extra driver, child seat, airport flight number, etc."></textarea>
-                </div>
+            <div class="form-grid span-2" id="bookingNameFields">
+              <div class="field booking-profile-field" id="bookingLastNameField">
+                <label for="bookingLastName">Last name</label>
+                <input type="text" id="bookingLastName" autocomplete="family-name" required>
               </div>
-            </details>
+              <div class="field booking-profile-field" id="bookingFirstNameField">
+                <label for="bookingFirstName">First name</label>
+                <input type="text" id="bookingFirstName" autocomplete="given-name" required>
+              </div>
+              <div class="field booking-profile-field" id="bookingMiddleNameField">
+                <label for="bookingMiddleName">Middle name</label>
+                <input type="text" id="bookingMiddleName" autocomplete="additional-name">
+              </div>
+              <div class="field booking-profile-field" id="bookingSuffixField">
+                <label for="bookingSuffix">Suffix</label>
+                <input type="text" id="bookingSuffix" autocomplete="honorific-suffix" placeholder="Jr., Sr., III">
+              </div>
+              <div class="field">
+                <label for="bookingPhone">Phone number</label>
+                <input type="tel" id="bookingPhone" autocomplete="tel" inputmode="tel" minlength="7" maxlength="24" placeholder="+63 9XX XXX XXXX" required>
+              </div>
+              <div class="field booking-profile-field" id="bookingEmailField">
+                <label for="bookingEmail">Email <small class="field-note">optional</small></label>
+                <input type="email" id="bookingEmail" autocomplete="email">
+              </div>
+            </div>
+            <div class="field span-2">
+              <label for="bookingNotes">Notes <small class="field-note">optional</small></label>
+              <textarea id="bookingNotes" rows="3" placeholder="Extra driver, child seat, airport flight number, etc."></textarea>
+            </div>
           </div>
-          <fieldset class="verification-options">
-            <legend>Google sign-in</legend>
-            <p id="bookingAuthStatus" role="status" aria-live="polite"></p>
-            <button type="button" class="btn btn-ghost" id="googleOrderButton" hidden>Sign in with Google</button>
-          </fieldset>
           <button type="submit" class="btn btn-primary btn-block" style="margin-top:1.25rem;">Send Inquiry</button>
           <div class="form-msg" id="formMsg"></div>
         </form>
@@ -384,32 +393,45 @@
     <div class="wrap">
       <div class="section-head">
         <p class="eyebrow">Contact</p>
-        <h2>Talk to a real person</h2>
+        <h2>Chat with live agent</h2>
       </div>
       <div class="contact-grid">
-        <div>
-          <div class="contact-card">
-            <h3>Phone</h3>
-            <p id="contactPhone" aria-busy="true"><span class="skeleton skeleton-contact-line" aria-hidden="true"></span></p>
-            <h3 style="margin-top:1rem;">Email</h3>
-            <p id="contactEmail" aria-busy="true"><span class="skeleton skeleton-contact-line line-wide" aria-hidden="true"></span></p>
-            <h3 style="margin-top:1rem;">Hours</h3>
-            <p id="contactHours" aria-busy="true"><span class="skeleton skeleton-contact-line line-medium" aria-hidden="true"></span></p>
+        <div class="contact-info-column">
+          <div class="contact-card live-agent-card">
+            <div class="live-agent-title-row">
+              <h3><i class="fa-solid fa-headset" aria-hidden="true"></i> <span id="contactHeading">CHAT WITH LIVE AGENT</span></h3>
+              <span class="contact-status" id="contactStatus">Open</span>
+            </div>
+            <p class="contact-description" id="contactDescription" hidden></p>
+            <div class="contact-channel">
+              <i class="fa-solid fa-phone" aria-hidden="true"></i>
+              <div><span>Phone</span><a id="contactPhone" href="tel:" aria-busy="true"><span class="skeleton skeleton-contact-line" aria-hidden="true"></span></a></div>
+            </div>
+            <div class="contact-channel">
+              <i class="fa-solid fa-envelope" aria-hidden="true"></i>
+              <div><span>Email</span><a id="contactEmail" href="mailto:" aria-busy="true"><span class="skeleton skeleton-contact-line line-wide" aria-hidden="true"></span></a></div>
+            </div>
+            <div class="contact-channel">
+              <i class="fa-regular fa-clock" aria-hidden="true"></i>
+              <div><span>Operational Hours</span><p id="contactHours" aria-busy="true"><span class="skeleton skeleton-contact-line line-medium" aria-hidden="true"></span></p></div>
+            </div>
           </div>
           <div class="contact-card">
             <h3>Pickup points</h3>
-            <ul id="contactLocations" aria-busy="true" aria-label="Loading pickup points" style="margin-top:0.6rem; display:flex; flex-direction:column; gap:0.4rem; font-size:0.9rem; color:var(--slate);">
+            <ul id="contactLocations" aria-busy="true" aria-label="Loading pickup points" class="contact-location-list">
               <li aria-hidden="true"><span class="skeleton skeleton-contact-line"></span></li>
               <li aria-hidden="true"><span class="skeleton skeleton-contact-line line-wide"></span></li>
               <li aria-hidden="true"><span class="skeleton skeleton-contact-line line-medium"></span></li>
             </ul>
           </div>
         </div>
-        <div class="map-box">
-          <div>
-            <span class="pin"><i class="fa-solid fa-location-dot" aria-hidden="true"></i></span>
-            <span>Map preview — plug in your Google Maps embed here</span>
+        <div class="contact-map-panel" id="contactMapPanel">
+          <div class="contact-map-heading">
+            <span><i class="fa-solid fa-map-location-dot" aria-hidden="true"></i> Pickup locations</span>
+            <button class="icon-btn contact-map-fullscreen" id="contactMapFullscreen" type="button" aria-label="Expand pickup locations map" aria-pressed="false" title="Expand map"><i class="fa-solid fa-expand" aria-hidden="true"></i></button>
           </div>
+          <div class="contact-map" id="contactMap" role="application" aria-label="Pickup location map. Select a pin or location name to see details."></div>
+          <p class="contact-map-empty" id="contactMapEmpty" hidden>No pickup locations are configured yet.</p>
         </div>
       </div>
     </div>
@@ -427,9 +449,9 @@
         <h4 id="footerAboutTitle" aria-busy="true"><span class="skeleton skeleton-footer-title" aria-hidden="true"></span></h4>
         <p id="footerAbout" aria-busy="true"><span class="skeleton skeleton-footer-line" aria-hidden="true"></span><span class="skeleton skeleton-footer-line" aria-hidden="true"></span><span class="skeleton skeleton-footer-line line-medium" aria-hidden="true"></span></p>
         <div class="social-row" aria-label="Social links">
-          <a href="#" aria-label="Facebook">f</a>
-          <a href="#" aria-label="Instagram">ig</a>
-          <a href="#" aria-label="X / Twitter">x</a>
+          <a href="#" aria-label="Facebook"><i class="fa-brands fa-facebook-f" aria-hidden="true"></i></a>
+          <a href="#" aria-label="Instagram"><i class="fa-brands fa-instagram" aria-hidden="true"></i></a>
+          <a href="#" aria-label="X"><i class="fa-brands fa-x-twitter" aria-hidden="true"></i></a>
         </div>
       </div>
       <div>
@@ -442,19 +464,16 @@
         </ul>
       </div>
       <div>
-        <h4>Locations</h4>
-        <ul id="footerLocations" aria-busy="true" aria-label="Loading pickup locations">
-          <li aria-hidden="true"><span class="skeleton skeleton-footer-line"></span></li>
-          <li aria-hidden="true"><span class="skeleton skeleton-footer-line line-medium"></span></li>
-          <li aria-hidden="true"><span class="skeleton skeleton-footer-line line-wide"></span></li>
-        </ul>
-      </div>
-      <div>
         <h4>Company</h4>
         <ul>
           <li><a href="#contact">Contact</a></li>
           <li><a href="admin.html">Admin login</a></li>
         </ul>
+      </div>
+      <div class="insurance-footer-cta">
+        <h4>Vehicle insurance</h4>
+        <p>Need insurance for your vehicle? Explore coverage with UniVanguard Insurance Agency Inc.</p>
+        <a href="#contact"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> Ask our live agent</a>
       </div>
     </div>
     <div class="footer-bottom">
@@ -464,7 +483,7 @@
   </div>
 </footer>
 <section class="chatbot-shell" id="chatbotShell" aria-label="carTOGO.mnl chat assistant">
-  <button class="chatbot-launcher" id="chatbotLauncher" type="button" aria-expanded="false" aria-controls="chatbotFrame">
+  <button class="chatbot-launcher" id="chatbotLauncher" type="button" aria-label="Open carTOGO chat; drag to move launcher" aria-expanded="false" aria-controls="chatbotFrame">
     <i class="fa-solid fa-comment-dots" aria-hidden="true"></i>
     <span>Ask carTOGO</span>
   </button>
@@ -474,8 +493,8 @@
 <script src="../config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="../back/js/data.js?v=pickup-time-1"></script>
-<script src="../back/js/main.js?v=capacity-min-seats-2"></script>
-<script src="../back/js/chatbot.js"></script>
+<script src="../back/js/data.js?v=site-assets-2"></script>
+<script src="../back/js/main.js?v=step6-5"></script>
+<script src="../back/js/chatbot.js?v=step6-5"></script>
 </body>
 </html>

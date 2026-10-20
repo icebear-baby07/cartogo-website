@@ -15,6 +15,8 @@ let LABELS = {};
 let UNITS = [];
 let INQUIRIES = [];
 let CHAT_SESSIONS = [];
+let SITE_ASSETS = [];
+let SITE_ASSETS_ERROR = "";
 let SELECTED_INQUIRY = null;
 let CURRENT_ADMIN_EMAIL = "";
 let UNIT_APPROVAL_CHALLENGE_ID = "";
@@ -22,6 +24,8 @@ let UNIT_APPROVAL_RESOLVE = null;
 let UNIT_APPROVAL_RETURN_FOCUS = null;
 let UNIT_APPROVAL_REQUEST_PENDING = false;
 let UNIT_APPROVAL_SUBMITTING = false;
+let UNIT_APPROVAL_RESOURCE = "unit";
+let UNIT_APPROVAL_APPROVER = null;
 const ADMIN_SIGN_IN_PENDING_KEY = "cartogo.adminGoogleSignInPending";
 
 document.addEventListener("DOMContentLoaded", initAdmin);
@@ -101,6 +105,7 @@ async function enterAdmin() {
     document.getElementById("adminShell").classList.add("visible");
     bindTabs();
     renderFleetTab();
+    renderSiteAssetsTab();
     renderLabelsTab();
     await renderInquiriesTab();
     try {
@@ -124,6 +129,13 @@ async function loadAll() {
   LABELS = await DB.getLabels();
   UNITS = await DB.getUnits();
   INQUIRIES = await DB.getInquiries();
+  try {
+    SITE_ASSETS = await DB.getSiteAssets();
+    SITE_ASSETS_ERROR = "";
+  } catch (error) {
+    SITE_ASSETS = [];
+    SITE_ASSETS_ERROR = error.message;
+  }
 }
 
 /* ---------- Tabs ---------- */
@@ -237,11 +249,20 @@ function renderFleetTab() {
 }
 
 async function requestAndApproveUnitChange(action, unit) {
+  return requestAndApproveAdminChange("unit", action, unit, DB.requestUnitChange, DB.approveUnitChange);
+}
+
+async function requestAndApproveSiteAssetChange(action, asset) {
+  return requestAndApproveAdminChange("site asset", action, asset, DB.requestSiteAssetChange, DB.approveSiteAssetChange);
+}
+
+async function requestAndApproveAdminChange(resource, action, asset, requestChange, approveChange) {
   const operation = action === "add" ? "Add" : action === "update" ? "Update" : "Delete";
-  showUnitApprovalLoading(operation, unit.display_name);
+  const assetName = asset.display_name || asset.loc_name || "contact details";
+  showUnitApprovalLoading(operation, assetName, resource);
   try {
-    const { challengeId } = await DB.requestUnitChange(action, unit);
-    const approved = await openUnitApprovalDialog(challengeId, operation, unit.display_name);
+    const { challengeId } = await requestChange(action, asset);
+    const approved = await openUnitApprovalDialog(challengeId, operation, assetName, resource, approveChange);
     if (!approved) throw new Error("Approval cancelled. The code will expire in five minutes.");
   } catch (error) {
     UNIT_APPROVAL_REQUEST_PENDING = false;
@@ -250,10 +271,10 @@ async function requestAndApproveUnitChange(action, unit) {
   }
 }
 
-function showUnitApprovalLoading(operation, unitName) {
+function showUnitApprovalLoading(operation, unitName, resource) {
   const modal = document.getElementById("unitApprovalModal");
   const closeButtons = [document.getElementById("closeUnitApproval"), document.getElementById("cancelUnitApproval")];
-  document.getElementById("unitApprovalTitle").textContent = `${operation} unit`;
+  document.getElementById("unitApprovalTitle").textContent = `${operation} ${resource}`;
   document.getElementById("unitApprovalDescription").textContent = `Requesting an approval code for ${unitName}. It will be sent to ${CURRENT_ADMIN_EMAIL}.`;
   document.getElementById("unitApprovalLoadingText").textContent = "Sending approval code...";
   document.getElementById("unitApprovalLoading").hidden = false;
@@ -268,18 +289,20 @@ function showUnitApprovalLoading(operation, unitName) {
   document.getElementById("unitApprovalTitle").focus();
 }
 
-function openUnitApprovalDialog(challengeId, operation, unitName) {
+function openUnitApprovalDialog(challengeId, operation, unitName, resource, approveChange) {
   const modal = document.getElementById("unitApprovalModal");
   const codeInput = document.getElementById("unitApprovalCode");
   const closeButtons = [document.getElementById("closeUnitApproval"), document.getElementById("cancelUnitApproval")];
-  document.getElementById("unitApprovalTitle").textContent = `${operation} ${unitName}`;
-  document.getElementById("unitApprovalDescription").textContent = `Enter the six-digit code sent to ${CURRENT_ADMIN_EMAIL}. The code expires in five minutes.`;
+  document.getElementById("unitApprovalTitle").textContent = `${operation} ${resource}: ${unitName}`;
+  document.getElementById("unitApprovalDescription").textContent = `Enter the six-digit code sent to ${CURRENT_ADMIN_EMAIL}. It approves only this ${resource} change and expires in five minutes.`;
   document.getElementById("unitApprovalLoading").hidden = true;
   document.getElementById("unitApprovalForm").hidden = false;
   document.getElementById("unitApprovalError").hidden = true;
   document.getElementById("unitApprovalError").textContent = "";
   codeInput.value = "";
   UNIT_APPROVAL_CHALLENGE_ID = challengeId;
+  UNIT_APPROVAL_RESOURCE = resource;
+  UNIT_APPROVAL_APPROVER = approveChange;
   UNIT_APPROVAL_REQUEST_PENDING = false;
   UNIT_APPROVAL_SUBMITTING = false;
   closeButtons.forEach(button => { button.disabled = false; });
@@ -330,7 +353,7 @@ function bindUnitApprovalDialog() {
     closeButtons.forEach(button => { button.disabled = true; });
     error.hidden = true;
     try {
-      await DB.approveUnitChange(UNIT_APPROVAL_CHALLENGE_ID, code);
+      await UNIT_APPROVAL_APPROVER(UNIT_APPROVAL_CHALLENGE_ID, code);
       closeUnitApprovalDialog(true);
     } catch (approvalError) {
       error.textContent = approvalError.message;
@@ -380,6 +403,170 @@ function bindAddCarForm() {
     } catch (error) {
       toast(error.message);
     }
+  });
+}
+
+function renderSiteAssetsTab() {
+  const errorBox = document.getElementById("siteAssetsError");
+  errorBox.hidden = !SITE_ASSETS_ERROR;
+  errorBox.style.display = SITE_ASSETS_ERROR ? "block" : "none";
+  errorBox.textContent = SITE_ASSETS_ERROR
+    ? `Could not load site assets: ${SITE_ASSETS_ERROR}. Run back/db/site_assets.sql in Supabase, then refresh this tab.`
+    : "";
+
+  const contact = SITE_ASSETS.find(asset => asset.asset_type === "contact");
+  const contactFields = {
+    siteContactDisplayName: contact?.display_name || "Live agent",
+    siteContactPhone: contact?.phone || "",
+    siteContactEmail: contact?.email || "",
+    siteContactHours: contact?.operational_hours || "",
+    siteContactStatus: contact?.status || "open",
+    siteContactDescription: contact?.description || ""
+  };
+  Object.entries(contactFields).forEach(([id, value]) => {
+    document.getElementById(id).value = value;
+  });
+  document.getElementById("saveSiteContactBtn").disabled = !contact?.id || Boolean(SITE_ASSETS_ERROR);
+
+  const locations = SITE_ASSETS.filter(asset => asset.asset_type === "location");
+  document.getElementById("siteAssetLocations").innerHTML = locations.length
+    ? locations.map(asset => `
+      <article class="fleet-item site-asset-item" data-id="${attr(asset.id)}">
+        <div class="fleet-editor">
+          <div class="site-asset-location-fields">
+            <label class="fleet-field">Location name<input data-field="loc_name" value="${attr(asset.loc_name)}" required maxlength="120"></label>
+            <label class="fleet-field">Display name<input data-field="display_name" value="${attr(asset.display_name)}" required maxlength="160"></label>
+            <label class="fleet-field">Latitude<input data-field="latitude" type="number" min="-90" max="90" step="any" value="${attr(asset.coordinates?.lat ?? "")}" required></label>
+            <label class="fleet-field">Longitude<input data-field="longitude" type="number" min="-180" max="180" step="any" value="${attr(asset.coordinates?.lng ?? "")}" required></label>
+            <label class="fleet-field">Opening time<input data-field="opening_hours" type="time" value="${attr(String(asset.opening_hours || "").slice(0, 5))}"></label>
+            <label class="fleet-field">Closing time<input data-field="closing_hours" type="time" value="${attr(String(asset.closing_hours || "").slice(0, 5))}"></label>
+            <label class="fleet-field">Status<select data-field="status"><option value="open" ${asset.status === "open" ? "selected" : ""}>Open</option><option value="closed" ${asset.status === "closed" ? "selected" : ""}>Closed</option></select></label>
+            <label class="fleet-field site-asset-description">Description<textarea data-field="description" rows="2" maxlength="600">${text(asset.description || "")}</textarea></label>
+          </div>
+          <div class="fleet-actions">
+            <button class="btn btn-dark btn-sm save-site-location" type="button"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Save location</button>
+            <button class="icon-btn danger delete-site-location" type="button" title="Delete location" aria-label="Delete ${attr(asset.display_name)}"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
+          </div>
+        </div>
+      </article>
+    `).join("")
+    : `<div class="empty-state">No pickup locations yet. Add one to place it on the public map.</div>`;
+}
+
+async function refreshSiteAssets() {
+  try {
+    SITE_ASSETS = await DB.getSiteAssets();
+    SITE_ASSETS_ERROR = "";
+  } catch (error) {
+    SITE_ASSETS = [];
+    SITE_ASSETS_ERROR = error.message;
+  }
+  renderSiteAssetsTab();
+}
+
+async function saveSiteAssetChange(action, asset, successMessage) {
+  await requestAndApproveSiteAssetChange(action, asset);
+  await refreshSiteAssets();
+  toast(successMessage);
+}
+
+function bindSiteAssetsTab() {
+  document.getElementById("siteAssetContactForm").addEventListener("submit", async event => {
+    event.preventDefault();
+    const contact = SITE_ASSETS.find(asset => asset.asset_type === "contact");
+    if (!contact?.id) {
+      toast("The contact record is missing. Run the site_assets.sql migration first.");
+      return;
+    }
+    const asset = {
+      id: contact.id,
+      asset_type: "contact",
+      display_name: document.getElementById("siteContactDisplayName").value.trim(),
+      phone: document.getElementById("siteContactPhone").value.trim(),
+      email: document.getElementById("siteContactEmail").value.trim(),
+      operational_hours: document.getElementById("siteContactHours").value.trim(),
+      status: document.getElementById("siteContactStatus").value,
+      description: document.getElementById("siteContactDescription").value.trim()
+    };
+    try {
+      await saveSiteAssetChange("update", asset, "Live-agent contact updated.");
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+
+  document.getElementById("showAddSiteLocationBtn").addEventListener("click", () => {
+    const form = document.getElementById("siteAssetAddForm");
+    form.hidden = !form.hidden;
+    if (!form.hidden) form.querySelector("[name=loc_name]").focus();
+  });
+  document.getElementById("cancelAddSiteLocationBtn").addEventListener("click", () => {
+    document.getElementById("siteAssetAddForm").reset();
+    document.getElementById("siteAssetAddForm").hidden = true;
+  });
+  document.getElementById("siteAssetAddForm").addEventListener("submit", async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const asset = {
+      asset_type: "location",
+      loc_name: String(formData.get("loc_name")).trim(),
+      display_name: String(formData.get("display_name")).trim(),
+      coordinates: { lat: Number(formData.get("latitude")), lng: Number(formData.get("longitude")) },
+      opening_hours: String(formData.get("opening_hours") || ""),
+      closing_hours: String(formData.get("closing_hours") || ""),
+      status: String(formData.get("status")),
+      description: String(formData.get("description") || "").trim()
+    };
+    try {
+      await saveSiteAssetChange("add", asset, `${asset.display_name} added to the site map.`);
+      form.reset();
+      form.hidden = true;
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+
+  document.getElementById("siteAssetLocations").addEventListener("click", async event => {
+    const button = event.target.closest("button");
+    if (!button) return;
+    const row = button.closest(".site-asset-item");
+    if (!row) return;
+    const asset = {
+      id: Number(row.dataset.id),
+      asset_type: "location",
+      loc_name: row.querySelector('[data-field="loc_name"]').value.trim(),
+      display_name: row.querySelector('[data-field="display_name"]').value.trim(),
+      coordinates: {
+        lat: Number(row.querySelector('[data-field="latitude"]').value),
+        lng: Number(row.querySelector('[data-field="longitude"]').value)
+      },
+      opening_hours: row.querySelector('[data-field="opening_hours"]').value,
+      closing_hours: row.querySelector('[data-field="closing_hours"]').value,
+      status: row.querySelector('[data-field="status"]').value,
+      description: row.querySelector('[data-field="description"]').value.trim()
+    };
+    if (button.classList.contains("save-site-location")) {
+      const invalidField = [...row.querySelectorAll("input, textarea")].find(field => !field.reportValidity());
+      if (invalidField) return;
+      try {
+        await saveSiteAssetChange("update", asset, `${asset.display_name} updated.`);
+      } catch (error) {
+        toast(error.message);
+      }
+    } else if (button.classList.contains("delete-site-location")) {
+      if (!confirm(`Delete "${asset.display_name}" from the public map? This can't be undone.`)) return;
+      try {
+        await saveSiteAssetChange("delete", { id: asset.id, asset_type: "location", display_name: asset.display_name }, `${asset.display_name} deleted.`);
+      } catch (error) {
+        toast(error.message);
+      }
+    }
+  });
+
+  document.getElementById("refreshSiteAssetsBtn").addEventListener("click", async () => {
+    await refreshSiteAssets();
+    toast(SITE_ASSETS_ERROR ? "Could not refresh site assets." : "Site assets refreshed.");
   });
 }
 
@@ -999,6 +1186,7 @@ function escapeHtml(str) {
 document.addEventListener("DOMContentLoaded", () => {
   bindAddCarForm();
   bindUnitApprovalDialog();
+  bindSiteAssetsTab();
   bindInquiryTools();
   bindChatMonitor();
 });

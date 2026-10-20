@@ -117,11 +117,11 @@ function _uid(prefix) {
   return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-async function unitApprovalRequest(path, payload) {
+async function adminApprovalRequest(path, payload, resource) {
   const { data, error } = await supa.auth.getSession();
   if (error) throw error;
   const accessToken = data.session?.access_token;
-  if (!accessToken) throw new Error("Sign in again to manage unit inventory.");
+  if (!accessToken) throw new Error("Sign in again to manage site data.");
   const response = await fetch(path, {
     method: "POST",
     headers: {
@@ -131,7 +131,7 @@ async function unitApprovalRequest(path, payload) {
     body: JSON.stringify(payload)
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || "The unit change could not be approved.");
+  if (!response.ok) throw new Error(result.error || `The ${resource} change could not be approved.`);
   return result;
 }
 
@@ -193,10 +193,25 @@ const DB = {
     });
   },
   async requestUnitChange(action, unit) {
-    return unitApprovalRequest("/api/unit-data/request", { action, unit });
+    return adminApprovalRequest("/api/unit-data/request", { action, unit }, "unit");
   },
   async approveUnitChange(challengeId, code) {
-    return unitApprovalRequest("/api/unit-data/approve", { challengeId, code });
+    return adminApprovalRequest("/api/unit-data/approve", { challengeId, code }, "unit");
+  },
+
+  async getSiteAssets() {
+    const { data, error } = await supa
+      .from("site_assets")
+      .select("*")
+      .order("id", { ascending: true });
+    if (error) throw error;
+    return data || [];
+  },
+  async requestSiteAssetChange(action, asset) {
+    return adminApprovalRequest("/api/site-assets/request", { action, asset }, "site asset");
+  },
+  async approveSiteAssetChange(challengeId, code) {
+    return adminApprovalRequest("/api/site-assets/approve", { challengeId, code }, "site asset");
   },
 
   // --- Inquiries (this is the "client information" store) ---

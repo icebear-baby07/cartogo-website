@@ -28,10 +28,6 @@ And this will guide us to the next part
 2.3. As they hover the cursor, the client's target location should reflect to the nearest pickup location's distance (should be displayed in the label like this: [#] distance from the nearest pickup location ([reference point]))
 2.4. The price rate (denoted as "rate" in premade database table) should be based from the data in the premade sql earlier.
 
-Use these reference points for now to be marked as "Pickup points"
-a. 14.718069, 121.040101
-b. 14.713487, 121.040112
-c. 14.716368, 121.042589
 
 ANIMATIONS, DESIGN, AND LAYOUT:
 - The capacity should be at the top-left of the whole field, it should be the first to be populated with client's data.
@@ -56,3 +52,26 @@ ANIMATIONS, DESIGN, AND LAYOUT:
 
 4. Make this available outside of localhost (127.0.0.1) address
 - I want to see this from 192.168... address
+
+5. Merge all the fields from inside "Additional Details" to name fields as well, remove the collapsible "Additional Details" pane entirely.
+- Move the Google sign-in to the bottom of this text "  Bring your license, ID, and the confirmation reference.", then add a modern CTA text label
+- Conduct a playwright code and check the fullscreen mode of the Leaflet map, I'm seeing an improper placement of the button
+- Update the location; have this "14.7267518,120.9392327" for pickup location A, this "14.6271442,121.0115951" for location B, and this "14.760287, 121.153861" for location C. Use a marker color differentiator that dynamically interacts with the color of the nearest distance.
+- Speaking of colors, turn the rest of this label "distance from the nearest pickup location [(Pickup location)]" to black font.
+- When a client signed with google, have them bypass the personal details fields entirely, and extract their personal information (based from their accounts). Their personal info is what we will send as a data for the booking requests.
+5.1. At the Contact (TALK TO A REAL PERSON) section, turn on the map provided. Notice the 3 hardcoded locations there? I want you to change it. Let me introduce you the next steps after this
+5.2. Set a new table named "site assets", intended for the site's info to put in display. I want it to be like this to be dynamically changeable once a set location is moved to a different place or if the company wants to expand. So it should be able to add more locations and it should pop in the map given (also with fullscreen toggle)
+- in "site_assets" table, have these columns (along with the default/given ones); 1. loc_name, 2. coordinates, 3. display_name, 4. description, 5. opening_hours, 6. closing_hours, 7. status ["open", "closed"]
+5.3. change the "TALK TO A REAL PERSON" label into "CHAT WITH LIVE AGENT", enclose it with the phone, email, and hours label (change the "hours" label into "Operational Hours"), All data under these labels should also be included to a new set of columns inside "site_assets" for dynamic changing
+- When hovered, the section of "CHAT WITH LIVE AGENT" should have an animation and a color change. Add icons inside to make it lively (also with animations).
+5.4. Add a simple hover animation to facebook, instagram, and x icon at the very bottom that they levitate a little bit when hovered.
+- The explore section at the very bottom should also have a "moving left animation" to each content hovered onto by the cursor.
+5.5. make the chatbot icon (when first opening the site) to be a moveable window, can be placed in any corner of the site but won't hinder with choices by simply not getting in the way when the choices are being hovered on
+
+6. The chatbot when hooked to the top gets stacked under the header section, as well as the map section.
+6.1. I want this function (at the very bottom): when hovered to a selected locations will automatically reflect to the map pins.
+6.2. Remove the Locations list at the very bottom (3rd section), then replace it with a CTA like this: "Need an insurance for your vehicle? Try univanguard" or something like that. The insurance company name is "UniVanguard Insurance Agency Inc."
+- Include animations, colors, icons, and other visuals
+6.3. Populate the Rates and deposits section even though a booking is not yet established. It works just like a menu (in restaurant setting).
+6.4. Include other information to the 300 extra driver / trip, 150 Child Seat / trip,  250 Late Return / Hour, 20% Refundable deposit, when hovered. Expand to the bottom and with a color highlight. But goes away when hovered to other parts of the site.
+6.5. When adjusting the size of the chatbot (when drag around), resize it to fit in a square, in a vertical rectangle (icon only), and its default horizontal rectangle dynamically

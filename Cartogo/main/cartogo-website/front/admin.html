@@ -11,7 +11,7 @@
 
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-<link rel="stylesheet" href="css/admin.css?v=otp-loading-2">
+<link rel="stylesheet" href="css/admin.css?v=site-assets-2">
 </head>
 <body class="admin-body">
 
@@ -32,6 +32,7 @@
     <a href="index.html" class="logo">carTOGO.mnl</a>
     <nav class="admin-tabs">
       <button class="admin-tab-btn active" data-tab="tab-fleet">Fleet &amp; Rates</button>
+      <button class="admin-tab-btn" data-tab="tab-site-assets">Site Assets</button>
       <button class="admin-tab-btn" data-tab="tab-labels">Site Labels</button>
       <button class="admin-tab-btn" data-tab="tab-inquiries">Inquiries</button>
       <button class="admin-tab-btn" data-tab="tab-chat">Chat Monitor</button>
@@ -77,6 +78,53 @@
             <div class="add-car-submit"><button type="submit" class="btn btn-dark"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add unit</button></div>
           </div>
         </form>
+      </div>
+    </section>
+
+    <!-- ---------- SITE ASSETS TAB ---------- -->
+    <section class="admin-panel" id="tab-site-assets">
+      <div class="admin-header">
+        <div>
+          <h1>Site assets</h1>
+          <p>Manage live-agent contact details and pickup locations. Every change requires email approval.</p>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="refreshSiteAssetsBtn" type="button" title="Refresh site assets" aria-label="Refresh site assets"><i class="fa-solid fa-rotate" aria-hidden="true"></i><span class="admin-action-label">Refresh</span></button>
+      </div>
+      <p class="login-error" id="siteAssetsError" role="alert" hidden></p>
+      <div class="admin-card">
+        <h2>Live-agent contact</h2>
+        <p class="sub">These details appear in the Contact section.</p>
+        <form id="siteAssetContactForm" class="site-asset-contact-form">
+          <div class="add-car-fields">
+            <div class="label-field"><label for="siteContactDisplayName">Display name</label><input id="siteContactDisplayName" required maxlength="160"></div>
+            <div class="label-field"><label for="siteContactPhone">Phone</label><input id="siteContactPhone" type="tel" maxlength="80"></div>
+            <div class="label-field"><label for="siteContactEmail">Email</label><input id="siteContactEmail" type="email" maxlength="254"></div>
+            <div class="label-field"><label for="siteContactHours">Operational hours</label><input id="siteContactHours" maxlength="160"></div>
+            <div class="label-field"><label for="siteContactStatus">Status</label><select id="siteContactStatus"><option value="open">Open</option><option value="closed">Closed</option></select></div>
+            <div class="label-field add-car-description"><label for="siteContactDescription">Description</label><textarea id="siteContactDescription" rows="2" maxlength="600"></textarea></div>
+            <div class="add-car-submit"><button type="submit" class="btn btn-dark" id="saveSiteContactBtn"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Save contact</button></div>
+          </div>
+        </form>
+      </div>
+      <div class="admin-card">
+        <div class="admin-header">
+          <div><h2>Pickup locations</h2><p class="sub">Location pins and descriptions update on the public map.</p></div>
+          <button class="btn btn-dark btn-sm" id="showAddSiteLocationBtn" type="button"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add location</button>
+        </div>
+        <form id="siteAssetAddForm" class="site-asset-add" hidden>
+          <div class="site-asset-location-fields">
+            <label class="fleet-field">Location name<input name="loc_name" required maxlength="120" placeholder="Pickup point D"></label>
+            <label class="fleet-field">Display name<input name="display_name" required maxlength="160" placeholder="Pasig City - Ortigas"></label>
+            <label class="fleet-field">Latitude<input name="latitude" type="number" min="-90" max="90" step="any" required></label>
+            <label class="fleet-field">Longitude<input name="longitude" type="number" min="-180" max="180" step="any" required></label>
+            <label class="fleet-field">Opening time<input name="opening_hours" type="time"></label>
+            <label class="fleet-field">Closing time<input name="closing_hours" type="time"></label>
+            <label class="fleet-field">Status<select name="status"><option value="open">Open</option><option value="closed">Closed</option></select></label>
+            <label class="fleet-field site-asset-description">Description<textarea name="description" rows="2" maxlength="600"></textarea></label>
+          </div>
+          <div class="fleet-actions"><button class="btn btn-dark btn-sm" type="submit"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add location</button><button class="btn btn-ghost btn-sm" id="cancelAddSiteLocationBtn" type="button">Cancel</button></div>
+        </form>
+        <div class="fleet-list" id="siteAssetLocations"></div>
       </div>
     </section>
 
@@ -215,7 +263,7 @@
 <div class="auth-toast" id="adminToast" role="status" aria-live="polite"></div>
 <script src="../config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="../back/js/data.js?v=pickup-time-1"></script>
-<script src="../back/js/admin.js?v=pickup-time-1"></script>
+<script src="../back/js/data.js?v=site-assets-2"></script>
+<script src="../back/js/admin.js?v=site-assets-2"></script>
 </body>
 </html>

@@ -101,7 +101,9 @@ table.admin-table input:focus, table.admin-table select:focus{ outline:none; bor
 .fleet-fields{ display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:0.65rem 0.8rem; }
 .fleet-field{ display:block; min-width:0; color:var(--slate); font-family:var(--font-mono); font-size:0.66rem; text-transform:uppercase; }
 .fleet-field input,.fleet-field select{ display:block; width:100%; min-width:0; margin-top:0.3rem; padding:0.55rem 0.6rem; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--concrete); color:var(--ink); font-family:var(--font-body); font-size:0.85rem; text-transform:none; }
+.fleet-field textarea{ display:block; width:100%; min-width:0; margin-top:0.3rem; padding:0.55rem 0.6rem; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--concrete); color:var(--ink); font-family:var(--font-body); font-size:0.85rem; text-transform:none; resize:vertical; }
 .fleet-field input:focus,.fleet-field select:focus{ outline:none; border-color:var(--route-blue); background:var(--paper); }
+.fleet-field textarea:focus{ outline:none; border-color:var(--route-blue); background:var(--paper); }
 .fleet-field.is-dirty{ color:var(--danger); }
 .fleet-field.is-dirty input,.fleet-field.is-dirty select{ border-color:var(--danger); background:rgba(122,31,31,0.07); box-shadow:0 0 0 1px var(--danger); }
 .fleet-actions{ display:flex; align-items:center; justify-content:flex-end; gap:0.55rem; }
@@ -121,6 +123,12 @@ table.admin-table input:focus, table.admin-table select:focus{ outline:none; bor
 .add-car-submit{ display:flex; justify-content:flex-end; }
 .add-car-submit .btn i{ margin-right:0.35rem; }
 .image-upload-preview[hidden]{ display:none; }
+.site-asset-location-fields{ display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:0.65rem 0.8rem; }
+.site-asset-description{ grid-column:1 / -1; }
+.site-asset-add{ margin:0 0 1rem; padding:1rem; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--concrete); }
+.site-asset-add[hidden]{ display:none; }
+.site-asset-contact-form{ max-width:900px; }
+.site-asset-contact-form .add-car-submit{ margin-top:0.75rem; }
 
 .icon-btn{
   border: 1.5px solid var(--line); background: var(--paper); border-radius: var(--radius-sm);
@@ -242,6 +250,7 @@ table.admin-table input:focus, table.admin-table select:focus{ outline:none; bor
 @media (max-width: 980px){
   .fleet-item{ grid-template-columns:minmax(0, 1fr); }
   .fleet-fields{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  .site-asset-location-fields{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 600px){
@@ -266,6 +275,8 @@ table.admin-table input:focus, table.admin-table select:focus{ outline:none; bor
 @media (max-width:600px){
   .admin-main{ padding:1.25rem 0.85rem; }
   .admin-header{ gap:0.75rem; margin-bottom:1rem; }
+  .site-asset-location-fields{ grid-template-columns:1fr; }
+  .site-asset-description{ grid-column:auto; }
   .admin-header h1{ font-size:1.35rem; }
   .admin-header > div:last-child{ width:100%; flex-wrap:wrap; justify-content:flex-start; }
   .admin-card{ padding:1rem; }
