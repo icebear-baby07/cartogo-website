@@ -1,7 +1,7 @@
 /* ===========================================================================
    carTOGO.mnl — ADMIN PANEL LOGIC (js/admin.js)
    Everything here reads/writes through DB (js/data.js). Public site content
-   and catalogs are stored in MongoDB; authentication and inquiries use Supabase.
+   and inquiries are stored in MongoDB; authentication and admin roles use Supabase.
 
    SECURITY NOTE: the password gate below is a convenience lock so a casual
    visitor doesn't stumble into edit mode — it is NOT real authentication
@@ -599,28 +599,6 @@ function renderLabelsTab() {
     </div>
 
     <div class="label-group">
-      <h3>Contact info</h3>
-      <div class="label-field"><label>Phone</label><input id="lblPhone" value="${attr(LABELS.contact.phone)}"></div>
-      <div class="label-field"><label>Email</label><input id="lblEmail" value="${attr(LABELS.contact.email)}"></div>
-      <div class="label-field"><label>Hours</label><input id="lblHours" value="${attr(LABELS.contact.hours)}"></div>
-    </div>
-
-    <div class="label-group">
-      <h3>Pickup points</h3>
-      <p style="font-size:0.82rem; color:var(--slate); margin-top:-0.5rem; margin-bottom:0.9rem;">
-        Format each as "Name — Address", e.g. <em>Downtown Hub — 88 Fairview Ave, Quezon City</em>.
-        These also fill the pickup-point dropdown on the booking form automatically.
-      </p>
-      <div id="locationsRepeat">${LABELS.contact.locations.map((loc) => `
-        <div class="repeat-item">
-          <button type="button" class="icon-btn danger remove-repeat" title="Remove this pickup point"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
-          <div class="label-field"><label>Pickup point</label><input class="loc-item" value="${attr(loc)}"></div>
-        </div>
-      `).join("")}</div>
-      <button type="button" class="btn btn-ghost btn-sm" id="addLocationBtn">+ Add pickup point</button>
-    </div>
-
-    <div class="label-group">
       <h3>FAQ</h3>
       <div id="faqRepeat">${LABELS.faq.map(item => `
         <div class="repeat-item">
@@ -685,18 +663,6 @@ function renderLabelsTab() {
     bindRemoveButtons();
   });
 
-  document.getElementById("addLocationBtn").addEventListener("click", () => {
-    const repeat = document.getElementById("locationsRepeat");
-    const div = document.createElement("div");
-    div.className = "repeat-item";
-    div.innerHTML = `
-      <button type="button" class="icon-btn danger remove-repeat" title="Remove this pickup point"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
-      <div class="label-field"><label>Pickup point</label><input class="loc-item" value=""></div>
-    `;
-    repeat.appendChild(div);
-    bindRemoveButtons();
-  });
-
   document.getElementById("addWhyBtn").addEventListener("click", () => {
     const repeat = document.getElementById("whyRepeat");
     const div = document.createElement("div");
@@ -728,15 +694,6 @@ function renderLabelsTab() {
   bindRemoveButtons();
 
   document.getElementById("saveLabelsBtn").addEventListener("click", async () => {
-    const locations = [...document.querySelectorAll(".loc-item")]
-      .map(i => i.value.trim())
-      .filter(Boolean);
-
-    if (locations.length === 0) {
-      toast("Keep at least one company location for the contact section.");
-      return;
-    }
-
     const editedTrustItems = [...document.querySelectorAll("#trustRepeat .repeat-item")].map(item => ({
       value: item.querySelector(".trust-value").value,
       label: item.querySelector(".trust-label").value
@@ -754,12 +711,6 @@ function renderLabelsTab() {
       about: {
         title: document.getElementById("lblAboutTitle").value,
         body: document.getElementById("lblAboutBody").value
-      },
-      contact: {
-        phone: document.getElementById("lblPhone").value,
-        email: document.getElementById("lblEmail").value,
-        hours: document.getElementById("lblHours").value,
-        locations
       },
       faq: [...document.querySelectorAll("#faqRepeat .repeat-item")].map(item => ({
         q: item.querySelector(".faq-q-input").value,
@@ -780,6 +731,7 @@ function renderLabelsTab() {
         detail: item.querySelector(".testi-detail").value
       }))
     };
+    delete newLabels.contact;
     await DB.saveLabels(newLabels);
     LABELS = await DB.getLabels();
     toast("Labels saved. Refresh the main site to see changes.");
@@ -1090,7 +1042,7 @@ function renderSettingsTab() {
     <div class="settings-actions"><button type="button" class="btn btn-primary" id="saveSettingsBtn">Save settings</button></div>
 
     <section class="danger-zone">
-      <div><h2>Danger zone</h2><p>Resets local fleet, labels, and site preferences. Customer inquiries and admin authorization remain stored in Supabase.</p></div>
+      <div><h2>Danger zone</h2><p>Resets local fleet, labels, and site preferences. Customer inquiries and admin authorization are not changed.</p></div>
       <button type="button" class="btn btn-ghost btn-sm" id="resetAllBtn">Reset everything to defaults</button>
     </section>
   `;

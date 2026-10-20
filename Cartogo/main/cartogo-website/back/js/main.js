@@ -334,10 +334,9 @@ function bindFaqToggles() {
 /* ---------- Contact ---------- */
 function renderContact() {
   const savedContact = SITE_ASSETS.find(asset => asset.asset_type === "contact");
-  const fallback = LABELS.contact;
-  const phone = savedContact ? savedContact.phone || "" : fallback.phone;
-  const email = savedContact ? savedContact.email || "" : fallback.email;
-  const hours = savedContact ? savedContact.operational_hours || "" : fallback.hours;
+  const phone = savedContact?.phone || "";
+  const email = savedContact?.email || "";
+  const hours = savedContact?.operational_hours || "";
   document.getElementById("contactHeading").textContent = `CHAT WITH ${savedContact?.display_name || "LIVE AGENT"}`.toUpperCase();
   const description = document.getElementById("contactDescription");
   description.textContent = savedContact?.description || "";

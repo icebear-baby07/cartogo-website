@@ -44,16 +44,6 @@
       { "q": "Can I change or cancel my booking?", "a": "Yes, free of charge up to 24 hours before your pickup time. Changes inside 24 hours may be subject to availability." },
       { "q": "Do you deliver to the airport?", "a": "Yes — our airport-area pickup can be arranged with the team when you submit your inquiry." }
     ],
-    "contact": {
-      "phone": "+63 2 8555 0142",
-      "email": "hello@cartogo.mnl",
-      "hours": "Mon – Sun, 6:00 AM – 10:00 PM",
-      "locations": [
-        "Quezon City — Fairview",
-        "Airport Area — Pasay",
-        "Quezon City — Commonwealth Ave"
-      ]
-    },
     "testimonials": [
       { "quote": "Choose a compact sedan for everyday city trips.", "name": "Honda City", "detail": "Ignited Red Metallic" },
       { "quote": "A practical and economical option for Metro Manila travel.", "name": "Mirage G4", "detail": "Red or Silver" },

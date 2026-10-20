@@ -51,6 +51,11 @@ if ($Port -lt 1024 -or $Port -gt 65535) {
 
 $Listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($Listener) {
+	$ExistingProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $($Listener.OwningProcess)"
+	$ServerScript = [System.IO.Path]::GetFullPath((Join-Path $ProjectRoot "server.py"))
+	$IsOwnedWebsite = $ExistingProcess -and
+		-not [string]::IsNullOrEmpty($ExistingProcess.CommandLine) -and
+		$ExistingProcess.CommandLine.IndexOf($ServerScript, [StringComparison]::OrdinalIgnoreCase) -ge 0
 	$IsExpectedSite = $false
 	try {
 		$ExistingSite = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/config.js" -UseBasicParsing -TimeoutSec 3
@@ -59,33 +64,30 @@ if ($Listener) {
 	catch {
 	}
 
-	if ($IsExpectedSite) {
+	if ($IsExpectedSite -and -not $Restart) {
+		Write-Host "Website is already running at http://127.0.0.1:$Port/front/"
+		exit 0
+	}
+	elseif ($IsOwnedWebsite) {
 		if ($Restart) {
-			$ExistingProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $($Listener.OwningProcess)"
-			$ServerScript = [System.IO.Path]::GetFullPath((Join-Path $ProjectRoot "server.py"))
-			if (-not $ExistingProcess -or [string]::IsNullOrEmpty($ExistingProcess.CommandLine) -or $ExistingProcess.CommandLine.IndexOf($ServerScript, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
-				throw "Refusing to stop the listener on port $Port because it could not be identified as the website's server.py."
-			}
-
-			Write-Host "Stopping the current website process on port $Port..."
-			Stop-Process -Id $Listener.OwningProcess -Force
-			try {
-				Wait-Process -Id $Listener.OwningProcess -Timeout 10 -ErrorAction Stop
-			}
-			catch {
-			}
-			$Listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
-			if ($Listener) {
-				throw "The website process did not release port $Port. Stop it manually before restarting."
-			}
+			Write-Host "Restarting the current website process on port $Port..."
 		}
 		else {
-			Write-Host "Website is already running at http://127.0.0.1:$Port/front/"
-			exit 0
+			Write-Host "The website process on port $Port was unresponsive. Restarting this verified Cartogo process..."
+		}
+		Stop-Process -Id $Listener.OwningProcess -Force
+		try {
+			Wait-Process -Id $Listener.OwningProcess -Timeout 10 -ErrorAction Stop
+		}
+		catch {
+		}
+		$Listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+		if ($Listener) {
+			throw "The website process did not release port $Port. Stop it manually before restarting."
 		}
 	}
 	else {
-		throw "Website port $Port is already in use by a different project."
+		throw "Website port $Port is already in use by a different project. The listener was not stopped."
 	}
 }
 
@@ -126,15 +128,11 @@ $LanAddresses = @(
 	} |
 	Select-Object -ExpandProperty IPAddress -Unique
 )
-Write-Host "Local access: http://127.0.0.1:$Port/front/"
-foreach ($Address in $LanAddresses) {
-	Write-Host "LAN access: http://${Address}:$Port/front/"
-}
 if ($LanAddresses.Count -eq 0) {
 	Write-Warning "No LAN IPv4 address detected. Connect this computer to a network to allow other devices to connect."
 }
 Write-Host "Allow Python through Windows Firewall on private networks if prompted."
-Write-Host "Press Ctrl+C to stop the website server."
+Write-Host "Starting the website server. Its local and LAN URLs will appear below."
 Push-Location $ProjectRoot
 try {
 	& $PythonPath (Join-Path $ProjectRoot "server.py")

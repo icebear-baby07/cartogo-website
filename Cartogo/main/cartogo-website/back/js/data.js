@@ -1,4 +1,4 @@
-/* Public site data is served from MongoDB; authentication and inquiries remain in Supabase. */
+/* Public site data and inquiries are served from MongoDB; authentication remains in Supabase. */
 const SUPABASE_URL = window.CARTOGO_CONFIG?.supabaseUrl;
 const SUPABASE_KEY = window.CARTOGO_CONFIG?.supabaseAnonKey;
 if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("Supabase configuration is missing. Check main/cartogo-website/.env and restart the website server.");
@@ -128,64 +128,65 @@ const DB = {
 
   // --- Inquiries (this is the "client information" store) ---
   async getInquiries() {
-    const { data, error } = await supa
-      .from("inquiries")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const { data, error } = await supa.auth.getSession();
     if (error) throw error;
-    return data || [];
+    const accessToken = data.session?.access_token;
+    if (!accessToken) throw new Error("Sign in again to view inquiries.");
+    return siteDataRequest("/api/admin/inquiries", {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
   },
   async addInquiry(inquiry) {
-    const payload = {
-      name: inquiry.name,
-      email: inquiry.email || null,
-      phone: inquiry.phone,
-      secondary_phone: inquiry.secondaryPhone || null,
-      car_id: inquiry.carId,
-      car_name: inquiry.carName,
-      capacity: inquiry.capacity,
-      pickup_date: inquiry.pickupDate,
-      pickup_time: inquiry.pickupTime,
-      return_date: inquiry.returnDate,
-      location: inquiry.location,
-      target_latitude: inquiry.targetLatitude,
-      target_longitude: inquiry.targetLongitude,
-      nearest_pickup_name: inquiry.nearestPickupName,
-      nearest_pickup_distance_km: inquiry.nearestPickupDistanceKm,
-      rate_region: inquiry.rateRegion,
-      rental_period_hours: inquiry.rentalPeriodHours,
-      estimated_rental_hours: inquiry.estimatedRentalHours,
-      rate_per_period: inquiry.ratePerPeriod,
-      rental_days: inquiry.rentalDays,
-      discount_percent: inquiry.discountPercent,
-      discount_amount: inquiry.discountAmount,
-      quoted_rate: inquiry.quotedRate,
-      notes: inquiry.notes,
-      status: inquiry.status,
-      user_id: inquiry.userId || null,
-      verification_method: inquiry.verificationMethod
-    };
-    const { data, error } = await supa
-      .from("inquiries")
-      .insert(payload);
+    const { data, error } = await supa.auth.getSession();
     if (error) throw error;
-    return data;
+    const accessToken = data.session?.access_token;
+    if (!accessToken) throw new Error("Sign in with Google before submitting your inquiry.");
+    const payload = {
+      carId: inquiry.carId,
+      carName: inquiry.carName,
+      phone: inquiry.phone,
+      capacity: inquiry.capacity,
+      pickupDate: inquiry.pickupDate,
+      pickupTime: inquiry.pickupTime,
+      returnDate: inquiry.returnDate,
+      location: inquiry.location,
+      targetLatitude: inquiry.targetLatitude,
+      targetLongitude: inquiry.targetLongitude,
+      nearestPickupName: inquiry.nearestPickupName,
+      nearestPickupDistanceKm: inquiry.nearestPickupDistanceKm,
+      rateRegion: inquiry.rateRegion,
+      rentalPeriodHours: inquiry.rentalPeriodHours,
+      estimatedRentalHours: inquiry.estimatedRentalHours,
+      ratePerPeriod: inquiry.ratePerPeriod,
+      rentalDays: inquiry.rentalDays,
+      discountPercent: inquiry.discountPercent,
+      discountAmount: inquiry.discountAmount,
+      quotedRate: inquiry.quotedRate,
+      notes: inquiry.notes,
+      secondaryPhone: inquiry.secondaryPhone || null
+    };
+    const result = await siteDataRequest("/api/inquiries", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`
+      },
+      body: JSON.stringify(payload)
+    });
+    return result.data;
   },
 
 
   async updateInquiry(id, patch) {
-    const { data, error } = await supa
-      .from("inquiries")
-      .update({ status: patch.status })
-      .eq("id", id)
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
+    const result = await adminRequest("/api/admin/inquiries", {
+      action: "update",
+      id,
+      status: patch.status
+    });
+    return result.data;
   },
   async deleteInquiry(id) {
-    const { error } = await supa.from("inquiries").delete().eq("id", id);
-    if (error) throw error;
+    await adminRequest("/api/admin/inquiries", { action: "delete", id });
     return true;
   },
 

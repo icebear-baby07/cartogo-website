@@ -78,8 +78,18 @@ ANIMATIONS, DESIGN, AND LAYOUT:
 
 7. Update the "CONTINUE WITH GOOGLE" section. It should be "[Google Icon] SIGN OUT" when an account is signed in.
 
-8. Migration to proper database: Have the data properly migrate from supabase to mongodb. Ask me about the collection name to use before confirming to suit my style
-8.2. Ask me a confirmation about which to store static data used in the actual site (exclude admin side for now).
-- This will be a preparation for the admin panel, in which enables to make changes for all the data in the site without using supabase or even writing a single code.
-- The supabase side shall only be managed by the owner and the admin panel for admins. But for now, I will be both since it's still a development stage.
-- The overall output shall deliver a 3-tier of access controls; 1. Users can only have the basic access to the site, 2. Admins can control the site and its panel, 3. Head and higher ups can control the overall supabase, data modification/deletion/addition confirmation (through the set pin)
+8. Migration to MongoDB — completed within the approved scope:
+- `vehicles`: public vehicle catalog and rates migrated from Supabase `unit_data`.
+- `site_assets`: pickup locations and live-agent contact records migrated from Supabase `site_assets`.
+- `site_content`: public pricing, fees, discounts, page copy, and social links. Contact and pickup details are managed only in `site_assets`, not duplicated in site content.
+- `inquiries`: customer inquiry records, including target coordinates and quote snapshots. Copy existing Supabase inquiries to MongoDB without deleting or modifying the Supabase originals; new submissions and admin inquiry operations use MongoDB.
+- Supabase remains the source for Google sign-in and administrator authorization. Keep existing Supabase inquiry row-level security active for the retained source records.
+- The one-time importer is idempotent, preserves numeric IDs, reads source tables in pages, and leaves existing MongoDB edits intact. The approved import has been run and verified; a repeat run imported no duplicates.
+- This prepares public-site data for management through the admin panel without exposing MongoDB credentials to browsers.
+- Future access-control phase: retain basic user access; allow admins to manage the website through its panel; reserve overall Supabase data changes and approval (including the set PIN) for the owner/head and higher-ups. This three-tier role design is not part of the current migration.
+
+9 [UNIFNISHED] 
+9.1. When logging in, I cannot place a booking because of the necessary field that I allegedly haven't filled (which I tackled about this before that I ask to use the google account details of users to be put into the necessary fields)
+- let's try it like this: Do not remove the fields when the user logs in using their google account, but rather, have it unwritable but still displays the information that they have on a dark gray font instead of default black
+- Confirm the selection of time: the option of time should disappear once the user clicks the desired time
+- I coudn't send an inquiry because of this wall "We couldn't verify a rate for this destination. Choose a location within the supported Luzon pricing area"

@@ -26,7 +26,9 @@ For bot and frontend development, use **`chatbot/restart_chat.cmd`** to restart 
 
 The chatbot can look up company reference records in MongoDB and use matching content when answering. Chat logs remain in the database configured by `MONGODB_DATABASE` and `MONGODB_COLLECTION`; proprietary information uses the `kb` database and the `PROPRIETARY_INFO_COLLECTION` collection by default. Configure its database and collection with `MONGODB_KNOWLEDGE_DATABASE` and `MONGODB_KNOWLEDGE_COLLECTION` in `chatbot/.env`.
 
-Vehicle questions read the public catalog from the same MongoDB database and collection configured for the website (`MONGODB_DATABASE=cartogo`, `MONGODB_UNITS_COLLECTION=vehicles`). Use the same server-side `MONGODB_URI` in `chatbot/.env`; the chatbot no longer needs Supabase credentials for inventory. It excludes units with `Inactive` status and says it cannot verify a vehicle answer if the catalog is unavailable or has no relevant records.
+Vehicle questions read the public catalog from the same MongoDB database and collection configured for the website (`MONGODB_DATABASE=cartogo`, `MONGODB_UNITS_COLLECTION=vehicles`). Use the same server-side `MONGODB_URI` in `chatbot/.env`; the chatbot no longer needs Supabase credentials for inventory. It excludes units with `Inactive` status, lists matching vehicle facts and rates directly from the catalog, and says it cannot verify a vehicle answer if the catalog has no matching records. For recommendations, it lists available vehicles and asks for passenger count, destination, budget, or preferred features before narrowing the choices.
+
+Try `What vehicles are available? Include each vehicle's capacity and rates.` to list the available fleet, or ask about one exact model, such as `What are the rates for the Toyota Fortuner?`. Company-specific policy answers require matching, approved records in the configured knowledge collection; the chatbot does not infer policies from the vehicle catalog or website page copy.
 
 Add documents to the knowledge collection with a text `content` field. The keyword lookup searches `title`, `content`, `topic`, `keywords`, and `tags`. For example:
 

@@ -35,40 +35,43 @@ if ($Port -lt 1024 -or $Port -gt 65535) {
 
 $Listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($Listener) {
+	$ExistingProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $($Listener.OwningProcess)"
+	$ServerScript = [System.IO.Path]::GetFullPath((Join-Path $ProjectRoot "server.py"))
+	$IsOwnedChatbot = $ExistingProcess -and
+		-not [string]::IsNullOrEmpty($ExistingProcess.CommandLine) -and
+		$ExistingProcess.CommandLine.IndexOf($ServerScript, [StringComparison]::OrdinalIgnoreCase) -ge 0
+	$IsExpectedChat = $false
 	try {
 		$ExistingChat = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/" -UseBasicParsing -TimeoutSec 3
+		$IsExpectedChat = $ExistingChat.StatusCode -eq 200 -and $ExistingChat.Content.Contains("<title>Cartogo | Chat</title>")
 	}
 	catch {
-		throw "Chatbot port $Port is already in use. Set CARTOGO_CHAT_PORT to an available port and update CHATBOT_PORT in main/cartogo-website/back/js/chatbot.js."
 	}
 
-	if ($ExistingChat.StatusCode -eq 200 -and $ExistingChat.Content.Contains("<title>Cartogo | Chat</title>")) {
+	if ($IsExpectedChat -and -not $Restart) {
+		Write-Host "Chatbot is already running at http://127.0.0.1:$Port"
+		exit 0
+	}
+	elseif ($IsOwnedChatbot) {
 		if ($Restart) {
-			$ExistingProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $($Listener.OwningProcess)"
-			$ServerScript = [System.IO.Path]::GetFullPath((Join-Path $ProjectRoot "server.py"))
-			if (-not $ExistingProcess -or [string]::IsNullOrEmpty($ExistingProcess.CommandLine) -or $ExistingProcess.CommandLine.IndexOf($ServerScript, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
-				throw "Refusing to stop the listener on port $Port because it could not be identified as this chatbot's server.py."
-			}
-
-			Write-Host "Stopping the current chatbot process on port $Port..."
-			Stop-Process -Id $Listener.OwningProcess -Force
-			try {
-				Wait-Process -Id $Listener.OwningProcess -Timeout 10 -ErrorAction Stop
-			}
-			catch {
-			}
-			$Listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
-			if ($Listener) {
-				throw "The chatbot process did not release port $Port. Stop it manually before restarting."
-			}
+			Write-Host "Restarting the current chatbot process on port $Port..."
 		}
 		else {
-			Write-Host "Chatbot is already running at http://127.0.0.1:$Port"
-			exit 0
+			Write-Host "The chatbot process on port $Port was unresponsive. Restarting this verified Cartogo process..."
+		}
+		Stop-Process -Id $Listener.OwningProcess -Force
+		try {
+			Wait-Process -Id $Listener.OwningProcess -Timeout 10 -ErrorAction Stop
+		}
+		catch {
+		}
+		$Listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+		if ($Listener) {
+			throw "The chatbot process did not release port $Port. Stop it manually before restarting."
 		}
 	}
 	else {
-		throw "Chatbot port $Port is already in use by another service."
+		throw "Chatbot port $Port is already in use by another service. The listener was not stopped."
 	}
 }
 
@@ -150,16 +153,10 @@ $LanAddresses = @(
 	Select-Object -ExpandProperty IPAddress -Unique
 )
 
-Write-Host "Local access: http://127.0.0.1:$Port"
-if ($LanAddresses.Count -gt 0) {
-	foreach ($Address in $LanAddresses) {
-		Write-Host "LAN access: http://${Address}:$Port"
-	}
-}
-else {
+if ($LanAddresses.Count -eq 0) {
 	Write-Warning "No LAN IPv4 address was detected. Other devices will not be able to connect until this computer joins an IPv4 network."
 }
-Write-Host "Press Ctrl+C to stop the server."
+Write-Host "Starting the chatbot server. Its local access URL will appear below."
 
 Push-Location $ProjectRoot
 try {

@@ -1,6 +1,7 @@
 import json
 import hashlib
 import hmac
+import math
 import os
 import re
 import secrets
@@ -8,6 +9,7 @@ import socket
 import smtplib
 import ssl
 import time
+from datetime import date
 from email.message import EmailMessage
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -25,7 +27,7 @@ ENV_KEYS = {
 	"SUPABASE_URL", "SUPABASE_ANON_KEY",
 	"MONGODB_URI", "MONGODB_DATABASE", "MONGODB_UNITS_COLLECTION",
 	"MONGODB_SITE_ASSETS_COLLECTION", "MONGODB_SITE_CONTENT_COLLECTION",
-	"MONGODB_SEQUENCES_COLLECTION",
+	"MONGODB_INQUIRIES_COLLECTION", "MONGODB_SEQUENCES_COLLECTION",
 	"SMTP_USER", "SMTP_APP_PASSWORD", "SMTP_HOST", "SMTP_PORT", "SMTP_FROM",
 	"HOST", "PORT",
 }
@@ -92,6 +94,9 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 		if request_path == "/config.js":
 			self.send_config()
 			return
+		if request_path == "/api/admin/inquiries":
+			self.get_admin_inquiries()
+			return
 		if request_path in {
 			"/api/public/units",
 			"/api/admin/units",
@@ -116,6 +121,10 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			self.approve_site_asset_change()
 		elif request_path == "/api/site-content/update":
 			self.update_site_content()
+		elif request_path == "/api/inquiries":
+			self.create_inquiry()
+		elif request_path == "/api/admin/inquiries":
+			self.manage_inquiries()
 		else:
 			self.send_json(404, {"error": "Not found."})
 
@@ -157,6 +166,56 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			message = str(error) if isinstance(error, RuntimeError) else "MongoDB could not update site content."
 			self.send_json(503, {"error": message})
 
+	def get_admin_inquiries(self):
+		try:
+			self.get_authorized_admin()
+			self.send_json(200, get_mongo_store().list_inquiries())
+		except PermissionError as error:
+			self.send_json(403, {"error": str(error)})
+		except (RuntimeError, PyMongoError):
+			self.send_json(503, {"error": "MongoDB inquiries are unavailable."})
+
+	def create_inquiry(self):
+		try:
+			payload = self.read_json()
+			user = self.get_verified_google_user()
+			inquiry = self.normalize_public_inquiry(payload, user)
+			result = get_mongo_store().add_inquiry(inquiry)
+			self.send_json(201, {"data": result})
+		except ValueError as error:
+			self.send_json(400, {"error": str(error)})
+		except PermissionError as error:
+			self.send_json(403, {"error": str(error)})
+		except (RuntimeError, PyMongoError):
+			self.send_json(503, {"error": "MongoDB could not save the inquiry."})
+
+	def manage_inquiries(self):
+		try:
+			self.get_authorized_admin()
+			payload = self.read_json()
+			action = payload.get("action")
+			inquiry_id = self.normalize_inquiry_id(payload.get("id"))
+			store = get_mongo_store()
+			if action == "update":
+				status = payload.get("status")
+				if not isinstance(status, str) or status not in {"pending_review", "contacted", "confirmed", "rejected"}:
+					raise ValueError("Choose a valid inquiry status.")
+				result = store.update_inquiry_status(inquiry_id, status)
+				self.send_json(200, {"data": result})
+			elif action == "delete":
+				store.delete_inquiry(inquiry_id)
+				self.send_json(200, {"data": {"id": inquiry_id}})
+			else:
+				raise ValueError("Choose a valid inquiry action.")
+		except ValueError as error:
+			self.send_json(400, {"error": str(error)})
+		except PermissionError as error:
+			self.send_json(403, {"error": str(error)})
+		except RuntimeError as error:
+			self.send_json(404 if "no longer exists" in str(error) else 503, {"error": str(error)})
+		except PyMongoError:
+			self.send_json(503, {"error": "MongoDB could not apply the inquiry change."})
+
 	def read_json(self):
 		try:
 			content_length = int(self.headers.get("Content-Length", "0"))
@@ -171,6 +230,127 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 		if not isinstance(payload, dict):
 			raise ValueError("Request body must be a JSON object.")
 		return payload
+
+	@staticmethod
+	def normalize_inquiry_id(value):
+		if isinstance(value, str) and value.isdigit():
+			value = int(value)
+		if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+			raise ValueError("A valid inquiry ID is required.")
+		return value
+
+	@staticmethod
+	def normalize_public_inquiry(payload, user):
+		def text_value(key, label, maximum, required=True):
+			value = payload.get(key)
+			if value is None and not required:
+				return None
+			if not isinstance(value, str):
+				raise ValueError(f"{label} must be text.")
+			value = value.strip()
+			if (required and not value) or len(value) > maximum:
+				raise ValueError(f"{label} must be non-empty and no longer than {maximum} characters.")
+			return value or None
+
+		def number_value(key, label, required=False, integer=False, minimum=0, maximum=None):
+			value = payload.get(key)
+			if value is None and not required:
+				return None
+			if isinstance(value, bool) or not isinstance(value, (int, float)):
+				raise ValueError(f"{label} must be a number.")
+			if (
+				(isinstance(value, float) and not math.isfinite(value))
+				or value < minimum
+				or (maximum is not None and value > maximum)
+				or (integer and not isinstance(value, int))
+			):
+				raise ValueError(f"{label} is outside the accepted range.")
+			return value
+
+		profile = user.get("user_metadata")
+		if not isinstance(profile, dict):
+			profile = {}
+		name = str(profile.get("full_name") or profile.get("name") or "").strip()
+		if not name:
+			name = " ".join(
+				str(profile.get(key) or "").strip()
+				for key in ("given_name", "middle_name", "family_name")
+				if str(profile.get(key) or "").strip()
+			)
+		if not name or len(name) > 160:
+			raise ValueError("Your verified Google profile must include a name up to 160 characters.")
+
+		phone = text_value("phone", "Phone number", 24)
+		phone_digits = re.sub(r"\D", "", phone)
+		if not 7 <= len(phone_digits) <= 15:
+			raise ValueError("Enter a phone number with 7 to 15 digits.")
+		car_id = text_value("carId", "Vehicle ID", 80)
+		car_name = text_value("carName", "Vehicle name", 160)
+		pickup_date = text_value("pickupDate", "Pickup date", 10)
+		return_date = text_value("returnDate", "Return date", 10)
+		try:
+			pickup_day = date.fromisoformat(pickup_date)
+			return_day = date.fromisoformat(return_date)
+		except ValueError:
+			raise ValueError("Pickup and return dates must use YYYY-MM-DD format.") from None
+		if return_day < pickup_day:
+			raise ValueError("Return date can't be earlier than the pickup date.")
+		pickup_time = text_value("pickupTime", "Pickup time", 5)
+		if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", pickup_time):
+			raise ValueError("Pickup time must use 24-hour HH:MM format.")
+
+		capacity = number_value("capacity", "Capacity", integer=True, minimum=1, maximum=2147483647)
+		rental_period_hours = number_value("rentalPeriodHours", "Rental period", integer=True, minimum=1, maximum=24)
+		if rental_period_hours is not None and rental_period_hours not in {12, 24}:
+			raise ValueError("Rental period must be 12 or 24 hours.")
+		estimated_rental_hours = number_value(
+			"estimatedRentalHours", "Estimated rental hours", required=True, integer=True, minimum=1, maximum=360
+		)
+		rental_days = number_value("rentalDays", "Rental days", required=True, integer=True, minimum=4, maximum=15)
+		discount_percent = number_value("discountPercent", "Discount percent", integer=True, maximum=10)
+		if discount_percent is not None and discount_percent not in {0, 5, 10}:
+			raise ValueError("Discount percent must be 0, 5, or 10.")
+		rate_region = text_value("rateRegion", "Rate region", 16)
+		if rate_region not in {"in", "out", "luzon"}:
+			raise ValueError("Choose a valid rate region.")
+		latitude = number_value("targetLatitude", "Target latitude", required=True, minimum=-90, maximum=90)
+		longitude = number_value("targetLongitude", "Target longitude", required=True, minimum=-180, maximum=180)
+
+		return {
+			"name": name,
+			"email": str(user["email"]).strip().lower(),
+			"phone": phone,
+			"secondary_phone": text_value("secondaryPhone", "Secondary phone", 24, required=False),
+			"car_id": car_id,
+			"car_name": car_name,
+			"capacity": capacity,
+			"pickup_date": pickup_date,
+			"pickup_time": pickup_time,
+			"return_date": return_date,
+			"location": text_value("location", "Target location", 500),
+			"target_latitude": latitude,
+			"target_longitude": longitude,
+			"nearest_pickup_name": text_value("nearestPickupName", "Nearest pickup location", 160),
+			"nearest_pickup_distance_km": number_value(
+				"nearestPickupDistanceKm", "Nearest pickup distance", required=True, maximum=99999.999
+			),
+			"rate_region": rate_region,
+			"rental_period_hours": rental_period_hours,
+			"estimated_rental_hours": estimated_rental_hours,
+			"rate_per_period": number_value(
+				"ratePerPeriod", "Rate per period", required=True, maximum=99999999.99
+			),
+			"rental_days": rental_days,
+			"discount_percent": discount_percent,
+			"discount_amount": number_value("discountAmount", "Discount amount", maximum=9999999999.99),
+			"quoted_rate": number_value(
+				"quotedRate", "Quoted rate", required=True, maximum=9999999999.99
+			),
+			"notes": text_value("notes", "Notes", 2000, required=False),
+			"status": "confirmed",
+			"user_id": str(user["id"]),
+			"verification_method": "google_oauth",
+		}
 
 	def get_authorized_admin(self):
 		token = self.headers.get("Authorization", "")
@@ -199,6 +379,33 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 		if is_admin is not True:
 			raise PermissionError("This account is not an authorized administrator.")
 		return {"id": str(user["id"]), "email": str(user["email"]).strip().lower()}
+
+	def get_verified_google_user(self):
+		token = self.headers.get("Authorization", "")
+		if not token.startswith("Bearer "):
+			raise PermissionError("Sign in with a verified Google account before submitting an inquiry.")
+		access_token = token[7:].strip()
+		base_url = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+		anon_key = os.environ.get("SUPABASE_ANON_KEY", "").strip()
+		if not base_url or not anon_key:
+			raise RuntimeError("Supabase URL and anon key are not configured on the website server.")
+		user = self.supabase_request(
+			f"{base_url}/auth/v1/user",
+			anon_key,
+			access_token,
+		)
+		if not isinstance(user, dict) or not user.get("id") or not user.get("email"):
+			raise PermissionError("The signed-in account could not be verified.")
+		app_metadata = user.get("app_metadata")
+		if not isinstance(app_metadata, dict):
+			app_metadata = {}
+		user_metadata = user.get("user_metadata")
+		if not isinstance(user_metadata, dict):
+			user_metadata = {}
+		email_verified = user_metadata.get("email_verified")
+		if app_metadata.get("provider") != "google" or email_verified not in (True, "true"):
+			raise PermissionError("A verified Google account is required to submit an inquiry.")
+		return user
 
 	@staticmethod
 	def supabase_request(url, api_key, access_token, method="GET", body=None, prefer=None):

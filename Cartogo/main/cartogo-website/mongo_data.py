@@ -1,5 +1,6 @@
 import os
 import math
+from datetime import datetime, timezone
 
 from pymongo import MongoClient, ReturnDocument
 from pymongo.errors import PyMongoError
@@ -7,12 +8,13 @@ from pymongo.errors import PyMongoError
 
 class MongoDataStore:
 	def __init__(self, client, database_name, units_collection, site_assets_collection,
-			site_content_collection, sequences_collection):
+			site_content_collection, inquiries_collection, sequences_collection):
 		self.client = client
 		self.database = client[database_name]
 		self.units = self.database[units_collection]
 		self.site_assets = self.database[site_assets_collection]
 		self.site_content = self.database[site_content_collection]
+		self.inquiries = self.database[inquiries_collection]
 		self.sequences = self.database[sequences_collection]
 
 	@classmethod
@@ -31,6 +33,7 @@ class MongoDataStore:
 			os.environ.get("MONGODB_UNITS_COLLECTION", "vehicles").strip() or "vehicles",
 			os.environ.get("MONGODB_SITE_ASSETS_COLLECTION", "site_assets").strip() or "site_assets",
 			os.environ.get("MONGODB_SITE_CONTENT_COLLECTION", "site_content").strip() or "site_content",
+			os.environ.get("MONGODB_INQUIRIES_COLLECTION", "inquiries").strip() or "inquiries",
 			os.environ.get("MONGODB_SEQUENCES_COLLECTION", "site_sequences").strip() or "site_sequences",
 		)
 
@@ -61,6 +64,40 @@ class MongoDataStore:
 			raise RuntimeError("MongoDB site content is not initialized. Run migrate_supabase_to_mongodb.py first.")
 		return self._public_document(content)
 
+	def list_inquiries(self):
+		return [
+			self._public_document(document)
+			for document in self.inquiries.find({}).sort("created_at", -1)
+		]
+
+	def add_inquiry(self, inquiry):
+		inquiry_id = self._next_id("inquiries", self.inquiries)
+		timestamp = datetime.now(timezone.utc).isoformat()
+		document = {
+			**inquiry,
+			"id": inquiry_id,
+			"_id": inquiry_id,
+			"created_at": timestamp,
+			"verified_at": timestamp,
+		}
+		self.inquiries.insert_one(document)
+		return self._public_document(document)
+
+	def update_inquiry_status(self, inquiry_id, status):
+		updated = self.inquiries.find_one_and_update(
+			{"_id": inquiry_id},
+			{"$set": {"status": status}},
+			return_document=ReturnDocument.AFTER,
+		)
+		if updated is None:
+			raise RuntimeError("That inquiry no longer exists. Refresh the list and try again.")
+		return self._public_document(updated)
+
+	def delete_inquiry(self, inquiry_id):
+		result = self.inquiries.delete_one({"_id": inquiry_id})
+		if result.deleted_count == 0:
+			raise RuntimeError("That inquiry no longer exists. Refresh the list and try again.")
+
 	def update_site_content(self, updates):
 		if not isinstance(updates, dict) or not updates:
 			raise ValueError("Provide site settings or labels to update.")
@@ -89,6 +126,8 @@ class MongoDataStore:
 		if labels is not None:
 			if not isinstance(labels, dict):
 				raise ValueError("Labels must be a JSON object.")
+			if "contact" in labels:
+				raise ValueError("Contact and pickup details must be managed in the site assets collection.")
 			fields["labels"] = labels
 		if len(fields) == 0 or set(updates) - {"settings", "labels"}:
 			raise ValueError("Only settings and labels can be updated here.")
