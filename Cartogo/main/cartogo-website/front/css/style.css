@@ -161,7 +161,6 @@ input, select, textarea{ font-family: inherit; font-size: 1rem; }
 
 /* ---------- Chatbot ---------- */
 .chatbot-shell{ position:fixed; right:1.25rem; bottom:1.25rem; z-index:1202; }
-.chatbot-shell.is-obscured:not(.is-open){ visibility:hidden; pointer-events:none; }
 .chatbot-shell.is-dragging{ z-index:1300; transition:none; }
 .chatbot-shell[data-corner="top-left"]{ top:calc(var(--chatbot-header-offset, 0px) + 1.25rem); left:1.25rem; right:auto; bottom:auto; }
 .chatbot-shell[data-corner="top-right"]{ top:calc(var(--chatbot-header-offset, 0px) + 1.25rem); right:1.25rem; left:auto; bottom:auto; }

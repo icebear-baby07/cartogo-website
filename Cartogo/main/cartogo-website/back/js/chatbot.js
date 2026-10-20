@@ -9,7 +9,6 @@ let launcherDrag = null;
 let suppressLauncherClick = false;
 let chatCloseTimer = null;
 const CHAT_STATE_TRANSITION_MS = 220;
-const CHATBOT_YIELD_TARGETS = ".booking-panel input, .booking-panel select, .booking-panel textarea, .booking-panel button, .booking-period-toggle, .booking-map, .contact-map, .contact-location-option, .quick-search, .fleet-grid article, .faq-item";
 
 const updateChatbotHeaderOffset = () => {
   document.documentElement.style.setProperty("--chatbot-header-offset", `${siteHeader?.getBoundingClientRect().bottom || 0}px`);
@@ -123,29 +122,12 @@ const finishLauncherDrag = event => {
 chatbotLauncher.addEventListener("pointerup", finishLauncherDrag);
 chatbotLauncher.addEventListener("pointercancel", finishLauncherDrag);
 
-document.addEventListener("pointerover", event => {
-  if (event.target.closest("#chatbotShell")) {
-    chatbotShell.classList.remove("is-obscured");
-  } else if (!chatbotShell.classList.contains("is-open") && event.target.closest(CHATBOT_YIELD_TARGETS)) {
-    chatbotShell.classList.add("is-obscured");
-  }
-});
-
 document.addEventListener("click", event => {
   if (chatbotShell.contains(event.target)) return;
   chatbotLauncher.classList.remove("is-label-expanded");
   chatbotLauncher.setAttribute("aria-label", "Open carTOGO chat; drag to move launcher");
   chatbotLauncher.removeAttribute("title");
 });
-
-document.addEventListener("pointerout", event => {
-  const next = event.relatedTarget;
-  if (!event.target.closest(CHATBOT_YIELD_TARGETS)
-    || (next instanceof Element && next.closest(CHATBOT_YIELD_TARGETS))) return;
-  chatbotShell.classList.remove("is-obscured");
-});
-
-chatbotShell.addEventListener("focusin", () => chatbotShell.classList.remove("is-obscured"));
 
 window.addEventListener("message", event => {
   if (event.source !== chatbotFrame.contentWindow || event.origin !== CHATBOT_URL.origin) return;
