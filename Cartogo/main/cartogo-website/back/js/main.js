@@ -1123,6 +1123,11 @@ function bindBookingForm() {
   const msg = document.getElementById("formMsg");
   const googleButton = document.getElementById("googleOrderButton");
   const authStatus = document.getElementById("bookingAuthStatus");
+  const authCopy = document.getElementById("bookingAuthCopy");
+  const signoutDialog = document.getElementById("signoutConfirmation");
+  const cancelSignOutButton = document.getElementById("cancelSignOutButton");
+  const confirmSignOutButton = document.getElementById("confirmSignOutButton");
+  const signoutConfirmationError = document.getElementById("signoutConfirmationError");
   const submitButton = form.querySelector("[type=submit]");
   const draftKey = "cartogo.bookingDraft";
   const signInPendingKey = "cartogo.customerGoogleSignInPending";
@@ -1148,23 +1153,32 @@ function bindBookingForm() {
       .filter(Boolean)
       .join(" ");
   };
+  const showAuthToast = message => {
+    authToast.textContent = message;
+    authToast.classList.add("show");
+    clearTimeout(authToast.hideTimeout);
+    authToast.hideTimeout = setTimeout(() => authToast.classList.remove("show"), 3000);
+  };
   const updateVerificationUI = () => {
     const isGoogle = hasVerifiedGoogleAccount(currentUser);
-    googleButton.hidden = isGoogle;
+    googleButton.hidden = false;
     nameFields.hidden = false;
     nameFields.querySelectorAll(".booking-profile-field").forEach(field => {
       field.hidden = isGoogle;
     });
     if (isGoogle) {
+      googleButton.innerHTML = '<i class="fa-brands fa-google" aria-hidden="true"></i> SIGN OUT';
+      googleButton.setAttribute("aria-label", "Sign out of Google");
+      authCopy.textContent = "Your Google account is connected to this inquiry.";
       authStatus.textContent = `Signed in as ${getGoogleProfileName(currentUser) || currentUser.email}. Google verified this email.`;
       if (sessionStorage.getItem(signInPendingKey) === "true") {
         sessionStorage.removeItem(signInPendingKey);
-        authToast.textContent = "Signed in successfully.";
-        authToast.classList.add("show");
-        clearTimeout(authToast.hideTimeout);
-        authToast.hideTimeout = setTimeout(() => authToast.classList.remove("show"), 3000);
+        showAuthToast("Signed in successfully.");
       }
     } else {
+      googleButton.innerHTML = '<i class="fa-brands fa-google" aria-hidden="true"></i> Continue with Google';
+      googleButton.setAttribute("aria-label", "Continue with Google");
+      authCopy.textContent = "Sign in with Google to send your inquiry.";
       authStatus.textContent = "Sign in with Google to send your inquiry.";
     }
   };
@@ -1351,7 +1365,53 @@ function bindBookingForm() {
   };
 
   restoreDraft();
+  cancelSignOutButton.addEventListener("click", () => signoutDialog.close());
+  signoutDialog.addEventListener("click", event => {
+    if (event.target === signoutDialog) signoutDialog.close();
+  });
+  signoutDialog.addEventListener("close", () => {
+    confirmSignOutButton.disabled = false;
+    cancelSignOutButton.disabled = false;
+    signoutConfirmationError.hidden = true;
+    signoutConfirmationError.textContent = "";
+  });
+  confirmSignOutButton.addEventListener("click", async () => {
+    if (!hasVerifiedGoogleAccount(currentUser)) {
+      signoutDialog.close();
+      updateVerificationUI();
+      return;
+    }
+    confirmSignOutButton.disabled = true;
+    cancelSignOutButton.disabled = true;
+    signoutConfirmationError.hidden = true;
+    try {
+      const { error } = await supa.auth.signOut();
+      if (error) throw error;
+      sessionStorage.removeItem(draftKey);
+      sessionStorage.removeItem(signInPendingKey);
+      currentUser = null;
+      updateVerificationUI();
+      signoutDialog.close();
+      googleButton.disabled = false;
+      msg.className = "form-msg";
+      msg.textContent = "";
+      showAuthToast("Sign out successfully.");
+      document.getElementById("bookingFirstName").focus({ preventScroll: true });
+    } catch (error) {
+      signoutDialog.close();
+      googleButton.disabled = false;
+      showAuthToast(`Could not sign out: ${error.message}`);
+    }
+  });
+
   googleButton.addEventListener("click", async () => {
+    if (hasVerifiedGoogleAccount(currentUser)) {
+      signoutConfirmationError.hidden = true;
+      signoutDialog.showModal();
+      cancelSignOutButton.focus();
+      return;
+    }
+
     googleButton.disabled = true;
     try {
       await startGoogleSignIn();

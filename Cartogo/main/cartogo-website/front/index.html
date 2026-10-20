@@ -13,7 +13,7 @@
 <!-- Styles -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="css/style.css?v=step6-15">
+<link rel="stylesheet" href="css/style.css?v=step7-2">
 </head>
 <body>
 
@@ -204,8 +204,8 @@
           </ul>
           <div class="booking-auth-cta">
             <p class="booking-auth-kicker">READY TO RESERVE?</p>
-            <p class="booking-auth-copy">Sign in with Google to send your inquiry.</p>
-            <button type="button" class="btn btn-ghost" id="googleOrderButton" hidden><i class="fa-brands fa-google" aria-hidden="true"></i> Continue with Google</button>
+            <p class="booking-auth-copy" id="bookingAuthCopy">Sign in with Google to send your inquiry.</p>
+            <button type="button" class="btn btn-ghost" id="googleOrderButton"><i class="fa-brands fa-google" aria-hidden="true"></i> Continue with Google</button>
             <p id="bookingAuthStatus" role="status" aria-live="polite"></p>
           </div>
         </div>
@@ -439,6 +439,19 @@
 
 </main>
 
+<dialog class="signout-confirmation" id="signoutConfirmation" aria-labelledby="signoutConfirmationTitle" aria-describedby="signoutConfirmationDescription">
+  <form class="signout-confirmation-inner" method="dialog">
+    <p class="eyebrow">Account</p>
+    <h2 id="signoutConfirmationTitle">Are you sure you want to sign out?</h2>
+    <p id="signoutConfirmationDescription">You can sign in again to send a booking inquiry.</p>
+    <p class="signout-confirmation-error" id="signoutConfirmationError" role="alert" hidden></p>
+    <div class="signout-confirmation-actions">
+      <button class="btn btn-ghost" id="cancelSignOutButton" type="button">Cancel</button>
+      <button class="btn btn-primary" id="confirmSignOutButton" type="button">Sign out</button>
+    </div>
+  </form>
+</dialog>
+
 <!-- ============ FOOTER ============ -->
 <div class="kerb-strip" aria-hidden="true"></div>
 <footer class="site-footer">
@@ -494,7 +507,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="../back/js/data.js?v=site-assets-2"></script>
-<script src="../back/js/main.js?v=step6-5"></script>
+<script src="../back/js/main.js?v=step7-2"></script>
 <script src="../back/js/chatbot.js?v=step6-6"></script>
 </body>
 </html>

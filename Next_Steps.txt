@@ -75,3 +75,5 @@ ANIMATIONS, DESIGN, AND LAYOUT:
 6.3. Populate the Rates and deposits section even though a booking is not yet established. It works just like a menu (in restaurant setting).
 6.4. Include other information to the 300 extra driver / trip, 150 Child Seat / trip,  250 Late Return / Hour, 20% Refundable deposit, when hovered. Expand to the bottom and with a color highlight. But goes away when hovered to other parts of the site.
 6.5. When adjusting the size of the chatbot (when drag around), resize it to fit in a square, in a vertical rectangle (icon only), and its default horizontal rectangle dynamically
+
+7. Update the "CONTINUE WITH GOOGLE" section. It should be "[Google Icon] SIGN OUT" when an account is signed in.

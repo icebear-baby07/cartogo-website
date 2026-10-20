@@ -69,7 +69,7 @@ body{
   -webkit-font-smoothing: antialiased;
 }
 .auth-toast{
-  position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 100;
+  position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 1204;
   max-width: min(24rem, calc(100vw - 2rem));
   padding: 0.8em 1.2em; border-radius: var(--radius-sm);
   background: var(--asphalt); color: var(--paper); font-size: 0.88rem;
@@ -666,6 +666,18 @@ body.has-map-fullscreen{ overflow:hidden; }
 .reservation-recap{ position:fixed; inset:0; width:min(42rem, calc(100vw - 2rem)); max-height:min(90dvh, 52rem); margin:auto; padding:0; overflow:auto; border:0; border-radius:var(--radius-md); background:var(--paper); color:var(--ink); box-shadow:0 24px 80px rgba(20,20,20,0.35); }
 .reservation-recap[open]{ display:block; }
 .reservation-recap::backdrop{ background:rgba(20,20,20,0.66); }
+.signout-confirmation{ width:min(30rem, calc(100vw - 2rem)); max-width:none; margin:auto; padding:0; overflow:hidden; border:1px solid var(--line); border-top:4px solid var(--signal); border-radius:var(--radius-md); background:var(--paper); color:var(--ink); box-shadow:0 24px 80px rgba(20,20,20,0.28); }
+.signout-confirmation[open]{ display:block; animation:signout-dialog-in 0.2s ease both; }
+.signout-confirmation::backdrop{ background:rgba(20,20,20,0.36); backdrop-filter:blur(8px); }
+.signout-confirmation-inner{ padding:clamp(1.25rem, 4vw, 2rem); }
+.signout-confirmation-inner .eyebrow{ margin-bottom:0.65rem; }
+.signout-confirmation-inner h2{ margin:0; font-size:clamp(1.3rem, 5vw, 1.7rem); line-height:1.2; }
+.signout-confirmation-inner>p:not(.eyebrow){ margin:0.8rem 0 1.3rem; color:var(--slate); font-size:0.92rem; }
+.signout-confirmation-actions{ display:flex; justify-content:flex-end; gap:0.7rem; flex-wrap:wrap; }
+.signout-confirmation-actions .btn{ min-width:7rem; }
+.signout-confirmation-error{ color:var(--danger)!important; }
+.signout-confirmation-error[hidden]{ display:none; }
+@keyframes signout-dialog-in{ from{ opacity:0; transform:translateY(8px) scale(0.98); } to{ opacity:1; transform:none; } }
 .reservation-recap-inner{ padding:clamp(1.25rem, 4vw, 2rem); }
 .recap-header{ display:flex; align-items:center; justify-content:space-between; gap:1rem; }
 .recap-header h2{ margin:0; font-size:1.8rem; }
@@ -768,6 +780,7 @@ body.has-contact-map-fullscreen{ overflow:hidden; }
   .insurance-footer-cta>a:hover{ transform:none; }
   .live-agent-card:hover .live-agent-title-row h3 i{ animation:none; }
   .fee-chip,.fee-chip-detail{ transition:none; }
+  .signout-confirmation[open]{ animation:none; }
 }
 
 /* ---------- 15. FOOTER ---------- */
