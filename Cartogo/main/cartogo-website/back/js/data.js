@@ -1,6 +1,4 @@
-/* Site seed data, browser-local settings, Supabase inquiries, and chat sessions. */
-
-const STORAGE_KEY = "carTOGOmnl.v1";
+/* Public site data is served from MongoDB; authentication and inquiries remain in Supabase. */
 const SUPABASE_URL = window.CARTOGO_CONFIG?.supabaseUrl;
 const SUPABASE_KEY = window.CARTOGO_CONFIG?.supabaseAnonKey;
 if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("Supabase configuration is missing. Check main/cartogo-website/.env and restart the website server.");
@@ -12,117 +10,24 @@ const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     flowType: "pkce"
   }
 });
-/* ---------- Seed content (used the very first time the site loads) ---------- */
-const SEED_DATA = {
-  settings: {
-    companyName: "carTOGO.mnl",
-    tagline: "Rent. Drive. Go.",
-    currency: "₱",
-    depositPercent: 20,
-    extraDriverFee: 300,
-    childSeatFee: 150,
-    lateFeePerHour: 250
-  },
+let SITE_CONTENT_CACHE = null;
 
-  labels: {
-    hero: {
-      title: "Your trip starts with <em>carTOGO.mnl</em>.",
-      subtitle: "Clean, well-maintained cars, clear rental rates, and easy reservations. Get on the road with carTOGO.mnl."
-    },
-    trustStrip: [
-      { value: "4", label: "Cars in our fleet" },
-      { value: "4", label: "Vehicle options" },
-      { value: "Metro Manila", label: "Pickup area" },
-      { value: "Easy", label: "Online inquiry" }
-    ],
-    howItWorks: [
-      { title: "Choose your ride", description: "Filter the fleet by category and pick the car that fits your trip." },
-      { title: "Pick your dates", description: "Set pickup and return dates — we hold your quoted rate for 24 hours." },
-      { title: "Confirm the details", description: "Submit your info below; our team confirms availability within 2 hours." },
-      { title: "Pick up & go", description: "Bring your license and ID to your chosen pickup point and hit the road." }
-    ],
-    whyChooseUs: [
-      { icon: "car", title: "Choice of vehicles", description: "Pick from compact sedans or a spacious SUV based on your trip." },
-      { icon: "clipboard", title: "Simple inquiry", description: "Send your preferred dates and vehicle through the online form." },
-      { icon: "card", title: "Clear pricing", description: "Rental rates and deposit estimates are shown before you inquire." },
-      { icon: "location", title: "Metro Manila pickup", description: "Choose a pickup area that works for your schedule." },
-      { icon: "phone", title: "Direct assistance", description: "Our contact details are available for questions and booking confirmation." },
-      { icon: "key", title: "Ready to drive", description: "Once your reservation is confirmed, complete the required pickup documents and go." }
-    ],
-    about: {
-      title: "Built for simple, reliable car rentals",
-      body: "cartogo.mnl focuses on simple, reliable car rentals in Metro Manila, with clear rates, clean vehicles, straightforward booking, and a team ready to help."
-    },
-    faq: [
-      { q: "What do I need to rent a car?", a: "A valid driver's license held for at least one year, one government-issued ID, and a credit or debit card for the security deposit." },
-      { q: "Is insurance included in the rate?", a: "Yes. Comprehensive insurance with a standard deductible is included in every quoted rate — no add-on required." },
-      { q: "What's your fuel policy?", a: "Every car leaves full and should come back full. Cars returned with less fuel are charged at pump price plus a small refueling fee." },
-      { q: "Can I change or cancel my booking?", a: "Yes, free of charge up to 24 hours before your pickup time. Changes inside 24 hours may be subject to availability." },
-      { q: "Do you deliver to the airport?", a: "Yes — our airport-area pickup can be arranged with the team when you submit your inquiry." }
-    ],
-    contact: {
-      phone: "+63 2 8555 0142",
-      email: "hello@cartogo.mnl",
-      hours: "Mon – Sun, 6:00 AM – 10:00 PM",
-      locations: [
-        "Quezon City — Fairview",
-        "Airport Area — Pasay",
-        "Quezon City — Commonwealth Ave"
-      ]
-    },
-    testimonials: [
-      { quote: "Choose a compact sedan for everyday city trips.", name: "Honda City", detail: "Ignited Red Metallic" },
-      { quote: "A practical and economical option for Metro Manila travel.", name: "Mirage G4", detail: "Red or Silver" },
-      { quote: "Bring the family and extra luggage with a seven-seat SUV.", name: "Toyota Fortuner", detail: "SUV · 7 seats" }
-    ]
-  },
-
-  cars: [
-    { id: "c1", name: "Honda City — Ignited Red Metallic", category: "Sedan", seats: 5, transmission: "Automatic", fuel: "Gasoline", rate: 2200, image: "../assets/photos/honda-city-red.jpg", blurb: "A stylish and comfortable sedan for city driving, business trips, and weekend getaways.", available: true },
-    { id: "c2", name: "Mitsubishi Mirage G4 — Red", category: "Sedan", seats: 5, transmission: "Automatic", fuel: "Gasoline", rate: 1900, image: "../assets/photos/mirage-g4-red.jpg", blurb: "Fuel-efficient, easy to drive, and practical for everyday travel around Metro Manila.", available: true },
-    { id: "c3", name: "Mitsubishi Mirage G4 — Silver", category: "Sedan", seats: 5, transmission: "Automatic", fuel: "Gasoline", rate: 1900, image: "../assets/photos/mirage-g4-silver.jpg", blurb: "A practical and economical choice for errands, work trips, and city adventures.", available: true },
-    { id: "c4", name: "Toyota Fortuner", category: "SUV", seats: 7, transmission: "Automatic", fuel: "Diesel", rate: 4500, image: "../assets/photos/toyota-fortuner.jpg", blurb: "A spacious seven-seater SUV made for family trips, long drives, and out-of-town adventures.", available: true }
-  ],
-
-  /* Real visitor submissions land here. Empty on first load, on purpose. */
-  inquiries: []
-};
-
-/* ---------- Internal read/write helpers ---------- */
-function _readAll() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_DATA));
-      return JSON.parse(JSON.stringify(SEED_DATA));
-    }
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error("carTOGO.mnl DB: failed to read storage, falling back to seed data.", err);
-    return JSON.parse(JSON.stringify(SEED_DATA));
-  }
+async function siteDataRequest(path, options = {}) {
+  const response = await fetch(path, {
+    cache: "no-store",
+    ...options
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || "Could not load site data.");
+  return result;
 }
 
-function _writeAll(data) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    return true;
-  } catch (err) {
-    console.error("carTOGO.mnl DB: failed to write storage.", err);
-    return false;
-  }
-}
-
-function _uid(prefix) {
-  return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-}
-
-async function adminApprovalRequest(path, payload, resource) {
+async function adminRequest(path, payload) {
   const { data, error } = await supa.auth.getSession();
   if (error) throw error;
   const accessToken = data.session?.access_token;
   if (!accessToken) throw new Error("Sign in again to manage site data.");
-  const response = await fetch(path, {
+  return siteDataRequest(path, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -130,44 +35,49 @@ async function adminApprovalRequest(path, payload, resource) {
     },
     body: JSON.stringify(payload)
   });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error || `The ${resource} change could not be approved.`);
-  return result;
+}
+
+async function updateSiteContent(payload) {
+  const result = await adminRequest("/api/site-content/update", payload);
+  SITE_CONTENT_CACHE = result.data;
+  return result.data;
 }
 
 /* ---------- Public DB API ---------- */
 const DB = {
-  // --- Settings (company name, currency, fees) ---
+  async getSiteContent() {
+    if (SITE_CONTENT_CACHE) return SITE_CONTENT_CACHE;
+    SITE_CONTENT_CACHE = await siteDataRequest("/api/site-content");
+    return SITE_CONTENT_CACHE;
+  },
+  // --- Public settings and page copy ---
   async getSettings() {
-    return _readAll().settings;
+    const content = SITE_CONTENT_CACHE || await this.getSiteContent();
+    return content.settings;
   },
   async saveSettings(settings) {
-    const data = _readAll();
-    data.settings = { ...data.settings, ...settings };
-    _writeAll(data);
-    return data.settings;
+    const content = await updateSiteContent({ settings });
+    return content.settings;
   },
-
-  // --- Labels (all editable site copy) ---
   async getLabels() {
-    const labels = _readAll().labels;
-    return labels || JSON.parse(JSON.stringify(SEED_DATA.labels));
+    const content = SITE_CONTENT_CACHE || await this.getSiteContent();
+    return content.labels;
   },
   async saveLabels(labels) {
-    const data = _readAll();
-    data.labels = { ...data.labels, ...labels };
-    _writeAll(data);
-    return data.labels;
+    const content = await updateSiteContent({ labels });
+    return content.labels;
   },
 
   // --- Units / public fleet + rates ---
-  async getUnits() {
-    const { data, error } = await supa
-      .from("unit_data")
-      .select("*")
-      .order("id", { ascending: true });
+  async getUnits({ admin = false } = {}) {
+    if (!admin) return siteDataRequest("/api/public/units");
+    const { data, error } = await supa.auth.getSession();
     if (error) throw error;
-    return data || [];
+    const accessToken = data.session?.access_token;
+    if (!accessToken) throw new Error("Sign in again to view all units.");
+    return siteDataRequest("/api/admin/units", {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
   },
   async getCars() {
     const units = await this.getUnits();
@@ -193,25 +103,27 @@ const DB = {
     });
   },
   async requestUnitChange(action, unit) {
-    return adminApprovalRequest("/api/unit-data/request", { action, unit }, "unit");
+    return adminRequest("/api/unit-data/request", { action, unit });
   },
   async approveUnitChange(challengeId, code) {
-    return adminApprovalRequest("/api/unit-data/approve", { challengeId, code }, "unit");
+    return adminRequest("/api/unit-data/approve", { challengeId, code });
   },
 
-  async getSiteAssets() {
-    const { data, error } = await supa
-      .from("site_assets")
-      .select("*")
-      .order("id", { ascending: true });
+  async getSiteAssets({ admin = false } = {}) {
+    if (!admin) return siteDataRequest("/api/site-assets");
+    const { data, error } = await supa.auth.getSession();
     if (error) throw error;
-    return data || [];
+    const accessToken = data.session?.access_token;
+    if (!accessToken) throw new Error("Sign in again to view site assets.");
+    return siteDataRequest("/api/admin/site-assets", {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
   },
   async requestSiteAssetChange(action, asset) {
-    return adminApprovalRequest("/api/site-assets/request", { action, asset }, "site asset");
+    return adminRequest("/api/site-assets/request", { action, asset });
   },
   async approveSiteAssetChange(challengeId, code) {
-    return adminApprovalRequest("/api/site-assets/approve", { challengeId, code }, "site asset");
+    return adminRequest("/api/site-assets/approve", { challengeId, code });
   },
 
   // --- Inquiries (this is the "client information" store) ---
@@ -332,7 +244,11 @@ const DB = {
 
   // --- Danger zone: reset everything back to the seed content ---
   async resetAll() {
-    _writeAll(JSON.parse(JSON.stringify(SEED_DATA)));
+    const defaults = await siteDataRequest("/api/site-content/defaults");
+    await updateSiteContent({
+      settings: defaults.settings,
+      labels: defaults.labels
+    });
     return true;
   }
 };

@@ -1,8 +1,7 @@
 /* ===========================================================================
    carTOGO.mnl — ADMIN PANEL LOGIC (js/admin.js)
-   Everything here reads/writes through DB (js/data.js). Changes made here
-   are picked up by index.html the next time it loads, because both pages
-   read from the same storage.
+   Everything here reads/writes through DB (js/data.js). Public site content
+   and catalogs are stored in MongoDB; authentication and inquiries use Supabase.
 
    SECURITY NOTE: the password gate below is a convenience lock so a casual
    visitor doesn't stumble into edit mode — it is NOT real authentication
@@ -38,7 +37,6 @@ async function initAdmin() {
     return;
   }
 
-  SETTINGS = await DB.getSettings();
   const { data, error } = await supa.auth.getSession();
   if (error) {
     showLoginError(`Could not check sign-in status: ${error.message}`);
@@ -127,10 +125,10 @@ async function enterAdmin() {
 async function loadAll() {
   SETTINGS = await DB.getSettings();
   LABELS = await DB.getLabels();
-  UNITS = await DB.getUnits();
+  UNITS = await DB.getUnits({ admin: true });
   INQUIRIES = await DB.getInquiries();
   try {
-    SITE_ASSETS = await DB.getSiteAssets();
+    SITE_ASSETS = await DB.getSiteAssets({ admin: true });
     SITE_ASSETS_ERROR = "";
   } catch (error) {
     SITE_ASSETS = [];
@@ -222,7 +220,7 @@ function renderFleetTab() {
       };
       try {
         await requestAndApproveUnitChange("update", unit);
-        UNITS = await DB.getUnits();
+        UNITS = await DB.getUnits({ admin: true });
         renderFleetTab();
         toast(`Saved changes to ${unit.display_name}.`);
       } catch (error) {
@@ -238,7 +236,7 @@ function renderFleetTab() {
       if (!confirm(`Delete "${unit.display_name}" from the unit data? This can't be undone.`)) return;
       try {
         await requestAndApproveUnitChange("delete", { id: unit.id, display_name: unit.display_name });
-        UNITS = await DB.getUnits();
+        UNITS = await DB.getUnits({ admin: true });
         renderFleetTab();
         toast(`Deleted ${unit.display_name}.`);
       } catch (error) {
@@ -396,7 +394,7 @@ function bindAddCarForm() {
     };
     try {
       await requestAndApproveUnitChange("add", unit);
-      UNITS = await DB.getUnits();
+      UNITS = await DB.getUnits({ admin: true });
       renderFleetTab();
       form.reset();
       toast(`Added ${unit.display_name} to the unit data.`);
@@ -455,7 +453,7 @@ function renderSiteAssetsTab() {
 
 async function refreshSiteAssets() {
   try {
-    SITE_ASSETS = await DB.getSiteAssets();
+    SITE_ASSETS = await DB.getSiteAssets({ admin: true });
     SITE_ASSETS_ERROR = "";
   } catch (error) {
     SITE_ASSETS = [];
@@ -1146,7 +1144,7 @@ function renderSettingsTab() {
   });
 
   document.getElementById("resetAllBtn").addEventListener("click", async () => {
-    if (!confirm("Reset local fleet, labels, and site preferences? Customer inquiries will remain in Supabase.")) return;
+    if (!confirm("Reset public settings and page copy to defaults? Fleet, site assets, booking inquiries, and chat sessions will remain unchanged.")) return;
     await DB.resetAll();
     await loadAll();
     SETTINGS.adminEmails = await DB.getAdminEmails();

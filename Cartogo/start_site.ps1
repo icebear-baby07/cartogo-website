@@ -14,7 +14,7 @@ if (-not (Test-Path $EnvironmentFile)) {
 		throw "Environment template not found: $EnvironmentExample"
 	}
 	Copy-Item -LiteralPath $EnvironmentExample -Destination $EnvironmentFile
-	throw "Created .env from the template. Set SUPABASE_URL and SUPABASE_ANON_KEY, then run this launcher again."
+	throw "Created .env from the template. Set SUPABASE_URL, SUPABASE_ANON_KEY, and MONGODB_URI, migrate the site data, then run this launcher again."
 }
 
 $Settings = @{}
@@ -33,6 +33,9 @@ $SupabaseUrl = $Settings["SUPABASE_URL"]
 $SupabaseKey = $Settings["SUPABASE_ANON_KEY"]
 if ($SupabaseUrl -notmatch '^https://[a-z0-9-]+\.supabase\.co$' -or -not $SupabaseKey -or $SupabaseKey -match 'your-|placeholder') {
 	throw "Set a valid SUPABASE_URL and SUPABASE_ANON_KEY in $EnvironmentFile. Use only a publishable/anon key here."
+}
+if (-not $Settings["MONGODB_URI"] -or $Settings["MONGODB_URI"] -match 'your-|placeholder') {
+	throw "Set the server-only MONGODB_URI in $EnvironmentFile before starting the MongoDB-backed site."
 }
 
 $HostName = if ($Settings["HOST"]) { $Settings["HOST"] } else { "0.0.0.0" }
@@ -104,6 +107,10 @@ $PythonPath = ([string]$PythonPath).Trim()
 $PythonVersion = & $PythonPath -c "import sys; print(sys.version_info.major * 100 + sys.version_info.minor)"
 if ($LASTEXITCODE -ne 0 -or [int]$PythonVersion -lt 310) {
 	throw "Python 3.10 or newer is required. Found version code: $PythonVersion"
+}
+$MongoDriverAvailable = & $PythonPath -c "import pymongo" 2>$null
+if ($LASTEXITCODE -ne 0) {
+	throw "The MongoDB driver is missing. From main/cartogo-website, run: py -3 -m pip install -r requirements.txt"
 }
 
 $PreviousHost = $env:HOST

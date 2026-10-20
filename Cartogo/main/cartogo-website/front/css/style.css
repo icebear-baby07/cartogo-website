@@ -807,6 +807,8 @@ body.has-contact-map-fullscreen{ overflow:hidden; }
   display:flex; align-items:center; justify-content:center; font-size:0.85rem; transition:transform 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 .social-row a:hover{ transform:translateY(-4px); border-color: var(--signal); color: var(--signal); }
+.social-row a[aria-disabled="true"]{ cursor:default; }
+.site-data-error{ position:fixed; z-index:99999; inset:0 0 auto; padding:1rem; background:#fff0f0; color:#8b1e1e; text-align:center; font-weight:700; box-shadow:0 4px 16px rgba(20,30,40,.16); }
 .footer-bottom{
   border-top: 1px solid #262626; padding: 1.25rem 0; font-size: 0.8rem;
   display:flex; justify-content:space-between; flex-wrap:wrap; gap:0.5rem;

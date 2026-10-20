@@ -77,3 +77,9 @@ ANIMATIONS, DESIGN, AND LAYOUT:
 6.5. When adjusting the size of the chatbot (when drag around), resize it to fit in a square, in a vertical rectangle (icon only), and its default horizontal rectangle dynamically
 
 7. Update the "CONTINUE WITH GOOGLE" section. It should be "[Google Icon] SIGN OUT" when an account is signed in.
+
+8. Migration to proper database: Have the data properly migrate from supabase to mongodb. Ask me about the collection name to use before confirming to suit my style
+8.2. Ask me a confirmation about which to store static data used in the actual site (exclude admin side for now).
+- This will be a preparation for the admin panel, in which enables to make changes for all the data in the site without using supabase or even writing a single code.
+- The supabase side shall only be managed by the owner and the admin panel for admins. But for now, I will be both since it's still a development stage.
+- The overall output shall deliver a 3-tier of access controls; 1. Users can only have the basic access to the site, 2. Admins can control the site and its panel, 3. Head and higher ups can control the overall supabase, data modification/deletion/addition confirmation (through the set pin)

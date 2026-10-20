@@ -1,0 +1,72 @@
+{
+  "settings": {
+    "companyName": "carTOGO.mnl",
+    "tagline": "Rent. Drive. Go.",
+    "currency": "₱",
+    "depositPercent": 20,
+    "extraDriverFee": 300,
+    "childSeatFee": 150,
+    "lateFeePerHour": 250
+  },
+  "labels": {
+    "hero": {
+      "title": "Your trip starts with <em>carTOGO.mnl</em>.",
+      "subtitle": "Clean, well-maintained cars, clear rental rates, and easy reservations. Get on the road with carTOGO.mnl."
+    },
+    "trustStrip": [
+      { "value": "4", "label": "Cars in our fleet" },
+      { "value": "4", "label": "Vehicle options" },
+      { "value": "Metro Manila", "label": "Pickup area" },
+      { "value": "Easy", "label": "Online inquiry" }
+    ],
+    "howItWorks": [
+      { "title": "Choose your ride", "description": "Filter the fleet by category and pick the car that fits your trip." },
+      { "title": "Pick your dates", "description": "Set pickup and return dates — we hold your quoted rate for 24 hours." },
+      { "title": "Confirm the details", "description": "Submit your info below; our team confirms availability within 2 hours." },
+      { "title": "Pick up & go", "description": "Bring your license and ID to your chosen pickup point and hit the road." }
+    ],
+    "whyChooseUs": [
+      { "icon": "car", "title": "Choice of vehicles", "description": "Pick from compact sedans or a spacious SUV based on your trip." },
+      { "icon": "clipboard", "title": "Simple inquiry", "description": "Send your preferred dates and vehicle through the online form." },
+      { "icon": "card", "title": "Clear pricing", "description": "Rental rates and deposit estimates are shown before you inquire." },
+      { "icon": "location", "title": "Metro Manila pickup", "description": "Choose a pickup area that works for your schedule." },
+      { "icon": "phone", "title": "Direct assistance", "description": "Our contact details are available for questions and booking confirmation." },
+      { "icon": "key", "title": "Ready to drive", "description": "Once your reservation is confirmed, complete the required pickup documents and go." }
+    ],
+    "about": {
+      "title": "Built for simple, reliable car rentals",
+      "body": "cartogo.mnl focuses on simple, reliable car rentals in Metro Manila, with clear rates, clean vehicles, straightforward booking, and a team ready to help."
+    },
+    "faq": [
+      { "q": "What do I need to rent a car?", "a": "A valid driver's license held for at least one year, one government-issued ID, and a credit or debit card for the security deposit." },
+      { "q": "Is insurance included in the rate?", "a": "Yes. Comprehensive insurance with a standard deductible is included in every quoted rate — no add-on required." },
+      { "q": "What's your fuel policy?", "a": "Every car leaves full and should come back full. Cars returned with less fuel are charged at pump price plus a small refueling fee." },
+      { "q": "Can I change or cancel my booking?", "a": "Yes, free of charge up to 24 hours before your pickup time. Changes inside 24 hours may be subject to availability." },
+      { "q": "Do you deliver to the airport?", "a": "Yes — our airport-area pickup can be arranged with the team when you submit your inquiry." }
+    ],
+    "contact": {
+      "phone": "+63 2 8555 0142",
+      "email": "hello@cartogo.mnl",
+      "hours": "Mon – Sun, 6:00 AM – 10:00 PM",
+      "locations": [
+        "Quezon City — Fairview",
+        "Airport Area — Pasay",
+        "Quezon City — Commonwealth Ave"
+      ]
+    },
+    "testimonials": [
+      { "quote": "Choose a compact sedan for everyday city trips.", "name": "Honda City", "detail": "Ignited Red Metallic" },
+      { "quote": "A practical and economical option for Metro Manila travel.", "name": "Mirage G4", "detail": "Red or Silver" },
+      { "quote": "Bring the family and extra luggage with a seven-seat SUV.", "name": "Toyota Fortuner", "detail": "SUV · 7 seats" }
+    ]
+  },
+  "discountRules": [
+    { "minDays": 4, "maxDays": 7, "percent": 5 },
+    { "minDays": 8, "maxDays": 15, "percent": 10 }
+  ],
+  "socialLinks": [
+    { "platform": "facebook", "label": "Facebook Link", "url": "" },
+    { "platform": "instagram", "label": "IG Link", "url": "" },
+    { "platform": "x", "label": "X Link", "url": "" }
+  ]
+}

@@ -30,13 +30,13 @@ MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "global.amazon.nova-2-lite-v1:0")
 MONGODB_URI = os.environ.get("MONGODB_URI", "").strip()
 MONGODB_DATABASE = os.environ.get("MONGODB_DATABASE", "cartogo")
 MONGODB_COLLECTION = os.environ.get("MONGODB_COLLECTION", "chat_logs")
+MONGODB_UNITS_COLLECTION = os.environ.get("MONGODB_UNITS_COLLECTION", "vehicles")
 MONGODB_KNOWLEDGE_DATABASE = os.environ.get("MONGODB_KNOWLEDGE_DATABASE", "kb")
 MONGODB_KNOWLEDGE_COLLECTION = os.environ.get("MONGODB_KNOWLEDGE_COLLECTION", "PROPRIETARY_INFO_COLLECTION")
 MONGODB_IDENTITY_COLLECTION = os.environ.get("MONGODB_IDENTITY_COLLECTION", "bot_identity")
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
-SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "").strip()
 MONGO_CLIENT = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=3000) if MONGODB_URI else None
 AI_CHAT_SESSIONS_LOG = MONGO_CLIENT[MONGODB_DATABASE][MONGODB_COLLECTION] if MONGO_CLIENT else None
+VEHICLE_CATALOG = MONGO_CLIENT[MONGODB_DATABASE][MONGODB_UNITS_COLLECTION] if MONGO_CLIENT else None
 PROPRIETARY_INFO_COLLECTION = (
 	MONGO_CLIENT[MONGODB_KNOWLEDGE_DATABASE][MONGODB_KNOWLEDGE_COLLECTION]
 	if MONGO_CLIENT
@@ -166,34 +166,18 @@ def find_company_information(query):
 
 
 def find_unit_records(query):
-	if not SUPABASE_URL or not SUPABASE_ANON_KEY:
-		return []
+	if VEHICLE_CATALOG is None:
+		raise RuntimeError("MongoDB vehicle catalog is not configured.")
 
 	terms = list(dict.fromkeys(
 		term.lower()
 		for term in re.findall(r"[a-z0-9]{3,}", query, re.IGNORECASE)
 		if term.lower() not in UNIT_QUERY_STOP_WORDS
 	))[:MAX_KNOWLEDGE_TERMS]
-	query_string = urlencode({
-		"select": "id,brand,model,display_name,capacity,in12_rate,in24_rate,out12_rate,out24_rate,luzon_rate,status,features",
-		"order": "id.asc",
-		"limit": "100",
-	})
-	request = Request(
-		f"{SUPABASE_URL}/rest/v1/unit_data?{query_string}",
-		headers={
-			"apikey": SUPABASE_ANON_KEY,
-			"Authorization": f"Bearer {SUPABASE_ANON_KEY}",
-			"Accept": "application/json",
-		},
-	)
-	try:
-		with urlopen(request, timeout=5) as response:
-			records = json.loads(response.read())
-	except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
-			raise RuntimeError("Supabase unit lookup failed.") from None
-	if not isinstance(records, list):
-		return []
+	records = list(VEHICLE_CATALOG.find(
+		{"status": {"$ne": "Inactive"}},
+		{"_id": 0},
+	).sort("id", ASCENDING).limit(100))
 
 	if not terms:
 		if not UNIT_QUERY_REQUIRED.search(query):
@@ -405,7 +389,7 @@ class ChatHandler(SimpleHTTPRequestHandler):
 			try:
 				unit_records = find_unit_records(self.chat_query or "")
 			except Exception as error:
-				self.log_error("Supabase unit lookup failed (%s)", type(error).__name__)
+				self.log_error("MongoDB vehicle lookup failed (%s)", type(error).__name__)
 		unit_context = build_unit_context(unit_records)
 		requires_company_data = CARTOGO_DATA_REQUIRED.search(self.chat_query or "")
 		requires_unit_data = UNIT_QUERY_REQUIRED.search(self.chat_query or "") or bool(unit_records)

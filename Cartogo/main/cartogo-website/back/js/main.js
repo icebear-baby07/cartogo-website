@@ -7,19 +7,15 @@
 let CARS = [];
 let SETTINGS = {};
 let LABELS = {};
+let SITE_CONTENT = {};
+let DISCOUNT_RULES = [];
 let SITE_ASSETS = [];
-let SITE_ASSETS_LOAD_FAILED = false;
 let CONTACT_MAP = null;
 let CONTACT_MAP_MARKERS = [];
 let CONTACT_MAP_FULLSCREEN = false;
 let activeFilter = "All";
-const DEFAULT_PICKUP_POINTS = [
-  { name: "Pickup point A", lat: 14.7267518, lng: 120.9392327, color: "#d62828" },
-  { name: "Pickup point B", lat: 14.6271442, lng: 121.0115951, color: "#277da1" },
-  { name: "Pickup point C", lat: 14.760287, lng: 121.153861, color: "#2f7d46" }
-];
 const PICKUP_MARKER_COLORS = ["#d62828", "#277da1", "#2f7d46", "#a45a18", "#7556a8", "#087e8b", "#b33f62", "#5b6b27"];
-let PICKUP_POINTS = [...DEFAULT_PICKUP_POINTS];
+let PICKUP_POINTS = [];
 let BOOKING_MAP = null;
 let BOOKING_PICKUP_MARKERS = [];
 let BOOKING_TARGET = null;
@@ -32,30 +28,26 @@ let BOOKING_GEOCODE_CONTROLLER = null;
 let BOOKING_LAST_GEOCODE_AT = 0;
 const BOOKING_GEOCODE_CACHE = new Map();
 
-document.addEventListener("DOMContentLoaded", init);
+document.addEventListener("DOMContentLoaded", async () => {
+  try {
+    await init();
+  } catch (error) {
+    console.error("The public site could not load its MongoDB data.", error);
+    const notice = document.createElement("div");
+    notice.className = "site-data-error";
+    notice.setAttribute("role", "alert");
+    notice.textContent = "Site data is temporarily unavailable. Please try again later.";
+    document.body.prepend(notice);
+  }
+});
 
 async function init() {
-  SETTINGS = await DB.getSettings();
-  LABELS = await DB.getLabels();
+  SITE_CONTENT = await DB.getSiteContent();
+  SETTINGS = SITE_CONTENT.settings;
+  LABELS = SITE_CONTENT.labels;
+  DISCOUNT_RULES = SITE_CONTENT.discountRules || [];
   CARS = await DB.getCars();
-  try {
-    SITE_ASSETS = await DB.getSiteAssets();
-    SITE_ASSETS_LOAD_FAILED = false;
-  } catch (error) {
-    SITE_ASSETS_LOAD_FAILED = true;
-    console.error("Site assets could not be loaded; using the saved site labels.", error);
-  }
-  if (SITE_ASSETS_LOAD_FAILED) {
-    SITE_ASSETS = DEFAULT_PICKUP_POINTS.map((point, index) => ({
-      id: `fallback-${index}`,
-      asset_type: "location",
-      loc_name: point.name,
-      coordinates: { lat: point.lat, lng: point.lng },
-      display_name: LABELS.contact.locations[index] || point.name,
-      description: "Pickup location",
-      status: "open"
-    }));
-  }
+  SITE_ASSETS = await DB.getSiteAssets();
   const configuredPickupPoints = SITE_ASSETS
     .filter(asset => asset.asset_type === "location")
     .map((asset, index) => ({
@@ -88,36 +80,6 @@ async function init() {
   bindBookingForm();
   bindBookingEstimate();
   bindQuickSearch();
-  bindFaqToggles();
-  window.addEventListener("storage", handleFleetStorageChange);
-}
-
-async function handleFleetStorageChange(event) {
-  if (event.key !== STORAGE_KEY && event.key !== null) return;
-
-  [SETTINGS, LABELS, CARS] = await Promise.all([
-    DB.getSettings(),
-    DB.getLabels(),
-    DB.getCars()
-  ]);
-  if (activeFilter !== "All" && !CARS.some(car => car.category === activeFilter)) {
-    activeFilter = "All";
-  }
-  document.title = SETTINGS.companyName + " — Car Rentals";
-  renderBrand();
-  renderHero();
-  renderTrustStrip();
-  renderFilters();
-  renderFleet();
-  renderHowItWorks();
-  renderWhyChooseUs();
-  renderRates();
-  renderTestimonials();
-  renderFaq();
-  renderContact();
-  renderFooter();
-  populateCarSelect();
-  renderBookingEstimate();
   bindFaqToggles();
 }
 
@@ -413,6 +375,30 @@ function renderFooter() {
   aboutBody.textContent = LABELS.about.body;
   finishLoading(aboutBody);
   document.getElementById("footerYear").textContent = new Date().getFullYear();
+  renderSocialLinks();
+}
+
+function renderSocialLinks() {
+  const socialLinks = SITE_CONTENT.socialLinks || [];
+  document.querySelectorAll("[data-social]").forEach(link => {
+    const social = socialLinks.find(item => item.platform === link.dataset.social);
+    const url = typeof social?.url === "string" ? social.url.trim() : "";
+    link.title = social?.label || link.getAttribute("aria-label") || "";
+    link.setAttribute("aria-label", social?.label || link.getAttribute("aria-label") || "");
+    if (/^https:\/\/[^\s]+$/i.test(url)) {
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.removeAttribute("aria-disabled");
+      link.removeAttribute("tabindex");
+    } else {
+      link.removeAttribute("href");
+      link.removeAttribute("target");
+      link.removeAttribute("rel");
+      link.setAttribute("aria-disabled", "true");
+      link.tabIndex = -1;
+    }
+  });
 }
 
 function contactLocationColor(location) {
@@ -914,10 +900,16 @@ function renderBookingEstimate() {
     discountRow.hidden = true;
     return;
   }
-  const promoPercent = rentalDays >= 8 ? 10 : 5;
+  const promoPercent = Number(DISCOUNT_RULES.find(rule =>
+    rentalDays >= Number(rule.minDays) && rentalDays <= Number(rule.maxDays)
+  )?.percent) || 0;
   document.getElementById("bookingPromoMessage").textContent = region !== "luzon" && selectedPeriod === 12
-    ? `Enjoy ${promoPercent}% off by selecting ${rentalDays} days on 24-hour rates.`
-    : `Enjoy ${promoPercent}% off by selecting ${rentalDays} days.`;
+    ? promoPercent
+      ? `Enjoy ${promoPercent}% off by selecting ${rentalDays} days on 24-hour rates.`
+      : "No long-rental discount applies to this duration."
+    : promoPercent
+      ? `Enjoy ${promoPercent}% off by selecting ${rentalDays} days.`
+      : "No long-rental discount applies to this duration.";
   const periodHours = region === "luzon" ? 24 : selectedPeriod;
   const rateField = region === "in"
     ? periodHours === 12 ? "in12_rate" : "in24_rate"
@@ -928,7 +920,7 @@ function renderBookingEstimate() {
   const rentalHours = rentalDays * 24;
   const rateBlocks = rentalHours / periodHours;
   const undiscountedSubtotal = rate * rateBlocks;
-  const discountPercent = periodHours === 24 ? (rentalDays >= 8 ? 10 : 5) : 0;
+  const discountPercent = periodHours === 24 ? promoPercent : 0;
   const promoDiscount = Math.round(undiscountedSubtotal * discountPercent) / 100;
   const rentalSubtotal = undiscountedSubtotal - promoDiscount;
   BOOKING_RATE_QUOTE = {

@@ -16,10 +16,16 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, unquote, urlsplit
 from urllib.request import Request, urlopen
 
+from mongo_data import MongoDataStore
+from pymongo.errors import PyMongoError
+
 
 ROOT = Path(__file__).resolve().parent
 ENV_KEYS = {
-	"SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY",
+	"SUPABASE_URL", "SUPABASE_ANON_KEY",
+	"MONGODB_URI", "MONGODB_DATABASE", "MONGODB_UNITS_COLLECTION",
+	"MONGODB_SITE_ASSETS_COLLECTION", "MONGODB_SITE_CONTENT_COLLECTION",
+	"MONGODB_SEQUENCES_COLLECTION",
 	"SMTP_USER", "SMTP_APP_PASSWORD", "SMTP_HOST", "SMTP_PORT", "SMTP_FROM",
 	"HOST", "PORT",
 }
@@ -30,6 +36,18 @@ OTP_REQUESTS_LOCK = Lock()
 UNIT_STATUSES = {"Available", "Rented", "Maintenance", "Inactive"}
 UNIT_RATE_FIELDS = ("in12_rate", "in24_rate", "out12_rate", "out24_rate", "luzon_rate")
 MAX_API_BODY_BYTES = 16 * 1024
+MONGO_STORE = None
+MONGO_STORE_LOCK = Lock()
+
+
+def get_mongo_store():
+	global MONGO_STORE
+	if MONGO_STORE is not None:
+		return MONGO_STORE
+	with MONGO_STORE_LOCK:
+		if MONGO_STORE is None:
+			MONGO_STORE = MongoDataStore.from_environment()
+	return MONGO_STORE
 
 
 def load_local_environment():
@@ -74,6 +92,16 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 		if request_path == "/config.js":
 			self.send_config()
 			return
+		if request_path in {
+			"/api/public/units",
+			"/api/admin/units",
+			"/api/site-assets",
+			"/api/admin/site-assets",
+			"/api/site-content",
+			"/api/site-content/defaults",
+		}:
+			self.get_site_data(request_path)
+			return
 		super().do_GET()
 
 	def do_POST(self):
@@ -86,8 +114,48 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			self.request_site_asset_change()
 		elif request_path == "/api/site-assets/approve":
 			self.approve_site_asset_change()
+		elif request_path == "/api/site-content/update":
+			self.update_site_content()
 		else:
 			self.send_json(404, {"error": "Not found."})
+
+	def get_site_data(self, request_path):
+		try:
+			if request_path == "/api/public/units":
+				result = get_mongo_store().list_units()
+			elif request_path == "/api/admin/units":
+				self.get_authorized_admin()
+				result = get_mongo_store().list_units(include_inactive=True)
+			elif request_path == "/api/site-assets":
+				result = get_mongo_store().list_site_assets()
+			elif request_path == "/api/admin/site-assets":
+				self.get_authorized_admin()
+				result = get_mongo_store().list_site_assets()
+			elif request_path == "/api/site-content":
+				result = get_mongo_store().get_site_content()
+			else:
+				seed_path = ROOT / "back" / "data" / "site_content_seed.json"
+				result = json.loads(seed_path.read_text(encoding="utf-8"))
+			self.send_json(200, result)
+		except PermissionError as error:
+			self.send_json(403, {"error": str(error)})
+		except (RuntimeError, PyMongoError, OSError, json.JSONDecodeError) as error:
+			message = str(error) if isinstance(error, RuntimeError) else "MongoDB site data is unavailable."
+			self.send_json(503, {"error": message})
+
+	def update_site_content(self):
+		try:
+			self.get_authorized_admin()
+			updates = self.read_json()
+			content = get_mongo_store().update_site_content(updates)
+			self.send_json(200, {"data": content})
+		except ValueError as error:
+			self.send_json(400, {"error": str(error)})
+		except PermissionError as error:
+			self.send_json(403, {"error": str(error)})
+		except (RuntimeError, PyMongoError) as error:
+			message = str(error) if isinstance(error, RuntimeError) else "MongoDB could not update site content."
+			self.send_json(503, {"error": message})
 
 	def read_json(self):
 		try:
@@ -293,8 +361,6 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			payload = self.read_json()
 			action, unit = self.normalize_unit_change(payload)
 			admin = self.get_authorized_admin()
-			if not os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip():
-				raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY is not configured on the website server.")
 			if not os.environ.get("SMTP_USER", "").strip() or not os.environ.get("SMTP_APP_PASSWORD", "").strip():
 				raise RuntimeError("Configure Gmail SMTP credentials in the website server environment first.")
 			with OTP_REQUESTS_LOCK:
@@ -351,8 +417,6 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			payload = self.read_json()
 			action, asset = self.normalize_site_asset_change(payload)
 			admin = self.get_authorized_admin()
-			if not os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip():
-				raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY is not configured on the website server.")
 			if not os.environ.get("SMTP_USER", "").strip() or not os.environ.get("SMTP_APP_PASSWORD", "").strip():
 				raise RuntimeError("Configure Gmail SMTP credentials in the website server environment first.")
 			with OTP_REQUESTS_LOCK:
@@ -436,6 +500,8 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			self.send_json(403, {"error": str(error)})
 		except RuntimeError as error:
 			self.send_json(503, {"error": str(error)})
+		except PyMongoError:
+			self.send_json(503, {"error": "MongoDB could not apply the approved unit change."})
 
 	def approve_site_asset_change(self):
 		try:
@@ -468,68 +534,14 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			self.send_json(403, {"error": str(error)})
 		except RuntimeError as error:
 			self.send_json(503, {"error": str(error)})
+		except PyMongoError:
+			self.send_json(503, {"error": "MongoDB could not apply the approved site asset change."})
 
-	@staticmethod
-	def execute_unit_change(action, unit):
-		base_url = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
-		service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
-		query = "?" + urlencode({"id": "eq." + str(unit["id"])}) if action != "add" else ""
-		url = f"{base_url}/rest/v1/unit_data{query}"
-		method = {"add": "POST", "update": "PATCH", "delete": "DELETE"}[action]
-		body = None if action == "delete" else json.dumps(unit).encode()
-		request = Request(url, data=body, method=method, headers={
-			"apikey": service_key,
-			"Authorization": f"Bearer {service_key}",
-			"Content-Type": "application/json",
-			"Prefer": "return=representation",
-		})
-		try:
-			with urlopen(request, timeout=10) as response:
-				content = response.read()
-		except HTTPError:
-			raise RuntimeError("Supabase could not apply the approved unit change.") from None
-		except (URLError, TimeoutError):
-			raise RuntimeError("Could not connect to Supabase to apply the approved change.") from None
-		if not content:
-			return None
-		try:
-			result = json.loads(content)
-		except json.JSONDecodeError:
-			return None
-		if action != "add" and (not isinstance(result, list) or not result):
-			raise RuntimeError("That unit no longer exists. Refresh the inventory and try again.")
-		return result
+	def execute_unit_change(self, action, unit):
+		return get_mongo_store().apply_unit_change(action, unit)
 
-	@staticmethod
-	def execute_site_asset_change(action, asset):
-		base_url = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
-		service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
-		query = "?" + urlencode({"id": "eq." + str(asset["id"])}) if action != "add" else ""
-		url = f"{base_url}/rest/v1/site_assets{query}"
-		method = {"add": "POST", "update": "PATCH", "delete": "DELETE"}[action]
-		body = None if action == "delete" else json.dumps(asset).encode()
-		request = Request(url, data=body, method=method, headers={
-			"apikey": service_key,
-			"Authorization": f"Bearer {service_key}",
-			"Content-Type": "application/json",
-			"Prefer": "return=representation",
-		})
-		try:
-			with urlopen(request, timeout=10) as response:
-				content = response.read()
-		except HTTPError:
-			raise RuntimeError("Supabase could not apply the approved site asset change.") from None
-		except (URLError, TimeoutError):
-			raise RuntimeError("Could not connect to Supabase to apply the approved change.") from None
-		if not content:
-			return None
-		try:
-			result = json.loads(content)
-		except json.JSONDecodeError:
-			return None
-		if action != "add" and (not isinstance(result, list) or not result):
-			raise RuntimeError("That site asset no longer exists. Refresh the list and try again.")
-		return result
+	def execute_site_asset_change(self, action, asset):
+		return get_mongo_store().apply_site_asset_change(action, asset)
 
 	def send_json(self, status, payload):
 		body = json.dumps(payload).encode("utf-8")

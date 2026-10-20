@@ -26,6 +26,8 @@ For bot and frontend development, use **`chatbot/restart_chat.cmd`** to restart 
 
 The chatbot can look up company reference records in MongoDB and use matching content when answering. Chat logs remain in the database configured by `MONGODB_DATABASE` and `MONGODB_COLLECTION`; proprietary information uses the `kb` database and the `PROPRIETARY_INFO_COLLECTION` collection by default. Configure its database and collection with `MONGODB_KNOWLEDGE_DATABASE` and `MONGODB_KNOWLEDGE_COLLECTION` in `chatbot/.env`.
 
+Vehicle questions read the public catalog from the same MongoDB database and collection configured for the website (`MONGODB_DATABASE=cartogo`, `MONGODB_UNITS_COLLECTION=vehicles`). Use the same server-side `MONGODB_URI` in `chatbot/.env`; the chatbot no longer needs Supabase credentials for inventory. It excludes units with `Inactive` status and says it cannot verify a vehicle answer if the catalog is unavailable or has no relevant records.
+
 Add documents to the knowledge collection with a text `content` field. The keyword lookup searches `title`, `content`, `topic`, `keywords`, and `tags`. For example:
 
 ```json
