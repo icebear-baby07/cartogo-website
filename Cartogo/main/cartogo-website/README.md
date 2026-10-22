@@ -4,7 +4,7 @@ Customer-facing car rental site with fleet information, booking inquiries, and a
 
 ## Start the website
 
-Requirements: Python 3.10 or newer, a Supabase project, and a MongoDB database reachable by the website server.
+Requirements: Python 3.10 or newer, a Supabase project, and a MongoDB database reachable by the website server. Guest email verification also requires the SMTP settings in `.env`.
 
 From the `Cartogo` directory, run `start_site.cmd`. On first launch, it creates `main/cartogo-website/.env` from `.env.example` and stops so you can configure it. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and the server-only `MONGODB_URI`; follow the migration steps below before launching the cut-over site. The default port is `8002`; the launcher prints local and LAN addresses.
 
@@ -85,9 +85,9 @@ The website and chatbot read the public vehicle catalog from MongoDB collection 
 
 For the chatbot, set the same `MONGODB_URI`, `MONGODB_DATABASE=cartogo`, and `MONGODB_UNITS_COLLECTION=vehicles` in `chatbot/.env`, then restart it. Chat logs and company knowledge use their separately configured MongoDB collections. No Supabase key is needed by the chatbot for vehicle lookup.
 
-The booking form filters unit choices to capacities no larger than the entered value, requires 12/24 hours for IN/OUT, and treats `luzon_rate` as a 24-hour rate. Rental days are selected from 4–15; 24-hour and Luzon quotes receive the MongoDB-configured promo, while 12-hour quotes do not. The return date follows the selected duration. Rates stay hidden until a unit is selected. Customer target coordinates are sent to Nominatim to identify the rate region; follow the OpenStreetMap tile and Nominatim usage policies before scaling production traffic. Keep the required OpenStreetMap attribution visible. Public visitors cannot read rows marked `Inactive`.
+The booking form filters unit choices to capacities no larger than the entered value and offers separate 12/24-hour and custom-day arrangements. Hourly rentals quote one selected rate block; custom rentals use a 4–15 day slider and the 24-hour rate, with configured discounts. Luzon destinations use custom-day rates only. The return date follows the selected arrangement and pickup time. Rates stay hidden until a unit is selected. Customer target coordinates are sent to Nominatim to identify the rate region; follow the OpenStreetMap tile and Nominatim usage policies before scaling production traffic. Keep the required OpenStreetMap attribution visible. Public visitors cannot read rows marked `Inactive`.
 
-Customer inquiry submissions require a verified Google account; the website server verifies the Supabase session before writing to MongoDB. Admin inquiry listing, status changes, and deletion require an authorized Supabase administrator. Do not expose MongoDB credentials to the browser. Keep Supabase inquiry row-level security enabled for the unchanged source records. If a token request returns `UNAUTHORIZED_INVALID_API_KEY`, verify that the Supabase URL and public key belong to the same project.
+Customers can submit inquiries either with Google sign-in or as a guest. Google-authenticated inquiries use the verified Supabase profile; guest inquiries require a name, phone number, and email address verified by a one-time code sent through SMTP. Guest verification codes expire after ten minutes, allow five attempts, and are rate-limited to one email per minute per client address. Admin inquiry listing, status changes, and deletion require an authorized Supabase administrator. Do not expose MongoDB credentials to the browser. Keep Supabase inquiry row-level security enabled for the unchanged source records. If a token request returns `UNAUTHORIZED_INVALID_API_KEY`, verify that the Supabase URL and public key belong to the same project.
 
 ## Data and security notes
 

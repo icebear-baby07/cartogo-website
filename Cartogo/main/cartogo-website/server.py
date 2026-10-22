@@ -35,6 +35,10 @@ UNIT_APPROVALS = {}
 UNIT_APPROVALS_LOCK = Lock()
 OTP_REQUESTS = {}
 OTP_REQUESTS_LOCK = Lock()
+GUEST_EMAIL_CHALLENGES = {}
+GUEST_EMAIL_VERIFICATIONS = {}
+GUEST_EMAIL_REQUESTS = {}
+GUEST_EMAIL_LOCK = Lock()
 UNIT_STATUSES = {"Available", "Rented", "Maintenance", "Inactive"}
 UNIT_RATE_FIELDS = ("in12_rate", "in24_rate", "out12_rate", "out24_rate", "luzon_rate")
 MAX_API_BODY_BYTES = 16 * 1024
@@ -123,6 +127,10 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			self.update_site_content()
 		elif request_path == "/api/inquiries":
 			self.create_inquiry()
+		elif request_path == "/api/email-verification/request":
+			self.request_guest_email_verification()
+		elif request_path == "/api/email-verification/verify":
+			self.verify_guest_email()
 		elif request_path == "/api/admin/inquiries":
 			self.manage_inquiries()
 		else:
@@ -172,15 +180,27 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			self.send_json(200, get_mongo_store().list_inquiries())
 		except PermissionError as error:
 			self.send_json(403, {"error": str(error)})
-		except (RuntimeError, PyMongoError):
+		except (RuntimeError, PyMongoError, ValueError):
 			self.send_json(503, {"error": "MongoDB inquiries are unavailable."})
 
 	def create_inquiry(self):
 		try:
 			payload = self.read_json()
-			user = self.get_verified_google_user()
+			user = self.get_verified_google_user() if self.headers.get("Authorization") else None
 			inquiry = self.normalize_public_inquiry(payload, user)
-			result = get_mongo_store().add_inquiry(inquiry)
+			email_verification_token = None
+			if not user:
+				email_verification_token = payload.get("emailVerificationToken")
+				if not self.claim_guest_email_verification(email_verification_token, inquiry["email"]):
+					raise ValueError("Verify your email address before submitting the inquiry.")
+			try:
+				result = get_mongo_store().add_inquiry(inquiry)
+			except (RuntimeError, PyMongoError, ValueError):
+				if email_verification_token:
+					self.finish_guest_email_verification(email_verification_token, consume=False)
+				raise
+			if email_verification_token:
+				self.finish_guest_email_verification(email_verification_token, consume=True)
 			self.send_json(201, {"data": result})
 		except ValueError as error:
 			self.send_json(400, {"error": str(error)})
@@ -188,6 +208,127 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			self.send_json(403, {"error": str(error)})
 		except (RuntimeError, PyMongoError):
 			self.send_json(503, {"error": "MongoDB could not save the inquiry."})
+
+	def request_guest_email_verification(self):
+		try:
+			payload = self.read_json()
+			email = payload.get("email")
+			if not isinstance(email, str):
+				raise ValueError("Enter a valid email address.")
+			email = email.strip().lower()
+			if len(email) > 254 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+				raise ValueError("Enter a valid email address.")
+			smtp_user = os.environ.get("SMTP_USER", "").strip()
+			smtp_password = os.environ.get("SMTP_APP_PASSWORD", "").strip()
+			if not smtp_user or not smtp_password:
+				raise RuntimeError("Guest email verification is unavailable until Gmail SMTP is configured.")
+
+			now = time.time()
+			client_ip = self.client_address[0]
+			request_key = f"{client_ip}:{email}"
+			with GUEST_EMAIL_LOCK:
+				for old_key, requested_at in list(GUEST_EMAIL_REQUESTS.items()):
+					if now - requested_at > 600:
+						GUEST_EMAIL_REQUESTS.pop(old_key, None)
+				for old_challenge, data in list(GUEST_EMAIL_CHALLENGES.items()):
+					if data["expires_at"] < now:
+						GUEST_EMAIL_CHALLENGES.pop(old_challenge, None)
+				for old_token, data in list(GUEST_EMAIL_VERIFICATIONS.items()):
+					if data["expires_at"] < now:
+						GUEST_EMAIL_VERIFICATIONS.pop(old_token, None)
+				last_request = GUEST_EMAIL_REQUESTS.get(request_key, 0)
+				if now - last_request < 60:
+					raise ValueError("Wait one minute before requesting another verification code.")
+				GUEST_EMAIL_REQUESTS[request_key] = now
+			challenge_id = secrets.token_urlsafe(24)
+			code = f"{secrets.randbelow(1000000):06d}"
+			with GUEST_EMAIL_LOCK:
+				GUEST_EMAIL_CHALLENGES[challenge_id] = {
+					"email": email,
+					"code_hash": hashlib.sha256(f"{challenge_id}:{code}".encode()).hexdigest(),
+					"expires_at": now + 600,
+					"attempts": 0,
+				}
+			message = EmailMessage()
+			message["Subject"] = "carTOGO email verification code"
+			message["From"] = os.environ.get("SMTP_FROM", "").strip() or smtp_user
+			message["To"] = email
+			message.set_content(
+				f"Your carTOGO email verification code is: {code}\n\n"
+				"This code expires in 10 minutes and can be used once. If you did not request this, ignore this email."
+			)
+			try:
+				with smtplib.SMTP(
+					os.environ.get("SMTP_HOST", "smtp.gmail.com").strip(),
+					int(os.environ.get("SMTP_PORT", "587")),
+					timeout=10,
+				) as mail_server:
+					mail_server.starttls(context=ssl.create_default_context())
+					mail_server.login(smtp_user, smtp_password)
+					mail_server.send_message(message)
+			except (OSError, smtplib.SMTPException, ValueError):
+				with GUEST_EMAIL_LOCK:
+					GUEST_EMAIL_CHALLENGES.pop(challenge_id, None)
+				raise RuntimeError("Gmail could not send the verification code. Check the website SMTP settings.") from None
+			self.send_json(200, {"challengeId": challenge_id, "expiresIn": 600})
+		except ValueError as error:
+			self.send_json(400, {"error": str(error)})
+		except RuntimeError as error:
+			self.send_json(503, {"error": str(error)})
+
+	def verify_guest_email(self):
+		try:
+			payload = self.read_json()
+			challenge_id = payload.get("challengeId")
+			code = payload.get("code")
+			if not isinstance(challenge_id, str) or not isinstance(code, str) or not re.fullmatch(r"\d{6}", code):
+				raise ValueError("Enter the six-digit verification code from your email.")
+			with GUEST_EMAIL_LOCK:
+				challenge = GUEST_EMAIL_CHALLENGES.get(challenge_id)
+				if not challenge or challenge["expires_at"] < time.time():
+					GUEST_EMAIL_CHALLENGES.pop(challenge_id, None)
+					raise ValueError("That verification code expired. Request a new one.")
+				challenge["attempts"] += 1
+				expected_hash = challenge["code_hash"]
+				provided_hash = hashlib.sha256(f"{challenge_id}:{code}".encode()).hexdigest()
+				if challenge["attempts"] > 5 or not hmac.compare_digest(expected_hash, provided_hash):
+					if challenge["attempts"] >= 5:
+						GUEST_EMAIL_CHALLENGES.pop(challenge_id, None)
+					raise ValueError("The verification code is incorrect or expired.")
+				GUEST_EMAIL_CHALLENGES.pop(challenge_id, None)
+				token = secrets.token_urlsafe(32)
+				GUEST_EMAIL_VERIFICATIONS[token] = {
+					"email": challenge["email"],
+					"expires_at": time.time() + 600,
+				}
+			self.send_json(200, {"verificationToken": token, "expiresIn": 600})
+		except ValueError as error:
+			self.send_json(400, {"error": str(error)})
+
+	@staticmethod
+	def claim_guest_email_verification(token, email):
+		if not isinstance(token, str) or not token:
+			return False
+		with GUEST_EMAIL_LOCK:
+			verification = GUEST_EMAIL_VERIFICATIONS.get(token)
+			if not verification or verification["expires_at"] < time.time():
+				GUEST_EMAIL_VERIFICATIONS.pop(token, None)
+				return False
+			if verification["email"] != email or verification.get("in_use"):
+				return False
+			verification["in_use"] = True
+			return True
+
+	@staticmethod
+	def finish_guest_email_verification(token, consume):
+		with GUEST_EMAIL_LOCK:
+			verification = GUEST_EMAIL_VERIFICATIONS.get(token)
+			if not verification:
+				return
+			if consume:
+				GUEST_EMAIL_VERIFICATIONS.pop(token, None)
+			else:
+				verification.pop("in_use", None)
 
 	def manage_inquiries(self):
 		try:
@@ -267,22 +408,29 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 				raise ValueError(f"{label} is outside the accepted range.")
 			return value
 
-		profile = user.get("user_metadata")
-		if not isinstance(profile, dict):
-			profile = {}
-		name = str(profile.get("full_name") or profile.get("name") or "").strip()
-		if not name:
-			name = " ".join(
-				str(profile.get(key) or "").strip()
-				for key in ("given_name", "middle_name", "family_name")
-				if str(profile.get(key) or "").strip()
-			)
-		if not name or len(name) > 160:
-			raise ValueError("Your verified Google profile must include a name up to 160 characters.")
+		if user:
+			profile = user.get("user_metadata")
+			if not isinstance(profile, dict):
+				profile = {}
+			name = str(profile.get("full_name") or profile.get("name") or "").strip()
+			if not name:
+				name = " ".join(
+					str(profile.get(key) or "").strip()
+					for key in ("given_name", "middle_name", "family_name")
+					if str(profile.get(key) or "").strip()
+				)
+			if not name or len(name) > 160:
+				raise ValueError("Your verified Google profile must include a name up to 160 characters.")
+			email = str(user["email"]).strip().lower()
+		else:
+			name = text_value("name", "Name", 160)
+			email = text_value("email", "Email", 254).lower()
+			if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+				raise ValueError("Enter a valid email address.")
 
-		phone = text_value("phone", "Phone number", 24)
-		phone_digits = re.sub(r"\D", "", phone)
-		if not 7 <= len(phone_digits) <= 15:
+		phone = text_value("phone", "Phone number", 24, required=not user)
+		phone_digits = re.sub(r"\D", "", phone or "")
+		if (phone and not 7 <= len(phone_digits) <= 15) or (not user and not phone):
 			raise ValueError("Enter a phone number with 7 to 15 digits.")
 		car_id = text_value("carId", "Vehicle ID", 80)
 		car_name = text_value("carName", "Vehicle name", 160)
@@ -303,22 +451,46 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 		rental_period_hours = number_value("rentalPeriodHours", "Rental period", integer=True, minimum=1, maximum=24)
 		if rental_period_hours is not None and rental_period_hours not in {12, 24}:
 			raise ValueError("Rental period must be 12 or 24 hours.")
-		estimated_rental_hours = number_value(
-			"estimatedRentalHours", "Estimated rental hours", required=True, integer=True, minimum=1, maximum=360
-		)
-		rental_days = number_value("rentalDays", "Rental days", required=True, integer=True, minimum=4, maximum=15)
+		rental_mode = payload.get("rentalMode")
+		if rental_mode is None:
+			rental_mode = "custom_days"
+		if not isinstance(rental_mode, str) or rental_mode not in {"hourly", "custom_days"}:
+			raise ValueError("Choose an hourly or custom-day rental arrangement.")
 		discount_percent = number_value("discountPercent", "Discount percent", integer=True, maximum=10)
 		if discount_percent is not None and discount_percent not in {0, 5, 10}:
 			raise ValueError("Discount percent must be 0, 5, or 10.")
+		estimated_rental_hours = number_value(
+			"estimatedRentalHours", "Estimated rental hours", required=True, integer=True, minimum=1, maximum=360
+		)
+		rental_days = number_value("rentalDays", "Rental days", required=True, integer=True, minimum=1, maximum=15)
+		if rental_mode == "custom_days":
+			if rental_days < 4 or estimated_rental_hours != rental_days * 24 or rental_period_hours != 24:
+				raise ValueError("Custom-day rentals must use a 4–15 day duration and 24-hour rates.")
+		elif (
+			rental_days != 1
+			or rental_period_hours not in {12, 24}
+			or estimated_rental_hours != rental_period_hours
+			or discount_percent not in (None, 0)
+		):
+			raise ValueError("Hourly rentals must be a single 12- or 24-hour block without a custom-day discount.")
 		rate_region = text_value("rateRegion", "Rate region", 16)
 		if rate_region not in {"in", "out", "luzon"}:
 			raise ValueError("Choose a valid rate region.")
+		if rental_mode == "hourly" and rate_region == "luzon":
+			raise ValueError("Luzon destinations use custom-day rates.")
+		if rental_mode == "hourly":
+			pickup_minutes = int(pickup_time[:2]) * 60 + int(pickup_time[3:])
+			expected_return_day_offset = (pickup_minutes + rental_period_hours * 60) // 1440
+			if (return_day - pickup_day).days != expected_return_day_offset:
+				raise ValueError("The return date must match the selected hourly rental period.")
+		if rental_mode == "custom_days" and (return_day - pickup_day).days != rental_days:
+			raise ValueError("The custom rental duration must match the pickup and return dates.")
 		latitude = number_value("targetLatitude", "Target latitude", required=True, minimum=-90, maximum=90)
 		longitude = number_value("targetLongitude", "Target longitude", required=True, minimum=-180, maximum=180)
 
 		return {
 			"name": name,
-			"email": str(user["email"]).strip().lower(),
+			"email": email,
 			"phone": phone,
 			"secondary_phone": text_value("secondaryPhone", "Secondary phone", 24, required=False),
 			"car_id": car_id,
@@ -336,6 +508,7 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			),
 			"rate_region": rate_region,
 			"rental_period_hours": rental_period_hours,
+			"rental_mode": rental_mode,
 			"estimated_rental_hours": estimated_rental_hours,
 			"rate_per_period": number_value(
 				"ratePerPeriod", "Rate per period", required=True, maximum=99999999.99
@@ -348,8 +521,8 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			),
 			"notes": text_value("notes", "Notes", 2000, required=False),
 			"status": "confirmed",
-			"user_id": str(user["id"]),
-			"verification_method": "google_oauth",
+			"user_id": str(user["id"]) if user else None,
+			"verification_method": "google_oauth" if user else "guest_form",
 		}
 
 	def get_authorized_admin(self):
@@ -399,11 +572,23 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 		app_metadata = user.get("app_metadata")
 		if not isinstance(app_metadata, dict):
 			app_metadata = {}
+		identities = user.get("identities")
+		if not isinstance(identities, list):
+			identities = []
+		providers = app_metadata.get("providers")
+		if not isinstance(providers, list):
+			providers = []
+		providers = {
+			app_metadata.get("provider"),
+			*providers,
+			*(identity.get("provider") for identity in identities if isinstance(identity, dict)),
+		}
 		user_metadata = user.get("user_metadata")
 		if not isinstance(user_metadata, dict):
 			user_metadata = {}
-		email_verified = user_metadata.get("email_verified")
-		if app_metadata.get("provider") != "google" or email_verified not in (True, "true"):
+		email_verified = user_metadata.get("email_verified") in (True, "true")
+		email_confirmed = bool(user.get("email_confirmed_at") or user.get("confirmed_at"))
+		if "google" not in providers or not (email_verified or email_confirmed):
 			raise PermissionError("A verified Google account is required to submit an inquiry.")
 		return user
 

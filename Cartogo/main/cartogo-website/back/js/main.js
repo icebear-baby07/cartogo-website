@@ -21,7 +21,9 @@ let BOOKING_PICKUP_MARKERS = [];
 let BOOKING_TARGET = null;
 let BOOKING_TARGET_MARKER = null;
 let BOOKING_PREVIEW_MARKER = null;
+let BOOKING_TARGET_REGION_LOOKUP = null;
 let BOOKING_RATE_QUOTE = null;
+let BOOKING_RENTAL_MODE = null;
 let BOOKING_MAP_FULLSCREEN = false;
 let BOOKING_DURATION_SELECTED = false;
 let BOOKING_GEOCODE_CONTROLLER = null;
@@ -615,7 +617,7 @@ function classifyTargetRegion(address) {
 }
 
 function regionDisplayName(region) {
-  return ({ in: "Metro Manila (IN)", out: "Neighboring areas (OUT)", luzon: "Luzon" })[region] || "Unclassified destination";
+  return ({ in: "Metro Manila", out: "Nearby areas", luzon: "Luzon" })[region] || "Unclassified destination";
 }
 
 function setBookingTarget(location) {
@@ -643,7 +645,7 @@ function setBookingTarget(location) {
     icon: createBookingLocationIcon(nearest.color)
   }).addTo(BOOKING_MAP);
   renderBookingEstimate();
-  resolveBookingTargetRegion(BOOKING_TARGET);
+  BOOKING_TARGET_REGION_LOOKUP = resolveBookingTargetRegion(BOOKING_TARGET);
 }
 
 async function resolveBookingTargetRegion(target) {
@@ -694,28 +696,40 @@ async function resolveBookingTargetRegion(target) {
     document.getElementById("bookingTargetStatus").textContent = `${target.label} · This location isn't in the supported Luzon pricing area.`;
   }
   updateBookingPeriodOptions(target.rateRegion);
+  document.getElementById("bookingPickup").dispatchEvent(new Event("change"));
   renderBookingEstimate();
 }
 
 function updateBookingPeriodOptions(region) {
   const periodField = document.getElementById("bookingPeriodField");
   const periodOptions = document.querySelectorAll('input[name="bookingPeriod"]');
+  const modeOptions = document.querySelectorAll('input[name="bookingMode"]');
   const note = document.getElementById("bookingPeriodNote");
   const isLuzon = region === "luzon";
   periodField.hidden = false;
   periodField.classList.toggle("luzon-rate", isLuzon);
   periodOptions.forEach(option => {
-    option.required = !isLuzon;
-    option.disabled = false;
+    option.required = false;
+    option.disabled = isLuzon;
     if (isLuzon) option.checked = false;
   });
   if (isLuzon) {
-    note.textContent = "Luzon pricing uses a 24-hour rate; choose a rental duration below.";
+    document.getElementById("bookingModeCustom").checked = true;
+    document.getElementById("bookingModeHourly").checked = false;
+    document.getElementById("bookingModeHourly").disabled = true;
+    BOOKING_RENTAL_MODE = "custom_days";
+    note.textContent = "Luzon rates use 24-hour blocks. Select a custom day arrangement.";
     note.hidden = false;
   } else {
+    document.getElementById("bookingModeHourly").disabled = false;
     note.hidden = true;
     note.textContent = "";
   }
+  if (!isLuzon && !Array.from(modeOptions).some(option => option.checked)) {
+    BOOKING_RENTAL_MODE = null;
+  }
+  periodField.classList.toggle("hourly-selected", BOOKING_RENTAL_MODE === "hourly");
+  periodField.classList.toggle("custom-selected", BOOKING_RENTAL_MODE === "custom_days");
 }
 
 function restoreBookingTargetFromDraft() {
@@ -738,6 +752,10 @@ function restoreBookingTargetFromDraft() {
   updateMapDistance(BOOKING_TARGET, "Selected: ");
   document.getElementById("bookingTargetStatus").textContent = `${BOOKING_TARGET.label} · ${regionDisplayName(BOOKING_TARGET.rateRegion)} rates`;
   updateBookingPeriodOptions(BOOKING_TARGET.rateRegion);
+  BOOKING_RENTAL_MODE = document.querySelector('input[name="bookingMode"]:checked')?.value || BOOKING_RENTAL_MODE;
+  if (!BOOKING_TARGET.rateRegion) {
+    BOOKING_TARGET_REGION_LOOKUP = resolveBookingTargetRegion(BOOKING_TARGET);
+  }
 }
 
 function bindBookingMap() {
@@ -834,6 +852,7 @@ function bindBookingMap() {
     window.setTimeout(() => {
       BOOKING_TARGET = null;
       BOOKING_RATE_QUOTE = null;
+      BOOKING_TARGET_REGION_LOOKUP = null;
       BOOKING_GEOCODE_CONTROLLER?.abort();
       BOOKING_TARGET_MARKER?.remove();
       BOOKING_TARGET_MARKER = null;
@@ -869,29 +888,30 @@ function renderBookingEstimate() {
   const discountAmount = document.getElementById("bookingDiscountAmount");
   const depositPercent = Number(SETTINGS.depositPercent) || 0;
   document.getElementById("bookingDepositPercent").textContent = depositPercent;
-  if (!BOOKING_DURATION_SELECTED) {
-    summary.textContent = "Choose a rental contract length to see your quote.";
-    subtotal.textContent = "—";
-    deposit.textContent = "—";
-    discountRow.hidden = true;
-    return;
-  }
   const toUtcDay = value => {
     const [year, month, day] = value.split("-").map(Number);
     return Date.UTC(year, month - 1, day);
   };
   const elapsedDays = (toUtcDay(returnDate) - toUtcDay(pickup)) / 86400000;
-  const rentalDays = Number(document.getElementById("bookingRentalDays").value);
-  if (!Number.isInteger(elapsedDays) || elapsedDays !== rentalDays || rentalDays < 4 || rentalDays > 15) {
-    summary.textContent = "Set a valid pickup date and 4–15 day rental duration.";
+  const isCustomDays = BOOKING_RENTAL_MODE === "custom_days";
+  const selectedPeriod = Number(document.querySelector('input[name="bookingPeriod"]:checked')?.value || 0);
+  const rentalDays = isCustomDays ? Number(document.getElementById("bookingRentalDays").value) : 1;
+  const periodHours = region === "luzon" || isCustomDays ? 24 : selectedPeriod;
+  if (isCustomDays && !BOOKING_DURATION_SELECTED) {
+    summary.textContent = "Choose a custom rental length to see your quote.";
     subtotal.textContent = "—";
     deposit.textContent = "—";
     discountRow.hidden = true;
     return;
   }
-
-  const selectedPeriod = Number(document.querySelector('input[name="bookingPeriod"]:checked')?.value || 0);
-  if (region !== "luzon" && selectedPeriod !== 12 && selectedPeriod !== 24) {
+  if (BOOKING_RENTAL_MODE !== "hourly" && !isCustomDays) {
+    summary.textContent = "Choose a rental arrangement to see your quote.";
+    subtotal.textContent = "—";
+    deposit.textContent = "—";
+    discountRow.hidden = true;
+    return;
+  }
+  if (BOOKING_RENTAL_MODE === "hourly" && selectedPeriod !== 12 && selectedPeriod !== 24) {
     estimate.hidden = false;
     summary.textContent = "Choose a 12- or 24-hour rental period to see your quote.";
     subtotal.textContent = "—";
@@ -899,32 +919,45 @@ function renderBookingEstimate() {
     discountRow.hidden = true;
     return;
   }
+  const pickupTime = document.getElementById("bookingPickupTime").value;
+  const expectedElapsedDays = isCustomDays
+    ? rentalDays
+    : Math.floor((Number(pickupTime.slice(0, 2)) * 60 + Number(pickupTime.slice(3, 5)) + selectedPeriod * 60) / 1440);
+  if (!Number.isInteger(elapsedDays) || elapsedDays !== expectedElapsedDays
+    || (isCustomDays && (rentalDays < 4 || rentalDays > 15))) {
+    summary.textContent = isCustomDays
+      ? "Set a valid pickup date and 4–15 day custom rental duration."
+      : "The return date must match your pickup time and selected rental period.";
+    subtotal.textContent = "—";
+    deposit.textContent = "—";
+    discountRow.hidden = true;
+    return;
+  }
   const promoPercent = Number(DISCOUNT_RULES.find(rule =>
-    rentalDays >= Number(rule.minDays) && rentalDays <= Number(rule.maxDays)
+    isCustomDays && rentalDays >= Number(rule.minDays) && rentalDays <= Number(rule.maxDays)
   )?.percent) || 0;
-  document.getElementById("bookingPromoMessage").textContent = region !== "luzon" && selectedPeriod === 12
+  document.getElementById("bookingPromoMessage").textContent = isCustomDays
     ? promoPercent
-      ? `Enjoy ${promoPercent}% off by selecting ${rentalDays} days on 24-hour rates.`
+      ? `Enjoy ${promoPercent}% off on your ${rentalDays}-day custom arrangement.`
       : "No long-rental discount applies to this duration."
-    : promoPercent
-      ? `Enjoy ${promoPercent}% off by selecting ${rentalDays} days.`
-      : "No long-rental discount applies to this duration.";
-  const periodHours = region === "luzon" ? 24 : selectedPeriod;
+    : "Hourly rental is priced as one 12- or 24-hour block; custom-day discounts do not apply.";
+  const effectivePeriod = periodHours || 24;
   const rateField = region === "in"
-    ? periodHours === 12 ? "in12_rate" : "in24_rate"
+    ? effectivePeriod === 12 ? "in12_rate" : "in24_rate"
     : region === "out"
-      ? periodHours === 12 ? "out12_rate" : "out24_rate"
+      ? effectivePeriod === 12 ? "out12_rate" : "out24_rate"
       : "luzon_rate";
   const rate = Number(car[rateField]);
-  const rentalHours = rentalDays * 24;
-  const rateBlocks = rentalHours / periodHours;
+  const rentalHours = isCustomDays ? rentalDays * 24 : effectivePeriod;
+  const rateBlocks = isCustomDays ? rentalHours / effectivePeriod : 1;
   const undiscountedSubtotal = rate * rateBlocks;
-  const discountPercent = periodHours === 24 ? promoPercent : 0;
+  const discountPercent = isCustomDays ? promoPercent : 0;
   const promoDiscount = Math.round(undiscountedSubtotal * discountPercent) / 100;
   const rentalSubtotal = undiscountedSubtotal - promoDiscount;
   BOOKING_RATE_QUOTE = {
     rateRegion: region,
-    periodHours,
+    rentalMode: BOOKING_RENTAL_MODE,
+    periodHours: effectivePeriod,
     rentalHours,
     rentalDays,
     rateBlocks,
@@ -933,8 +966,10 @@ function renderBookingEstimate() {
     discountAmount: promoDiscount,
     total: rentalSubtotal
   };
-  const regionLabel = region === "in" ? "IN" : region === "out" ? "OUT" : "Luzon";
-  summary.textContent = `${rentalDays} days · ${rateBlocks} × ${periodHours}-hour ${regionLabel} rate at ${formatCurrency(rate, SETTINGS.currency)}${discountPercent ? ` · ${discountPercent}% promo` : ""}`;
+  const arrangementSummary = isCustomDays
+    ? `${rentalDays} days · ${rateBlocks} × 24-hour ${regionDisplayName(region)} rate`
+    : `One ${effectivePeriod}-hour ${regionDisplayName(region)} rate`;
+  summary.textContent = `${arrangementSummary} at ${formatCurrency(rate, SETTINGS.currency)}${discountPercent ? ` · ${discountPercent}% promo` : ""}`;
   subtotal.textContent = formatCurrency(rentalSubtotal, SETTINGS.currency);
   discountRow.hidden = discountPercent === 0;
   discountAmount.textContent = `−${formatCurrency(promoDiscount, SETTINGS.currency)}`;
@@ -951,6 +986,10 @@ function bindBookingEstimate() {
   const promoMessage = document.getElementById("bookingPromoMessage");
   const durationDetails = document.getElementById("bookingDurationDetails");
   const durationSummary = document.getElementById("bookingDurationSummary");
+  const modeOptions = document.querySelectorAll('input[name="bookingMode"]');
+  document.getElementById("bookingPickupTime").addEventListener("change", event => {
+    event.currentTarget.blur();
+  });
   const hoverCanExpand = window.matchMedia("(hover: hover) and (pointer: fine)");
   let durationPinnedOpen = false;
   let durationHovering = false;
@@ -968,33 +1007,16 @@ function bindBookingEstimate() {
   const updateDurationPromo = () => {
     const days = Number(daysInput.value);
     const percentage = days >= 8 ? 10 : 5;
-    const selectedPeriod = document.querySelector('input[name="bookingPeriod"]:checked')?.value;
     durationDetails.classList.toggle("duration-unselected", !BOOKING_DURATION_SELECTED);
     daysOutput.textContent = BOOKING_DURATION_SELECTED ? `${days} days` : "--";
-    promoMessage.textContent = selectedPeriod === "12"
-      ? `Enjoy ${percentage}% off by selecting ${days} days on 24-hour rates.`
-      : BOOKING_DURATION_SELECTED
-        ? `Enjoy ${percentage}% off by selecting ${days} days.`
-        : "Choose 4–7 days for 5% off or 8–15 days for 10% off.";
-  };
-  const clearSelectedPeriod = () => {
-    const checkedPeriod = document.querySelector('input[name="bookingPeriod"]:checked');
-    if (!checkedPeriod) return;
-    checkedPeriod.checked = false;
-    updateDurationPromo();
-    renderBookingEstimate();
-  };
-  const resetDurationForPeriodChange = () => {
-    daysInput.value = "4";
-    BOOKING_DURATION_SELECTED = false;
-    closeDuration();
-    syncReturnDate();
+    promoMessage.textContent = BOOKING_DURATION_SELECTED
+      ? `Enjoy ${percentage}% off on your ${days}-day custom arrangement.`
+      : "Choose a custom day arrangement to unlock 4–7 day and 8–15 day discounts.";
   };
 
   durationSummary.setAttribute("aria-expanded", "false");
   durationSummary.addEventListener("click", event => {
     event.preventDefault();
-    clearSelectedPeriod();
     durationPinnedOpen = !durationPinnedOpen;
     const durationOpen = durationPinnedOpen || durationHovering;
     if (!hoverCanExpand.matches) {
@@ -1028,34 +1050,69 @@ function bindBookingEstimate() {
     const days = Number(daysInput.value);
     updateDurationPromo();
     if (pickup) {
-      const [year, month, day] = pickup.split("-").map(Number);
-      const returnDate = new Date(Date.UTC(year, month - 1, day + days));
-      returnInput.value = returnDate.toISOString().slice(0, 10);
+      if (BOOKING_RENTAL_MODE === "hourly") {
+        const period = Number(document.querySelector('input[name="bookingPeriod"]:checked')?.value || 0);
+        const pickupTime = document.getElementById("bookingPickupTime").value;
+        if (period && pickupTime) {
+          const [hour, minute] = pickupTime.split(":").map(Number);
+          const dayOffset = Math.floor((hour * 60 + minute + period * 60) / 1440);
+          const [year, month, day] = pickup.split("-").map(Number);
+          const returnDate = new Date(Date.UTC(year, month - 1, day + dayOffset));
+          returnInput.value = returnDate.toISOString().slice(0, 10);
+        } else {
+          returnInput.value = "";
+        }
+      } else if (BOOKING_RENTAL_MODE === "custom_days") {
+        const [year, month, day] = pickup.split("-").map(Number);
+        const returnDate = new Date(Date.UTC(year, month - 1, day + days));
+        returnInput.value = returnDate.toISOString().slice(0, 10);
+      } else {
+        returnInput.value = "";
+      }
       returnInput.min = pickup;
     } else {
       returnInput.value = "";
     }
     renderBookingEstimate();
   };
+  const applyRentalMode = mode => {
+    BOOKING_RENTAL_MODE = mode;
+    const periodField = document.getElementById("bookingPeriodField");
+    periodField.classList.toggle("hourly-selected", mode === "hourly");
+    periodField.classList.toggle("custom-selected", mode === "custom_days");
+    syncReturnDate();
+  };
   pickupInput.addEventListener("change", syncReturnDate);
+  document.getElementById("bookingPickupTime").addEventListener("change", syncReturnDate);
   daysInput.addEventListener("input", () => {
     BOOKING_DURATION_SELECTED = true;
     syncReturnDate();
   });
   daysInput.addEventListener("click", () => {
-    clearSelectedPeriod();
     BOOKING_DURATION_SELECTED = true;
     updateDurationPromo();
     renderBookingEstimate();
   });
-  document.querySelectorAll('input[name="bookingPeriod"]').forEach(input => {
-    input.addEventListener("change", resetDurationForPeriodChange);
-    input.addEventListener("click", () => {
-      if (input.checked) {
-        window.setTimeout(() => {
-          if (input.checked) resetDurationForPeriodChange();
-        }, 0);
+  modeOptions.forEach(input => {
+    input.addEventListener("change", () => {
+      if (input.value === "custom_days") {
+        document.getElementById("bookingPeriod12").checked = false;
+        document.getElementById("bookingPeriod24").checked = false;
       }
+      applyRentalMode(input.value);
+    });
+  });
+  document.querySelectorAll('input[name="bookingPeriod"]').forEach(input => {
+    input.addEventListener("change", () => {
+      BOOKING_RENTAL_MODE = "hourly";
+      document.getElementById("bookingModeHourly").checked = true;
+      document.getElementById("bookingModeCustom").checked = false;
+      const periodField = document.getElementById("bookingPeriodField");
+      periodField.classList.add("hourly-selected");
+      periodField.classList.remove("custom-selected");
+      syncReturnDate();
+      updateDurationPromo();
+      renderBookingEstimate();
     });
   });
   ["bookingLastName", "bookingFirstName"].forEach(id => {
@@ -1064,6 +1121,17 @@ function bindBookingEstimate() {
   document.getElementById("bookingForm").addEventListener("reset", () => {
     window.setTimeout(() => {
       BOOKING_DURATION_SELECTED = false;
+      BOOKING_RENTAL_MODE = null;
+      document.querySelectorAll('input[name="bookingMode"]').forEach(option => {
+        option.checked = false;
+      });
+      document.getElementById("bookingPeriodField").classList.remove("hourly-selected", "custom-selected");
+      ["bookingFirstName", "bookingLastName", "bookingMiddleName", "bookingSuffix", "bookingPhone", "bookingEmail", "bookingNotes", "guestEmailCode"].forEach(id => {
+        document.getElementById(id).value = "";
+      });
+      document.getElementById("guestEmailCodeRow").hidden = true;
+      document.getElementById("guestEmailVerificationStatus").textContent = "";
+      document.getElementById("guestEmailVerificationStatus").className = "";
       updateDurationPromo();
       closeDuration();
       updateBookingPeriodOptions(null);
@@ -1100,7 +1168,11 @@ function bindQuickSearch() {
       const [startYear, startMonth, startDay] = pickup.split("-").map(Number);
       const [endYear, endMonth, endDay] = ret.split("-").map(Number);
       const days = (Date.UTC(endYear, endMonth - 1, endDay) - Date.UTC(startYear, startMonth - 1, startDay)) / 86400000;
-      if (Number.isInteger(days) && days >= 4 && days <= 15) daysInput.value = String(days);
+      if (Number.isInteger(days) && days >= 4 && days <= 15) {
+        daysInput.value = String(days);
+        document.getElementById("bookingModeCustom").checked = true;
+        document.getElementById("bookingModeCustom").dispatchEvent(new Event("change", { bubbles: true }));
+      }
     }
     daysInput.dispatchEvent(new Event("input", { bubbles: true }));
     renderBookingEstimate();
@@ -1124,6 +1196,14 @@ function bindBookingForm() {
   const signInPendingKey = "cartogo.customerGoogleSignInPending";
   const authToast = document.getElementById("authToast");
   const nameFields = document.getElementById("bookingNameFields");
+  const guestEmailInput = document.getElementById("bookingEmail");
+  const guestEmailFieldNote = document.getElementById("bookingEmailNote");
+  const guestVerification = document.getElementById("guestEmailVerification");
+  const guestEmailCodeRow = document.getElementById("guestEmailCodeRow");
+  const guestEmailCodeInput = document.getElementById("guestEmailCode");
+  const guestVerificationStatus = document.getElementById("guestEmailVerificationStatus");
+  const sendGuestEmailCodeButton = document.getElementById("sendGuestEmailCode");
+  const verifyGuestEmailCodeButton = document.getElementById("verifyGuestEmailCode");
   const recapDialog = document.getElementById("reservationRecap");
   const recapCloseButton = document.getElementById("recapCloseButton");
   const recapEditButton = document.getElementById("recapEditButton");
@@ -1132,9 +1212,24 @@ function bindBookingForm() {
   let currentUser = null;
   let pendingInquiry = null;
   let isSendingInquiry = false;
+  let isResolvingDestination = false;
+  let guestEmailChallengeId = null;
+  let guestEmailChallengeAddress = null;
+  let guestEmailVerificationToken = null;
+  let guestEmailVerifiedAddress = null;
+  let isRequestingGuestCode = false;
+  let isVerifyingGuestCode = false;
 
-  const hasVerifiedGoogleAccount = user => user?.app_metadata?.provider === "google"
-    && (user.user_metadata?.email_verified === true || user.user_metadata?.email_verified === "true");
+  const hasVerifiedGoogleAccount = user => {
+    const providers = [
+      user?.app_metadata?.provider,
+      ...(Array.isArray(user?.app_metadata?.providers) ? user.app_metadata.providers : []),
+      ...(Array.isArray(user?.identities) ? user.identities.map(identity => identity.provider) : [])
+    ];
+    const profileEmailVerified = user?.user_metadata?.email_verified === true
+      || user?.user_metadata?.email_verified === "true";
+    return providers.includes("google") && (profileEmailVerified || Boolean(user?.email_confirmed_at || user?.confirmed_at));
+  };
   const getGoogleProfileName = user => {
     const profile = user?.user_metadata || {};
     const fullName = String(profile.full_name || profile.name || "").trim();
@@ -1150,17 +1245,49 @@ function bindBookingForm() {
     clearTimeout(authToast.hideTimeout);
     authToast.hideTimeout = setTimeout(() => authToast.classList.remove("show"), 3000);
   };
+  const setGuestVerificationStatus = (message, state = "") => {
+    guestVerificationStatus.textContent = message;
+    guestVerificationStatus.className = state ? `is-${state}` : "";
+  };
+  const resetGuestEmailVerification = () => {
+    guestEmailChallengeId = null;
+    guestEmailChallengeAddress = null;
+    guestEmailVerificationToken = null;
+    guestEmailVerifiedAddress = null;
+    guestEmailCodeRow.hidden = true;
+    guestEmailCodeInput.value = "";
+    setGuestVerificationStatus("");
+    sendGuestEmailCodeButton.disabled = false;
+    sendGuestEmailCodeButton.textContent = "Send verification code";
+  };
+  form.addEventListener("reset", resetGuestEmailVerification);
   const updateVerificationUI = () => {
     const isGoogle = hasVerifiedGoogleAccount(currentUser);
+    const phoneInput = document.getElementById("bookingPhone");
+    document.getElementById("bookingGuestNote").hidden = isGoogle;
+    const profile = currentUser?.user_metadata || {};
+    const profilePhone = String(profile.phone_number || profile.phone || "").trim();
     googleButton.hidden = false;
     nameFields.hidden = false;
     nameFields.querySelectorAll(".booking-profile-field").forEach(field => {
       field.hidden = isGoogle;
+      field.querySelectorAll("input").forEach(input => {
+        input.disabled = isGoogle;
+      });
     });
+    guestEmailInput.disabled = isGoogle;
+    guestEmailInput.required = !isGoogle;
+    guestEmailInput.value = isGoogle ? currentUser.email || "" : guestEmailInput.value;
+    guestEmailFieldNote.textContent = isGoogle ? "from Google" : "required for guests";
+    guestVerification.hidden = isGoogle;
+    if (isGoogle) resetGuestEmailVerification();
+    phoneInput.required = !isGoogle;
+    if (isGoogle && profilePhone) phoneInput.value = profilePhone;
+    phoneInput.readOnly = isGoogle && Boolean(profilePhone);
     if (isGoogle) {
       googleButton.innerHTML = '<i class="fa-brands fa-google" aria-hidden="true"></i> SIGN OUT';
       googleButton.setAttribute("aria-label", "Sign out of Google");
-      authCopy.textContent = "Your Google account is connected to this inquiry.";
+      authCopy.textContent = "Your details are ready from Google—signing in saves you time.";
       authStatus.textContent = `Signed in as ${getGoogleProfileName(currentUser) || currentUser.email}. Google verified this email.`;
       if (sessionStorage.getItem(signInPendingKey) === "true") {
         sessionStorage.removeItem(signInPendingKey);
@@ -1169,8 +1296,8 @@ function bindBookingForm() {
     } else {
       googleButton.innerHTML = '<i class="fa-brands fa-google" aria-hidden="true"></i> Continue with Google';
       googleButton.setAttribute("aria-label", "Continue with Google");
-      authCopy.textContent = "Sign in with Google to send your inquiry.";
-      authStatus.textContent = "Sign in with Google to send your inquiry.";
+      authCopy.textContent = "Continue with Google to prefill your details and save time.";
+      authStatus.textContent = "Or verify your email below to send your inquiry as a guest.";
     }
   };
 
@@ -1189,6 +1316,7 @@ function bindBookingForm() {
         if (input.type === "radio") input.checked = value === true;
         else if (typeof value === "string") input.value = value;
       }
+      BOOKING_RENTAL_MODE = document.querySelector('input[name="bookingMode"]:checked')?.value || null;
       populateCarSelect();
       renderRates();
       restoreBookingTargetFromDraft();
@@ -1200,7 +1328,7 @@ function bindBookingForm() {
 
   const saveDraft = () => {
     const draft = {};
-    form.querySelectorAll("input, select, textarea").forEach(input => {
+    Array.from(form.elements).forEach(input => {
       if (input.id) draft[input.id] = input.type === "radio" ? input.checked : input.value;
     });
     draft.bookingDurationChosen = BOOKING_DURATION_SELECTED;
@@ -1226,10 +1354,15 @@ function bindBookingForm() {
     const enteredEmail = emailInput.value.trim();
     return {
       name,
-      email: enteredEmail && emailInput.validity.valid ? enteredEmail : currentUser?.email || "",
+      googleAuthenticated: hasVerifiedGoogleAccount(currentUser),
+      emailVerificationToken: guestEmailVerificationToken,
+      email: hasVerifiedGoogleAccount(currentUser)
+        ? currentUser.email || ""
+        : enteredEmail && emailInput.validity.valid ? enteredEmail : "",
       phone: document.getElementById("bookingPhone").value.trim(),
       carId,
       carName: car ? car.name : "Unknown",
+      rentalMode: BOOKING_RENTAL_MODE,
       capacity: document.getElementById("bookingCapacity").value ? Number(document.getElementById("bookingCapacity").value) : null,
       pickupDate: document.getElementById("bookingPickup").value,
       returnDate: document.getElementById("bookingReturn").value,
@@ -1268,7 +1401,7 @@ function bindBookingForm() {
 
   const openReservationRecap = inquiry => {
     document.getElementById("recapName").textContent = inquiry.name;
-    document.getElementById("recapEmail").textContent = inquiry.email || currentUser.email;
+    document.getElementById("recapEmail").textContent = inquiry.email || currentUser?.email || "—";
     document.getElementById("recapCar").textContent = inquiry.carName;
     document.getElementById("recapCapacity").textContent = inquiry.capacity ?? "—";
     document.getElementById("recapPickupDate").textContent = formatRecapDate(inquiry.pickupDate);
@@ -1276,8 +1409,10 @@ function bindBookingForm() {
     document.getElementById("recapReturnDate").textContent = formatRecapDate(inquiry.returnDate);
     document.getElementById("recapTargetLocation").textContent = inquiry.location;
     document.getElementById("recapNearestPickup").textContent = `${inquiry.nearestPickupDistanceKm.toFixed(2)} km from ${inquiry.nearestPickupName}`;
-    document.getElementById("recapRateBasis").textContent = `${regionDisplayName(inquiry.rateRegion)} · ${inquiry.rentalPeriodHours}-hour blocks at ${formatCurrency(inquiry.ratePerPeriod, SETTINGS.currency)}`;
-    document.getElementById("recapRentalDays").textContent = `${inquiry.rentalDays} days`;
+    document.getElementById("recapRateBasis").textContent = `${regionDisplayName(inquiry.rateRegion)} · ${inquiry.rentalMode === "hourly" ? "one" : `${inquiry.rentalDays}`} ${inquiry.rentalMode === "hourly" ? `${inquiry.rentalPeriodHours}-hour block` : `days at 24-hour rates`} at ${formatCurrency(inquiry.ratePerPeriod, SETTINGS.currency)}`;
+    document.getElementById("recapRentalDays").textContent = inquiry.rentalMode === "hourly"
+      ? `${inquiry.rentalPeriodHours} hours`
+      : `${inquiry.rentalDays} days`;
     document.getElementById("recapDiscountRow").hidden = !inquiry.discountPercent;
     document.getElementById("recapDiscount").textContent = inquiry.discountPercent
       ? `${inquiry.discountPercent}% · −${formatCurrency(inquiry.discountAmount, SETTINGS.currency)}`
@@ -1288,7 +1423,7 @@ function bindBookingForm() {
     document.getElementById("recapNotesRow").hidden = !inquiry.notes;
     recapError.hidden = true;
     recapError.textContent = "";
-    pendingInquiry = { ...inquiry, email: inquiry.email || currentUser.email };
+    pendingInquiry = { ...inquiry, email: inquiry.email || currentUser?.email || "" };
     recapDialog.showModal();
   };
 
@@ -1308,8 +1443,9 @@ function bindBookingForm() {
   });
   recapConfirmButton.addEventListener("click", async () => {
     if (!pendingInquiry || isSendingInquiry) return;
-    if (!hasVerifiedGoogleAccount(currentUser)) {
-      recapError.textContent = "Your Google sign-in is no longer valid. Sign in again before confirming.";
+    const isGoogle = hasVerifiedGoogleAccount(currentUser);
+    if (!isGoogle && (!guestEmailVerificationToken || guestEmailVerifiedAddress !== pendingInquiry.email.toLowerCase())) {
+      recapError.textContent = "Verify your email address before confirming this guest inquiry.";
       recapError.hidden = false;
       return;
     }
@@ -1322,8 +1458,8 @@ function bindBookingForm() {
     submitButton.textContent = "Sending…";
     try {
       await persistInquiry(pendingInquiry, {
-        userId: currentUser.id,
-        verificationMethod: "google_oauth",
+        userId: isGoogle ? currentUser.id : null,
+        verificationMethod: isGoogle ? "google_oauth" : "email_otp",
         status: "confirmed"
       });
       pendingInquiry = null;
@@ -1354,6 +1490,87 @@ function bindBookingForm() {
       throw error;
     }
   };
+
+  guestEmailInput.addEventListener("input", () => {
+    const email = guestEmailInput.value.trim().toLowerCase();
+    if ((guestEmailVerificationToken || guestEmailChallengeId)
+      && email !== (guestEmailVerifiedAddress || guestEmailChallengeAddress)) {
+      resetGuestEmailVerification();
+      setGuestVerificationStatus("Email changed. Request a new verification code.");
+      sendGuestEmailCodeButton.textContent = "Send verification code";
+    }
+  });
+  sendGuestEmailCodeButton.addEventListener("click", async () => {
+    const email = guestEmailInput.value.trim().toLowerCase();
+    if (!guestEmailInput.validity.valid || !email) {
+      setGuestVerificationStatus("Enter a valid email address first.", "error");
+      guestEmailInput.focus();
+      return;
+    }
+    if (isRequestingGuestCode) return;
+    isRequestingGuestCode = true;
+    sendGuestEmailCodeButton.disabled = true;
+    setGuestVerificationStatus("Sending verification code…");
+    try {
+      const result = await DB.requestGuestEmailCode(email);
+      guestEmailChallengeId = result.challengeId;
+      guestEmailChallengeAddress = email;
+      guestEmailVerifiedAddress = null;
+      guestEmailVerificationToken = null;
+      guestEmailCodeRow.hidden = false;
+      sendGuestEmailCodeButton.disabled = false;
+      sendGuestEmailCodeButton.textContent = "Resend code";
+      guestEmailCodeInput.focus();
+      setGuestVerificationStatus("Code sent. Check your inbox and spam folder.");
+    } catch (error) {
+      setGuestVerificationStatus(error.message || "Could not send a verification code.", "error");
+      sendGuestEmailCodeButton.disabled = false;
+    } finally {
+      isRequestingGuestCode = false;
+    }
+  });
+  verifyGuestEmailCodeButton.addEventListener("click", async () => {
+    if (!guestEmailChallengeId || isVerifyingGuestCode) {
+      setGuestVerificationStatus("Request a verification code first.", "error");
+      return;
+    }
+    const code = guestEmailCodeInput.value.trim();
+    if (guestEmailInput.value.trim().toLowerCase() !== guestEmailChallengeAddress) {
+      resetGuestEmailVerification();
+      setGuestVerificationStatus("Email changed. Request a new verification code.", "error");
+      return;
+    }
+    if (!/^\d{6}$/.test(code)) {
+      setGuestVerificationStatus("Enter the six-digit code from your email.", "error");
+      guestEmailCodeInput.focus();
+      return;
+    }
+    isVerifyingGuestCode = true;
+    verifyGuestEmailCodeButton.disabled = true;
+    setGuestVerificationStatus("Verifying code…");
+    try {
+      const result = await DB.verifyGuestEmailCode(guestEmailChallengeId, code);
+      guestEmailVerificationToken = result.verificationToken;
+      guestEmailVerifiedAddress = guestEmailChallengeAddress;
+      guestEmailChallengeId = null;
+      guestEmailCodeRow.hidden = true;
+      guestEmailCodeInput.value = "";
+      setGuestVerificationStatus("Email verified. You can submit your inquiry.", "verified");
+    } catch (error) {
+      setGuestVerificationStatus(error.message || "Could not verify that code.", "error");
+    } finally {
+      isVerifyingGuestCode = false;
+      verifyGuestEmailCodeButton.disabled = false;
+    }
+  });
+  guestEmailInput.addEventListener("change", () => {
+    const email = guestEmailInput.value.trim().toLowerCase();
+    if ((guestEmailVerificationToken || guestEmailChallengeId)
+      && email !== (guestEmailVerifiedAddress || guestEmailChallengeAddress)) {
+      resetGuestEmailVerification();
+      sendGuestEmailCodeButton.textContent = "Send verification code";
+    }
+  });
 
   restoreDraft();
   cancelSignOutButton.addEventListener("click", () => signoutDialog.close());
@@ -1434,20 +1651,42 @@ function bindBookingForm() {
     e.preventDefault();
     msg.className = "form-msg";
     msg.textContent = "";
+    if (isResolvingDestination) return;
+    const selectedTarget = BOOKING_TARGET;
+    if (selectedTarget && !selectedTarget.rateRegion && BOOKING_TARGET_REGION_LOOKUP) {
+      isResolvingDestination = true;
+      const submitLabel = submitButton.textContent;
+      submitButton.disabled = true;
+      submitButton.textContent = "Checking destination…";
+      msg.textContent = "Checking the selected destination and its rate…";
+      try {
+        await BOOKING_TARGET_REGION_LOOKUP;
+      } finally {
+        isResolvingDestination = false;
+        submitButton.disabled = false;
+        submitButton.textContent = submitLabel;
+      }
+      if (BOOKING_TARGET !== selectedTarget) {
+        msg.className = "form-msg error";
+        msg.textContent = "The selected destination changed while it was being checked. Submit again to continue.";
+        return;
+      }
+    }
     const inquiry = collectInquiry();
     const lastName = document.getElementById("bookingLastName").value.trim();
     const firstName = document.getElementById("bookingFirstName").value.trim();
     const isGoogle = hasVerifiedGoogleAccount(currentUser);
 
-    if ((!isGoogle && (!lastName || !firstName)) || (isGoogle && !inquiry.name) || !inquiry.carId || !inquiry.pickupDate || !inquiry.pickupTime || !inquiry.returnDate) {
+    if ((!isGoogle && (!lastName || !firstName)) || (isGoogle && !inquiry.name) || !inquiry.carId || !inquiry.pickupDate || !inquiry.pickupTime) {
       msg.className = "form-msg error";
       msg.textContent = isGoogle && !inquiry.name
         ? "Your Google account did not provide a profile name. Add a name to your Google profile and sign in again."
-        : "Please fill in your name, car, pickup date, pickup time, and rental duration.";
+        : "Please fill in your name, unit, pickup date, and pickup time.";
       return;
     }
     const phoneDigits = inquiry.phone.replace(/\D/g, "");
-    if (phoneDigits.length < 7 || phoneDigits.length > 15) {
+    if ((phoneDigits.length > 0 && (phoneDigits.length < 7 || phoneDigits.length > 15))
+      || (!isGoogle && phoneDigits.length === 0)) {
       msg.className = "form-msg error";
       msg.textContent = "Enter a phone number with 7 to 15 digits, including the country code if applicable.";
       document.getElementById("bookingPhone").focus();
@@ -1456,8 +1695,40 @@ function bindBookingForm() {
     const emailInput = document.getElementById("bookingEmail");
     if (!isGoogle && emailInput.value.trim() && !emailInput.validity.valid) {
       msg.className = "form-msg error";
-      msg.textContent = "Enter a valid email address or leave the optional email field blank.";
+      msg.textContent = "Enter a valid email address.";
       emailInput.focus();
+      return;
+    }
+    if (!isGoogle && !emailInput.value.trim()) {
+      msg.className = "form-msg error";
+      msg.textContent = "Enter the email address you want us to verify.";
+      emailInput.focus();
+      return;
+    }
+    if (!BOOKING_RENTAL_MODE) {
+      msg.className = "form-msg error";
+      msg.textContent = "Choose either a 12/24-hour rental or a custom day arrangement.";
+      document.getElementById("bookingPeriodField").scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    if (BOOKING_RENTAL_MODE === "hourly" && BOOKING_TARGET?.rateRegion !== "luzon"
+      && !document.querySelector('input[name="bookingPeriod"]:checked')) {
+      msg.className = "form-msg error";
+      msg.textContent = "Choose either the 12-hour or 24-hour rental period.";
+      document.getElementById("bookingPeriodField").scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    if (BOOKING_RENTAL_MODE === "custom_days" && !BOOKING_DURATION_SELECTED) {
+      msg.className = "form-msg error";
+      msg.textContent = "Choose a custom rental length using the 4–15 day slider.";
+      document.getElementById("bookingDurationDetails").scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    if (!inquiry.returnDate) {
+      msg.className = "form-msg error";
+      msg.textContent = BOOKING_RENTAL_MODE === "hourly"
+        ? "Choose a pickup time to calculate the return date."
+        : "Choose a pickup date to calculate your custom rental dates.";
       return;
     }
     if (!BOOKING_TARGET) {
@@ -1466,9 +1737,11 @@ function bindBookingForm() {
       document.getElementById("bookingMap").scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
-    if (!BOOKING_TARGET.rateRegion || !BOOKING_RATE_QUOTE) {
+    if (!BOOKING_TARGET.rateRegion) {
       msg.className = "form-msg error";
-      msg.textContent = "We couldn't verify a rate for this destination. Choose a location within the supported Luzon pricing area.";
+      msg.textContent = document.getElementById("bookingTargetStatus").textContent.includes("Could not identify")
+        ? "We couldn't identify this destination. Click a clearer location on the map and try again."
+        : "This destination isn't within the supported Luzon pricing area. Choose another location on the map.";
       return;
     }
     if (new Date(inquiry.returnDate) < new Date(inquiry.pickupDate)) {
@@ -1481,17 +1754,18 @@ function bindBookingForm() {
       msg.textContent = "Capacity must be a whole number greater than zero.";
       return;
     }
-    if (BOOKING_TARGET.rateRegion !== "luzon"
-      && !document.querySelector('input[name="bookingPeriod"]:checked')) {
+    if (!BOOKING_RATE_QUOTE) {
       msg.className = "form-msg error";
-      msg.textContent = "Choose either the 12-hour or 24-hour rental period.";
-      document.getElementById("bookingPeriodField").scrollIntoView({ behavior: "smooth", block: "center" });
+      msg.textContent = "Choose a unit and valid rental dates to calculate your rate.";
       return;
     }
-    if (!hasVerifiedGoogleAccount(currentUser)) {
+    if (!isGoogle && (!guestEmailVerificationToken
+      || guestEmailVerifiedAddress !== inquiry.email.toLowerCase())) {
       msg.className = "form-msg error";
-      msg.textContent = "Sign in with Google before sending your inquiry.";
-      googleButton.focus();
+      msg.textContent = "Verify your email using the code sent to your inbox before continuing.";
+      guestVerification.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (!guestEmailChallengeId) sendGuestEmailCodeButton.focus();
+      else guestEmailCodeInput.focus();
       return;
     }
     openReservationRecap(inquiry);

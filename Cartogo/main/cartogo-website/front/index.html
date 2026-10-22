@@ -165,12 +165,12 @@
       <div class="section-head">
         <p class="eyebrow">Pricing</p>
         <h2>Rates &amp; deposits</h2>
-        <p>Browse current rates by unit. IN covers Metro Manila, OUT covers neighboring areas, and the Luzon rate covers supported Luzon destinations.</p>
+        <p>Browse current rates by unit. Rates vary for Metro Manila, nearby areas, and supported Luzon destinations.</p>
       </div>
       <div class="rates-table-wrap">
         <table class="rates">
           <thead>
-            <tr><th>Unit</th><th>Brand</th><th>IN / 12 hr</th><th>IN / 24 hr</th><th>OUT / 12 hr</th><th>OUT / 24 hr</th><th>Luzon</th></tr>
+            <tr>            <th>Unit</th><th>Brand</th><th>Metro Manila / 12 hr</th><th>Metro Manila / 24 hr</th><th>Nearby areas / 12 hr</th><th>Nearby areas / 24 hr</th><th>Luzon / 24 hr</th></tr>
           </thead>
           <tbody id="ratesBody" aria-busy="true">
             <tr aria-hidden="true"><td colspan="7"><span class="skeleton skeleton-line line-wide"></span></td></tr>
@@ -204,9 +204,51 @@
           </ul>
           <div class="booking-auth-cta">
             <p class="booking-auth-kicker">READY TO RESERVE?</p>
-            <p class="booking-auth-copy" id="bookingAuthCopy">Sign in with Google to send your inquiry.</p>
+            <p class="booking-auth-copy" id="bookingAuthCopy">Sign in with Google or provide your details below to send an inquiry.</p>
             <button type="button" class="btn btn-ghost" id="googleOrderButton"><i class="fa-brands fa-google" aria-hidden="true"></i> Continue with Google</button>
             <p id="bookingAuthStatus" role="status" aria-live="polite"></p>
+          </div>
+          <p class="booking-guest-note" id="bookingGuestNote">Don't have a Google account? You can still book a vehicle by providing your information below.</p>
+          <div class="form-grid booking-contact-fields" id="bookingNameFields">
+            <div class="field booking-profile-field" id="bookingFirstNameField">
+              <label for="bookingFirstName">First name</label>
+              <input type="text" id="bookingFirstName" form="bookingForm" autocomplete="given-name" required>
+            </div>
+            <div class="field booking-profile-field" id="bookingLastNameField">
+              <label for="bookingLastName">Last name</label>
+              <input type="text" id="bookingLastName" form="bookingForm" autocomplete="family-name" required>
+            </div>
+            <div class="field booking-profile-field" id="bookingMiddleNameField">
+              <label for="bookingMiddleName">Middle name</label>
+              <input type="text" id="bookingMiddleName" form="bookingForm" autocomplete="additional-name">
+            </div>
+            <div class="field booking-profile-field" id="bookingSuffixField">
+              <label for="bookingSuffix">Suffix</label>
+              <input type="text" id="bookingSuffix" form="bookingForm" autocomplete="honorific-suffix" placeholder="Jr., Sr., III">
+            </div>
+            <div class="field">
+              <label for="bookingPhone">Phone number <small class="field-note">guest required</small></label>
+              <input type="tel" id="bookingPhone" form="bookingForm" autocomplete="tel" inputmode="tel" minlength="7" maxlength="24" placeholder="+63 9XX XXX XXXX" required>
+            </div>
+            <div class="field booking-profile-field" id="bookingEmailField">
+              <label for="bookingEmail">Email <small class="field-note" id="bookingEmailNote">required for guest bookings</small></label>
+              <input type="email" id="bookingEmail" form="bookingForm" autocomplete="email">
+            </div>
+            <div class="guest-email-verification span-2" id="guestEmailVerification" hidden>
+              <button type="button" class="btn btn-ghost btn-sm" id="sendGuestEmailCode">Send verification code</button>
+              <div class="guest-email-code-row" id="guestEmailCodeRow" hidden>
+                <label for="guestEmailCode">Email verification code</label>
+                <div class="guest-email-code-controls">
+                  <input type="text" id="guestEmailCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" aria-describedby="guestEmailVerificationStatus">
+                  <button type="button" class="btn btn-dark btn-sm" id="verifyGuestEmailCode">Verify</button>
+                </div>
+              </div>
+              <p id="guestEmailVerificationStatus" role="status" aria-live="polite"></p>
+            </div>
+            <div class="field span-2 booking-notes-field">
+              <label for="bookingNotes">Notes <small class="field-note">optional</small></label>
+              <textarea id="bookingNotes" form="bookingForm" rows="3" placeholder="Extra driver, child seat, airport flight number, etc."></textarea>
+            </div>
           </div>
         </div>
 
@@ -233,14 +275,18 @@
                   <input type="hidden" id="bookingReturn">
                 </div>
                 <fieldset class="field span-2 booking-period-field" id="bookingPeriodField">
-                  <legend>Rental period</legend>
+                  <legend>Choose your rental arrangement</legend>
+                  <div class="booking-mode-toggle">
+                    <label id="bookingHourlyModeLabel"><input type="radio" id="bookingModeHourly" name="bookingMode" value="hourly"><span><i class="fa-regular fa-clock" aria-hidden="true"></i> 12 / 24-hour rental</span></label>
+                    <label id="bookingCustomModeLabel"><input type="radio" id="bookingModeCustom" name="bookingMode" value="custom_days"><span><i class="fa-solid fa-calendar-days" aria-hidden="true"></i> Custom day arrangement</span></label>
+                  </div>
                   <div class="booking-period-toggle">
-                    <label><input type="radio" id="bookingPeriod12" name="bookingPeriod" value="12" required><span><i class="fa-regular fa-clock" aria-hidden="true"></i> 12 hours</span></label>
-                    <label><input type="radio" id="bookingPeriod24" name="bookingPeriod" value="24" required><span><i class="fa-solid fa-calendar-day" aria-hidden="true"></i> 24 hours</span></label>
+                    <label><input type="radio" id="bookingPeriod12" name="bookingPeriod" value="12"><span><i class="fa-regular fa-clock" aria-hidden="true"></i> 12 hours</span></label>
+                    <label><input type="radio" id="bookingPeriod24" name="bookingPeriod" value="24"><span><i class="fa-solid fa-calendar-day" aria-hidden="true"></i> 24 hours</span></label>
                   </div>
                   <p class="booking-period-note" id="bookingPeriodNote" hidden></p>
                   <details class="booking-duration-details" id="bookingDurationDetails">
-                    <summary id="bookingDurationSummary">Rental contract length <output id="bookingRentalDaysValue" for="bookingRentalDays">--</output></summary>
+                    <summary id="bookingDurationSummary">Custom rental length <output id="bookingRentalDaysValue" for="bookingRentalDays">--</output></summary>
                     <div class="booking-duration-content">
                       <input type="range" id="bookingRentalDays" min="4" max="15" step="1" value="4" aria-label="Rental contract length in days" aria-describedby="bookingPromoMessage">
                       <div class="booking-duration-scale" aria-hidden="true"><span>4 days</span><span>15 days</span></div>
@@ -285,36 +331,6 @@
                 </section>
               </div>
             </details>
-            <div class="form-grid span-2" id="bookingNameFields">
-              <div class="field booking-profile-field" id="bookingLastNameField">
-                <label for="bookingLastName">Last name</label>
-                <input type="text" id="bookingLastName" autocomplete="family-name" required>
-              </div>
-              <div class="field booking-profile-field" id="bookingFirstNameField">
-                <label for="bookingFirstName">First name</label>
-                <input type="text" id="bookingFirstName" autocomplete="given-name" required>
-              </div>
-              <div class="field booking-profile-field" id="bookingMiddleNameField">
-                <label for="bookingMiddleName">Middle name</label>
-                <input type="text" id="bookingMiddleName" autocomplete="additional-name">
-              </div>
-              <div class="field booking-profile-field" id="bookingSuffixField">
-                <label for="bookingSuffix">Suffix</label>
-                <input type="text" id="bookingSuffix" autocomplete="honorific-suffix" placeholder="Jr., Sr., III">
-              </div>
-              <div class="field">
-                <label for="bookingPhone">Phone number</label>
-                <input type="tel" id="bookingPhone" autocomplete="tel" inputmode="tel" minlength="7" maxlength="24" placeholder="+63 9XX XXX XXXX" required>
-              </div>
-              <div class="field booking-profile-field" id="bookingEmailField">
-                <label for="bookingEmail">Email <small class="field-note">optional</small></label>
-                <input type="email" id="bookingEmail" autocomplete="email">
-              </div>
-            </div>
-            <div class="field span-2">
-              <label for="bookingNotes">Notes <small class="field-note">optional</small></label>
-              <textarea id="bookingNotes" rows="3" placeholder="Extra driver, child seat, airport flight number, etc."></textarea>
-            </div>
           </div>
           <button type="submit" class="btn btn-primary btn-block" style="margin-top:1.25rem;">Send Inquiry</button>
           <div class="form-msg" id="formMsg"></div>
@@ -322,7 +338,7 @@
         <dialog class="reservation-recap" id="reservationRecap" aria-labelledby="reservationRecapTitle">
           <div class="reservation-recap-inner">
             <header class="recap-header">
-              <h2 id="reservationRecapTitle">Reservation recap</h2>
+              <h2 id="reservationRecapTitle">RESERVATION RECAP</h2>
               <button class="recap-close" id="recapCloseButton" type="button" aria-label="Close reservation recap" autofocus>
                 <i class="fa-solid fa-xmark" aria-hidden="true"></i>
               </button>
@@ -506,8 +522,8 @@
 <script src="../config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="../back/js/data.js?v=step8-mongodb-1"></script>
-<script src="../back/js/main.js?v=step8-mongodb-1"></script>
+<script src="../back/js/data.js?v=step9.3-booking-flow"></script>
+<script src="../back/js/main.js?v=step9.3-booking-flow"></script>
 <script src="../back/js/chatbot.js?v=step6-6"></script>
 </body>
 </html>

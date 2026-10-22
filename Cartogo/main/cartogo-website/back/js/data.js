@@ -137,14 +137,21 @@ const DB = {
     });
   },
   async addInquiry(inquiry) {
-    const { data, error } = await supa.auth.getSession();
-    if (error) throw error;
-    const accessToken = data.session?.access_token;
-    if (!accessToken) throw new Error("Sign in with Google before submitting your inquiry.");
+    let accessToken = null;
+    if (inquiry.googleAuthenticated) {
+      const { data, error } = await supa.auth.getSession();
+      if (error) throw error;
+      accessToken = data.session?.access_token;
+      if (!accessToken) throw new Error("Your Google sign-in expired. Sign in again or submit as a guest.");
+    }
     const payload = {
+      name: inquiry.name,
+      email: inquiry.email,
+      emailVerificationToken: inquiry.emailVerificationToken || null,
       carId: inquiry.carId,
       carName: inquiry.carName,
       phone: inquiry.phone,
+      rentalMode: inquiry.rentalMode,
       capacity: inquiry.capacity,
       pickupDate: inquiry.pickupDate,
       pickupTime: inquiry.pickupTime,
@@ -165,15 +172,28 @@ const DB = {
       notes: inquiry.notes,
       secondaryPhone: inquiry.secondaryPhone || null
     };
+    const requestHeaders = { "Content-Type": "application/json" };
+    if (accessToken) requestHeaders.Authorization = `Bearer ${accessToken}`;
     const result = await siteDataRequest("/api/inquiries", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`
-      },
+      headers: requestHeaders,
       body: JSON.stringify(payload)
     });
     return result.data;
+  },
+  async requestGuestEmailCode(email) {
+    return siteDataRequest("/api/email-verification/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email })
+    });
+  },
+  async verifyGuestEmailCode(challengeId, code) {
+    return siteDataRequest("/api/email-verification/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ challengeId, code })
+    });
   },
 
 

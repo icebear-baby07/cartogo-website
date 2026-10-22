@@ -1,5 +1,3 @@
-#NS-01
-
 1. I want you to make another sql file named "unit_data" with this query
 
 CREATE TABLE IF NOT EXISTS unit_data (
@@ -89,7 +87,19 @@ ANIMATIONS, DESIGN, AND LAYOUT:
 - Future access-control phase: retain basic user access; allow admins to manage the website through its panel; reserve overall Supabase data changes and approval (including the set PIN) for the owner/head and higher-ups. This three-tier role design is not part of the current migration.
 
 9 [UNIFNISHED] 
-9.1. When logging in, I cannot place a booking because of the necessary field that I allegedly haven't filled (which I tackled about this before that I ask to use the google account details of users to be put into the necessary fields)
-- let's try it like this: Do not remove the fields when the user logs in using their google account, but rather, have it unwritable but still displays the information that they have on a dark gray font instead of default black
+9.1. When logging in, I cannot place a booking because of the necessary field that I allegedly haven't filled (which I tackled about this before that I ask to use the google account details of users to be put into the necessary fields, it should be then unwritable under those circumstances)
 - Confirm the selection of time: the option of time should disappear once the user clicks the desired time
 - I coudn't send an inquiry because of this wall "We couldn't verify a rate for this destination. Choose a location within the supported Luzon pricing area"
+9.2. Fix the process wall (guest mode) / or tell me if this is a client error
+- When picking either 12/24 hours, a prompt "Choose a rental contract length using the 4-15 day slider"
+- When picking a custom date using the slider, The prompt says "Choose either the 12-hour or 24-hour rental period" appears.
+9.3. Fix the site operation using this logic
+- It should be either 12/24-hour rental of units or a custom day arrangement. Both shouldn't be mixed up.
+- I want the toast title "RESERVATION RECAP" and the x button to be sticky to the top of the toast.
+- (when in guest mode). Add  a subroutine to verify the email address input by the user.
+
+
+[UNIFNISHED] 9.4. Fix these parts
+- Give a completely different bug error when sending an email OTP goes 404
+- It shouldn't accept "0" value in the capacity field.
+- "We will only use this for urgent updates about your booking"

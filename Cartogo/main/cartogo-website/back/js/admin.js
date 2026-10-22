@@ -815,7 +815,7 @@ async function renderInquiriesTab() {
 
 function exportInquiryCsv(inquiry) {
   const row = [
-    ["Submitted", "Name", "Email", "Phone", "Secondary phone", "Unit", "Unit ID", "Capacity", "Pickup date", "Pickup time", "Return date", "Target location", "Target latitude", "Target longitude", "Nearest pickup", "Distance km", "Rate region", "Rate period hours", "Estimated hours", "Rental days", "Rate per period", "Discount percent", "Discount amount", "Quoted rate", "Status", "Notes"],
+    ["Submitted", "Name", "Email", "Phone", "Secondary phone", "Unit", "Unit ID", "Capacity", "Pickup date", "Pickup time", "Return date", "Target location", "Target latitude", "Target longitude", "Nearest pickup", "Distance km", "Rate region", "Rental mode", "Rate period hours", "Estimated hours", "Rental days", "Rate per period", "Discount percent", "Discount amount", "Quoted rate", "Status", "Notes"],
     [
       inquiry.created_at || inquiry.submittedAt || "",
       inquiry.name || "",
@@ -834,6 +834,7 @@ function exportInquiryCsv(inquiry) {
       inquiry.nearest_pickup_name || "",
       inquiry.nearest_pickup_distance_km ?? "",
       inquiry.rate_region || "",
+      inquiry.rental_mode || "",
       inquiry.rental_period_hours ?? "",
       inquiry.estimated_rental_hours ?? "",
       inquiry.rental_days ?? "",
@@ -880,7 +881,7 @@ function showInquiryDetails(id) {
       <div><dt>Target location</dt><dd>${text(inquiry.location || "—")}</dd></div>
       <div><dt>Target coordinates</dt><dd>${text(inquiry.target_latitude ?? "—")}, ${text(inquiry.target_longitude ?? "—")}</dd></div>
       <div><dt>Nearest pickup</dt><dd>${text(inquiry.nearest_pickup_name || "—")} · ${text(inquiry.nearest_pickup_distance_km ?? "—")} km</dd></div>
-      <div><dt>Quoted rate</dt><dd>${text(inquiry.rate_region || "—")} · ${text(inquiry.rental_days ?? "—")} days · ${text(inquiry.rental_period_hours ?? "—")} hrs · ${text(inquiry.quoted_rate ?? "—")}</dd></div>
+      <div><dt>Quoted rate</dt><dd>${text(inquiry.rate_region || "—")} · ${inquiry.rental_mode === "hourly" ? `${text(inquiry.rental_period_hours ?? "—")}-hour rental` : `${text(inquiry.rental_days ?? "—")} custom days`} · ${text(inquiry.quoted_rate ?? "—")}</dd></div>
       <div><dt>Promo discount</dt><dd>${text(inquiry.discount_percent ?? 0)}% · ${text(inquiry.discount_amount ?? 0)}</dd></div>
       <div class="inquiry-detail-wide"><dt>Notes</dt><dd class="preserve-lines">${text(inquiry.notes || "—")}</dd></div>
     </div>
@@ -897,11 +898,11 @@ function bindInquiryTools() {
 
   document.getElementById("exportCsvBtn").addEventListener("click", () => {
     if (INQUIRIES.length === 0) { toast("No inquiries to export yet."); return; }
-    const headers = ["Submitted", "Name", "Email", "Phone", "Unit", "Capacity", "Pickup Date", "Pickup Time", "Return Date", "Location", "Rate Region", "Rental Days", "Rate Period Hours", "Discount Percent", "Discount Amount", "Quoted Rate", "Status", "Notes"];
+    const headers = ["Submitted", "Name", "Email", "Phone", "Unit", "Capacity", "Pickup Date", "Pickup Time", "Return Date", "Location", "Rate Region", "Rental Mode", "Rental Days", "Rate Period Hours", "Discount Percent", "Discount Amount", "Quoted Rate", "Status", "Notes"];
     const rows = INQUIRIES.map(i => [
       i.submittedAt || i.created_at || "", i.name, i.email, i.phone, i.carName || i.car_name, i.capacity ?? "",
       i.pickupDate || i.pickup_date, i.pickup_time || i.pickupTime || "", i.returnDate || i.return_date, i.location || "", i.rate_region || "",
-      i.rental_days ?? "", i.rental_period_hours ?? "", i.discount_percent ?? "", i.discount_amount ?? "",
+      i.rental_mode || "", i.rental_days ?? "", i.rental_period_hours ?? "", i.discount_percent ?? "", i.discount_amount ?? "",
       i.quoted_rate ?? "", i.status, (i.notes || "").replace(/\n/g, " ")
     ]);
     const csv = [headers, ...rows]
