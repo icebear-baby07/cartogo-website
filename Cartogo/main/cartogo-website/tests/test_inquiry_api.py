@@ -21,6 +21,10 @@ class InquiryNormalizationTests(unittest.TestCase):
 		}
 		self.payload = {
 			"name": "Untrusted Name",
+			"firstName": "Alex",
+			"lastName": "Customer",
+			"middleName": "",
+			"suffix": "",
 			"email": "someone-else@example.com",
 			"phone": "+63 912 345 6789",
 			"carId": "4",
@@ -58,6 +62,19 @@ class InquiryNormalizationTests(unittest.TestCase):
 		self.assertEqual(result["verification_method"], "google_oauth")
 		self.assertEqual(result["car_id"], "4")
 
+	def test_guest_name_requires_first_and_last_but_middle_and_suffix_are_optional(self):
+		result = WebsiteHandler.normalize_public_inquiry(self.payload, None)
+		self.assertEqual(result["name"], "Customer, Alex")
+
+		self.payload["middleName"] = "Morgan"
+		self.payload["suffix"] = "Jr."
+		result = WebsiteHandler.normalize_public_inquiry(self.payload, None)
+		self.assertEqual(result["name"], "Customer, Alex Morgan, Jr.")
+
+		self.payload["firstName"] = ""
+		with self.assertRaisesRegex(ValueError, "First name"):
+			WebsiteHandler.normalize_public_inquiry(self.payload, None)
+
 	def test_rejects_invalid_coordinates(self):
 		self.payload["targetLatitude"] = 91
 
@@ -70,25 +87,34 @@ class InquiryNormalizationTests(unittest.TestCase):
 		with self.assertRaisesRegex(ValueError, "earlier"):
 			WebsiteHandler.normalize_public_inquiry(self.payload, self.user)
 
-	def test_google_inquiry_can_use_verified_email_without_phone(self):
+	def test_google_inquiry_requires_phone_number(self):
 		self.payload["phone"] = ""
 
-		result = WebsiteHandler.normalize_public_inquiry(self.payload, self.user)
+		with self.assertRaisesRegex(ValueError, "phone number with 7 to 15 digits"):
+			WebsiteHandler.normalize_public_inquiry(self.payload, self.user)
 
-		self.assertIsNone(result["phone"])
+		self.payload["phone"] = "+63 912 345 6789"
+		result = WebsiteHandler.normalize_public_inquiry(self.payload, self.user)
 		self.assertEqual(result["email"], "customer@example.com")
+		self.assertEqual(result["phone"], "+63 912 345 6789")
+
+	def test_rejects_zero_capacity(self):
+		self.payload["capacity"] = 0
+
+		with self.assertRaisesRegex(ValueError, "Capacity is outside the accepted range"):
+			WebsiteHandler.normalize_public_inquiry(self.payload, self.user)
 
 	def test_guest_inquiry_uses_submitted_identity_and_is_marked_unverified(self):
 		result = WebsiteHandler.normalize_public_inquiry(self.payload, None)
 
-		self.assertEqual(result["name"], "Untrusted Name")
+		self.assertEqual(result["name"], "Customer, Alex")
 		self.assertEqual(result["email"], "someone-else@example.com")
 		self.assertIsNone(result["user_id"])
 		self.assertEqual(result["verification_method"], "guest_form")
 
 	def test_guest_inquiry_requires_phone_and_validates_email(self):
 		self.payload["phone"] = ""
-		with self.assertRaisesRegex(ValueError, "Phone number"):
+		with self.assertRaisesRegex(ValueError, "phone number"):
 			WebsiteHandler.normalize_public_inquiry(self.payload, None)
 
 		self.payload["phone"] = "+63 912 345 6789"

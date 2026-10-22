@@ -520,10 +520,13 @@ function bindContactMap() {
 function populateCarSelect(preferredId = null) {
   const select = document.getElementById("bookingCar");
   const selectedId = preferredId || select.value;
-  const requestedCapacity = Number(document.getElementById("bookingCapacity").value);
-  const matchingCars = Number.isInteger(requestedCapacity) && requestedCapacity > 0
-    ? CARS.filter(car => Number(car.seats) >= requestedCapacity)
-    : CARS;
+  const capacityValue = document.getElementById("bookingCapacity").value.trim();
+  const requestedCapacity = Number(capacityValue);
+  const matchingCars = !capacityValue
+    ? CARS
+    : Number.isInteger(requestedCapacity) && requestedCapacity > 0
+      ? CARS.filter(car => Number(car.seats) >= requestedCapacity)
+      : [];
   select.innerHTML = `<option value="">Select a car</option>` +
     matchingCars.map(car => `<option value="${escapeHtml(car.id)}">${escapeHtml(car.name)}</option>`).join("");
   if (matchingCars.some(car => car.id === selectedId)) select.value = selectedId;
@@ -1258,6 +1261,7 @@ function bindBookingForm() {
     guestEmailCodeInput.value = "";
     setGuestVerificationStatus("");
     sendGuestEmailCodeButton.disabled = false;
+    sendGuestEmailCodeButton.hidden = false;
     sendGuestEmailCodeButton.textContent = "Send verification code";
   };
   form.addEventListener("reset", resetGuestEmailVerification);
@@ -1281,9 +1285,8 @@ function bindBookingForm() {
     guestEmailFieldNote.textContent = isGoogle ? "from Google" : "required for guests";
     guestVerification.hidden = isGoogle;
     if (isGoogle) resetGuestEmailVerification();
-    phoneInput.required = !isGoogle;
+    phoneInput.required = true;
     if (isGoogle && profilePhone) phoneInput.value = profilePhone;
-    phoneInput.readOnly = isGoogle && Boolean(profilePhone);
     if (isGoogle) {
       googleButton.innerHTML = '<i class="fa-brands fa-google" aria-hidden="true"></i> SIGN OUT';
       googleButton.setAttribute("aria-label", "Sign out of Google");
@@ -1354,6 +1357,10 @@ function bindBookingForm() {
     const enteredEmail = emailInput.value.trim();
     return {
       name,
+      firstName: hasVerifiedGoogleAccount(currentUser) ? "" : document.getElementById("bookingFirstName").value.trim(),
+      lastName: hasVerifiedGoogleAccount(currentUser) ? "" : document.getElementById("bookingLastName").value.trim(),
+      middleName: hasVerifiedGoogleAccount(currentUser) ? "" : document.getElementById("bookingMiddleName").value.trim(),
+      suffix: hasVerifiedGoogleAccount(currentUser) ? "" : document.getElementById("bookingSuffix").value.trim(),
       googleAuthenticated: hasVerifiedGoogleAccount(currentUser),
       emailVerificationToken: guestEmailVerificationToken,
       email: hasVerifiedGoogleAccount(currentUser)
@@ -1554,6 +1561,7 @@ function bindBookingForm() {
       guestEmailVerifiedAddress = guestEmailChallengeAddress;
       guestEmailChallengeId = null;
       guestEmailCodeRow.hidden = true;
+      sendGuestEmailCodeButton.hidden = true;
       guestEmailCodeInput.value = "";
       setGuestVerificationStatus("Email verified. You can submit your inquiry.", "verified");
     } catch (error) {
@@ -1677,6 +1685,13 @@ function bindBookingForm() {
     const firstName = document.getElementById("bookingFirstName").value.trim();
     const isGoogle = hasVerifiedGoogleAccount(currentUser);
 
+    const capacityInput = document.getElementById("bookingCapacity");
+    if (capacityInput.value && (!Number.isInteger(Number(capacityInput.value)) || Number(capacityInput.value) < 1)) {
+      msg.className = "form-msg error";
+      msg.textContent = "Capacity must be a whole number greater than zero.";
+      capacityInput.focus();
+      return;
+    }
     if ((!isGoogle && (!lastName || !firstName)) || (isGoogle && !inquiry.name) || !inquiry.carId || !inquiry.pickupDate || !inquiry.pickupTime) {
       msg.className = "form-msg error";
       msg.textContent = isGoogle && !inquiry.name
@@ -1685,8 +1700,7 @@ function bindBookingForm() {
       return;
     }
     const phoneDigits = inquiry.phone.replace(/\D/g, "");
-    if ((phoneDigits.length > 0 && (phoneDigits.length < 7 || phoneDigits.length > 15))
-      || (!isGoogle && phoneDigits.length === 0)) {
+    if (phoneDigits.length < 7 || phoneDigits.length > 15) {
       msg.className = "form-msg error";
       msg.textContent = "Enter a phone number with 7 to 15 digits, including the country code if applicable.";
       document.getElementById("bookingPhone").focus();
@@ -1747,11 +1761,6 @@ function bindBookingForm() {
     if (new Date(inquiry.returnDate) < new Date(inquiry.pickupDate)) {
       msg.className = "form-msg error";
       msg.textContent = "Return date can't be earlier than the pickup date.";
-      return;
-    }
-    if (inquiry.capacity !== null && (!Number.isInteger(inquiry.capacity) || inquiry.capacity < 1)) {
-      msg.className = "form-msg error";
-      msg.textContent = "Capacity must be a whole number greater than zero.";
       return;
     }
     if (!BOOKING_RATE_QUOTE) {

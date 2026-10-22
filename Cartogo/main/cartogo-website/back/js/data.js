@@ -17,8 +17,22 @@ async function siteDataRequest(path, options = {}) {
     cache: "no-store",
     ...options
   });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error || "Could not load site data.");
+  const responseText = await response.text();
+  let result;
+  try {
+    result = responseText ? JSON.parse(responseText) : {};
+  } catch {
+    const error = new Error(response.status === 404
+      ? `Requested endpoint not found (404): ${path}`
+      : "The server returned an invalid response.");
+    error.status = response.status;
+    throw error;
+  }
+  if (!response.ok) {
+    const error = new Error(result.error || "Could not load site data.");
+    error.status = response.status;
+    throw error;
+  }
   return result;
 }
 
@@ -146,6 +160,10 @@ const DB = {
     }
     const payload = {
       name: inquiry.name,
+      firstName: inquiry.firstName,
+      lastName: inquiry.lastName,
+      middleName: inquiry.middleName,
+      suffix: inquiry.suffix,
       email: inquiry.email,
       emailVerificationToken: inquiry.emailVerificationToken || null,
       carId: inquiry.carId,
@@ -182,11 +200,18 @@ const DB = {
     return result.data;
   },
   async requestGuestEmailCode(email) {
-    return siteDataRequest("/api/email-verification/request", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email })
-    });
+    try {
+      return await siteDataRequest("/api/email-verification/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email })
+      });
+    } catch (error) {
+      if (error.status === 404) {
+        throw new Error("Email verification service not found (404). Restart or update the website server, then refresh the page.");
+      }
+      throw error;
+    }
   },
   async verifyGuestEmailCode(challengeId, code) {
     return siteDataRequest("/api/email-verification/verify", {

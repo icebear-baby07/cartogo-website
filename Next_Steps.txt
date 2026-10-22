@@ -86,7 +86,7 @@ ANIMATIONS, DESIGN, AND LAYOUT:
 - This prepares public-site data for management through the admin panel without exposing MongoDB credentials to browsers.
 - Future access-control phase: retain basic user access; allow admins to manage the website through its panel; reserve overall Supabase data changes and approval (including the set PIN) for the owner/head and higher-ups. This three-tier role design is not part of the current migration.
 
-9 [UNIFNISHED] 
+9 Client Side & Main website interface.
 9.1. When logging in, I cannot place a booking because of the necessary field that I allegedly haven't filled (which I tackled about this before that I ask to use the google account details of users to be put into the necessary fields, it should be then unwritable under those circumstances)
 - Confirm the selection of time: the option of time should disappear once the user clicks the desired time
 - I coudn't send an inquiry because of this wall "We couldn't verify a rate for this destination. Choose a location within the supported Luzon pricing area"
@@ -97,9 +97,12 @@ ANIMATIONS, DESIGN, AND LAYOUT:
 - It should be either 12/24-hour rental of units or a custom day arrangement. Both shouldn't be mixed up.
 - I want the toast title "RESERVATION RECAP" and the x button to be sticky to the top of the toast.
 - (when in guest mode). Add  a subroutine to verify the email address input by the user.
-
-
-[UNIFNISHED] 9.4. Fix these parts
+9.4. Fix these parts and add some from this list
 - Give a completely different bug error when sending an email OTP goes 404
 - It shouldn't accept "0" value in the capacity field.
-- "We will only use this for urgent updates about your booking"
+- Require the users to add a phone number now with a hint using an 'i' icon with text "We will only use this for urgent updates about your booking" when hovered. They shouldn't be able to submit a query without placing a phone number. Don't add verification steps for now
+- Add to the readme this subject: Couldn't add a successful phone number verification right now due to lack of free-provider to sandbox. highlight it to be a "soon-to-be-added" feature.
+- Optionalized the Middle name and suffix, but provide a required "process wall" to prevent successful inquiries with lack of the necessary fields.
+- When an email is verified, remove the "RESEND CODE" from the display, then place the "Email verified. You can submit your inquiry" to its place.
+- Blur the background when "RESERVATION RECAP" toast appears, then remove the blur once complete or cancelled.
+- Fix the UI in smaller devices interfaces.

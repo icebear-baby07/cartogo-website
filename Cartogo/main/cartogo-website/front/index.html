@@ -13,7 +13,7 @@
 <!-- Styles -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="css/style.css?v=step7-2">
+<link rel="stylesheet" href="css/style.css?v=step9.4.1-booking-flow">
 </head>
 <body>
 
@@ -227,7 +227,12 @@
               <input type="text" id="bookingSuffix" form="bookingForm" autocomplete="honorific-suffix" placeholder="Jr., Sr., III">
             </div>
             <div class="field">
-              <label for="bookingPhone">Phone number <small class="field-note">guest required</small></label>
+              <label for="bookingPhone">Phone number <small class="field-note">required</small>
+                <span class="booking-phone-hint" tabindex="0" aria-label="Why we need your phone number" aria-describedby="bookingPhoneHint">
+                  <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+                  <span class="booking-phone-tooltip" id="bookingPhoneHint" role="tooltip">We will only use this for urgent updates about your booking</span>
+                </span>
+              </label>
               <input type="tel" id="bookingPhone" form="bookingForm" autocomplete="tel" inputmode="tel" minlength="7" maxlength="24" placeholder="+63 9XX XXX XXXX" required>
             </div>
             <div class="field booking-profile-field" id="bookingEmailField">
@@ -236,6 +241,7 @@
             </div>
             <div class="guest-email-verification span-2" id="guestEmailVerification" hidden>
               <button type="button" class="btn btn-ghost btn-sm" id="sendGuestEmailCode">Send verification code</button>
+              <p id="guestEmailVerificationStatus" role="status" aria-live="polite"></p>
               <div class="guest-email-code-row" id="guestEmailCodeRow" hidden>
                 <label for="guestEmailCode">Email verification code</label>
                 <div class="guest-email-code-controls">
@@ -243,7 +249,6 @@
                   <button type="button" class="btn btn-dark btn-sm" id="verifyGuestEmailCode">Verify</button>
                 </div>
               </div>
-              <p id="guestEmailVerificationStatus" role="status" aria-live="polite"></p>
             </div>
             <div class="field span-2 booking-notes-field">
               <label for="bookingNotes">Notes <small class="field-note">optional</small></label>
@@ -522,8 +527,8 @@
 <script src="../config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="../back/js/data.js?v=step9.3-booking-flow"></script>
-<script src="../back/js/main.js?v=step9.3-booking-flow"></script>
+<script src="../back/js/data.js?v=step9.4.1-booking-flow"></script>
+<script src="../back/js/main.js?v=step9.4.1-booking-flow"></script>
 <script src="../back/js/chatbot.js?v=step6-6"></script>
 </body>
 </html>

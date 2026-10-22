@@ -423,14 +423,22 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 				raise ValueError("Your verified Google profile must include a name up to 160 characters.")
 			email = str(user["email"]).strip().lower()
 		else:
-			name = text_value("name", "Name", 160)
+			first_name = text_value("firstName", "First name", 80)
+			last_name = text_value("lastName", "Last name", 80)
+			middle_name = text_value("middleName", "Middle name", 80, required=False)
+			name_suffix = text_value("suffix", "Suffix", 24, required=False)
+			name = f"{last_name}, {' '.join(part for part in (first_name, middle_name) if part)}"
+			if name_suffix:
+				name += f", {name_suffix}"
+			if len(name) > 160:
+				raise ValueError("Name must be no longer than 160 characters.")
 			email = text_value("email", "Email", 254).lower()
 			if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
 				raise ValueError("Enter a valid email address.")
 
-		phone = text_value("phone", "Phone number", 24, required=not user)
+		phone = text_value("phone", "Phone number", 24, required=False)
 		phone_digits = re.sub(r"\D", "", phone or "")
-		if (phone and not 7 <= len(phone_digits) <= 15) or (not user and not phone):
+		if not phone or not 7 <= len(phone_digits) <= 15:
 			raise ValueError("Enter a phone number with 7 to 15 digits.")
 		car_id = text_value("carId", "Vehicle ID", 80)
 		car_name = text_value("carName", "Vehicle name", 160)
