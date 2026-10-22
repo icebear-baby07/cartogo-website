@@ -13,7 +13,7 @@
 <!-- Styles -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="css/style.css?v=step9.5-email-design">
+<link rel="stylesheet" href="css/style.css?v=step10.12-how-slideshow-controls">
 </head>
 <body>
 
@@ -129,14 +129,19 @@
   <section class="section bg-paper" id="how">
     <div class="wrap">
       <div class="section-head center">
-        <p class="eyebrow">Four steps, no surprises</p>
+        <p class="eyebrow">Simple steps, no surprises</p>
         <h2>How renting with us works</h2>
       </div>
-      <div class="markers" id="markersGrid" aria-busy="true" aria-label="Loading rental steps">
-        <div class="marker skeleton-marker" aria-hidden="true"><span class="skeleton skeleton-step-number"></span><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span></div>
-        <div class="marker skeleton-marker" aria-hidden="true"><span class="skeleton skeleton-step-number"></span><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span></div>
-        <div class="marker skeleton-marker" aria-hidden="true"><span class="skeleton skeleton-step-number"></span><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span></div>
-        <div class="marker skeleton-marker" aria-hidden="true"><span class="skeleton skeleton-step-number"></span><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span></div>
+      <div class="how-slideshow" id="markersGrid" role="region" aria-busy="true" aria-roledescription="carousel" aria-label="Rental procedure">
+        <div class="how-slideshow-stage" aria-hidden="true">
+          <div class="marker skeleton-marker"><span class="skeleton skeleton-step-number"></span><span class="skeleton skeleton-line line-wide"></span><span class="skeleton skeleton-line"></span><span class="skeleton skeleton-line line-medium"></span></div>
+        </div>
+        <div class="how-slideshow-controls">
+          <button class="how-slide-control" type="button" data-how-action="previous" aria-label="Previous step" disabled><i class="fa-solid fa-arrow-left" aria-hidden="true"></i></button>
+          <div class="how-slide-indicators" role="group" aria-label="Choose a rental procedure step"></div>
+          <button class="how-slide-control" type="button" data-how-action="next" aria-label="Next step" disabled><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
+        </div>
+        <span class="sr-only" id="howSlideAnnouncement" aria-live="polite"></span>
       </div>
     </div>
   </section>
@@ -528,7 +533,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="../back/js/data.js?v=step9.5-email-design"></script>
-<script src="../back/js/main.js?v=step9.5-email-design"></script>
+<script src="../back/js/main.js?v=step10.12-how-slideshow-controls"></script>
 <script src="../back/js/chatbot.js?v=step6-6"></script>
 </body>
 </html>

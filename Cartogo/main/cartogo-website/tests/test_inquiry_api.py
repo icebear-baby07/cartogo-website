@@ -8,10 +8,12 @@ from server import (
 	GUEST_EMAIL_CHALLENGES,
 	GUEST_EMAIL_REQUESTS,
 	GUEST_EMAIL_VERIFICATIONS,
+	UNIT_APPROVALS,
 	WebsiteHandler,
 	build_branded_email,
 	send_branded_email,
 	send_inquiry_confirmation,
+	send_inquiry_rejection,
 )
 
 
@@ -439,6 +441,271 @@ class BrandedEmailTests(unittest.TestCase):
 		)
 		self.assertNotIn(token, GUEST_EMAIL_VERIFICATIONS)
 		handler.log_message.assert_called_once()
+
+
+class InquiryRejectionTests(unittest.TestCase):
+	def test_rejection_email_uses_shared_branded_template_and_escapes_reason(self):
+		inquiry = {
+			"email": "customer@example.com",
+			"name": "Alex",
+			"rejection_reason": "Vehicle <unavailable> & scheduling conflict.",
+		}
+		with patch("server.send_branded_email") as send_email:
+			send_inquiry_rejection(inquiry)
+
+		args = send_email.call_args.args
+		self.assertEqual(args[0], "customer@example.com")
+		self.assertIn("Update about your reservation inquiry", args[1])
+		self.assertIn("Vehicle &lt;unavailable&gt; &amp; scheduling conflict.", args[5])
+		self.assertIn("Vehicle <unavailable> & scheduling conflict.", args[6])
+		self.assertIn("Alex", args[3] + args[4])
+
+	def test_rejection_email_requires_an_email_address(self):
+		with self.assertRaisesRegex(ValueError, "valid email address"):
+			send_inquiry_rejection({"rejection_reason": "Unable to accommodate."})
+
+	def make_admin_handler(self, payload):
+		handler = object.__new__(WebsiteHandler)
+		handler.headers = {"Authorization": "Bearer admin-token"}
+		handler.get_authorized_admin = Mock(return_value={"id": "admin-1"})
+		handler.read_json = Mock(return_value=payload)
+		handler.send_json = Mock()
+		handler.log_message = Mock()
+		return handler
+
+	def test_reject_action_stores_reason_and_reports_email_delivery(self):
+		rejected = {
+			"id": 42,
+			"email": "customer@example.com",
+			"status": "rejected",
+			"rejection_reason": "Vehicle unavailable.",
+			"rejection_email_sent": False,
+		}
+		store = Mock()
+		store.reject_inquiry.return_value = rejected.copy()
+		store.mark_inquiry_rejection_email_sent.return_value = {**rejected, "rejection_email_sent": True}
+		handler = self.make_admin_handler({"action": "reject", "id": 42, "reason": "Vehicle unavailable."})
+		with patch("server.get_mongo_store", return_value=store), \
+			patch("server.send_inquiry_rejection"):
+			handler.manage_inquiries()
+
+		store.reject_inquiry.assert_called_once_with(42, "Vehicle unavailable.")
+		handler.send_json.assert_called_once_with(
+			200,
+			{"data": {**rejected, "rejection_email_sent": True}, "emailSent": True},
+		)
+
+	def test_reject_action_keeps_status_and_reports_failed_email_delivery(self):
+		rejected = {
+			"id": 42,
+			"email": "customer@example.com",
+			"status": "rejected",
+			"rejection_reason": "Vehicle unavailable.",
+			"rejection_email_sent": False,
+		}
+		store = Mock()
+		store.reject_inquiry.return_value = rejected.copy()
+		handler = self.make_admin_handler({"action": "reject", "id": 42, "reason": "Vehicle unavailable."})
+		with patch("server.get_mongo_store", return_value=store), \
+			patch("server.send_inquiry_rejection", side_effect=RuntimeError("SMTP unavailable")):
+			handler.manage_inquiries()
+
+		store.mark_inquiry_rejection_email_sent.assert_not_called()
+		handler.send_json.assert_called_once_with(
+			200,
+			{"data": rejected, "emailSent": False},
+		)
+		handler.log_message.assert_called_once()
+
+	def test_reject_action_enforces_250_word_limit(self):
+		store = Mock()
+		handler = self.make_admin_handler({
+			"action": "reject",
+			"id": 42,
+			"reason": " ".join(["reason"] * 251),
+		})
+		with patch("server.get_mongo_store", return_value=store):
+			handler.manage_inquiries()
+
+		store.reject_inquiry.assert_not_called()
+		handler.send_json.assert_called_once_with(
+			400,
+			{"error": "The rejection explanation must be no more than 250 words."},
+		)
+
+	def test_reject_action_accepts_exactly_250_words(self):
+		rejected = {
+			"id": 42,
+			"email": "customer@example.com",
+			"status": "rejected",
+			"rejection_reason": " ".join(["reason"] * 250),
+			"rejection_email_sent": False,
+		}
+		store = Mock()
+		store.reject_inquiry.return_value = rejected.copy()
+		store.mark_inquiry_rejection_email_sent.return_value = {**rejected, "rejection_email_sent": True}
+		handler = self.make_admin_handler({"action": "reject", "id": 42, "reason": rejected["rejection_reason"]})
+		with patch("server.get_mongo_store", return_value=store), \
+			patch("server.send_inquiry_rejection"):
+			handler.manage_inquiries()
+
+		store.reject_inquiry.assert_called_once_with(42, rejected["rejection_reason"])
+		handler.send_json.assert_called_once_with(
+			200,
+			{"data": {**rejected, "rejection_email_sent": True}, "emailSent": True},
+		)
+
+	def test_retry_action_resends_unsent_rejection_email(self):
+		rejected = {
+			"id": 42,
+			"email": "customer@example.com",
+			"status": "rejected",
+			"rejection_reason": "Vehicle unavailable.",
+			"rejection_email_sent": False,
+		}
+		store = Mock()
+		store.get_inquiry.return_value = rejected.copy()
+		store.mark_inquiry_rejection_email_sent.return_value = {**rejected, "rejection_email_sent": True}
+		handler = self.make_admin_handler({"action": "resend_rejection", "id": 42})
+		with patch("server.get_mongo_store", return_value=store), \
+			patch("server.send_inquiry_rejection") as send_email:
+			handler.manage_inquiries()
+
+		send_email.assert_called_once()
+		self.assertEqual(send_email.call_args.args[0]["id"], rejected["id"])
+		self.assertEqual(send_email.call_args.args[0]["rejection_reason"], rejected["rejection_reason"])
+		store.mark_inquiry_rejection_email_sent.assert_called_once_with(42)
+		handler.send_json.assert_called_once_with(
+			200,
+			{"data": {**rejected, "rejection_email_sent": True}, "emailSent": True},
+		)
+
+	def test_status_update_does_not_allow_pending_or_rejected_values(self):
+		for status in ("pending_review", "rejected"):
+			with self.subTest(status=status):
+				store = Mock()
+				handler = self.make_admin_handler({"action": "update", "id": 42, "status": status})
+				with patch("server.get_mongo_store", return_value=store):
+					handler.manage_inquiries()
+				store.update_inquiry_status.assert_not_called()
+				handler.send_json.assert_called_once_with(400, {"error": "Choose a valid inquiry status."})
+
+
+class OwnerApprovalTests(unittest.TestCase):
+	def make_handler(self, payload):
+		handler = object.__new__(WebsiteHandler)
+		handler.read_json = Mock(return_value=payload)
+		handler.send_json = Mock()
+		handler.log_message = Mock()
+		handler.get_authorized_admin = Mock(return_value={
+			"id": "admin-1",
+			"email": "staff@example.com",
+			"access_token": "admin-token",
+		})
+		handler.get_cartogo_owner_email = Mock(return_value="owner@example.com")
+		return handler
+
+	def test_direct_site_content_write_is_disabled(self):
+		handler = object.__new__(WebsiteHandler)
+		handler.send_json = Mock()
+
+		handler.update_site_content()
+
+		handler.send_json.assert_called_once_with(403, {
+			"error": "Owner approval is required. Request a PIN before changing site content.",
+		})
+
+	def test_owner_pin_is_sent_to_database_designated_owner(self):
+		handler = self.make_handler({
+			"resource": "site_content",
+			"action": "update",
+			"data": {"settings": {"companyName": "carTOGO"}},
+		})
+		with patch.dict("os.environ", {
+			"SMTP_USER": "mailer@example.com",
+			"SMTP_APP_PASSWORD": "test-password",
+		}), patch.dict("server.OTP_REQUESTS", {}, clear=True), \
+			patch.dict("server.UNIT_APPROVALS", {}, clear=True), \
+			patch("server.secrets.token_urlsafe", return_value="owner-change-challenge"), \
+			patch("server.secrets.randbelow", return_value=1234), \
+			patch("server.send_branded_email") as send_email:
+			handler.request_owner_change()
+			challenge = UNIT_APPROVALS["owner-change-challenge"].copy()
+
+		send_email.assert_called_once()
+		self.assertEqual(send_email.call_args.args[0], "owner@example.com")
+		self.assertEqual(send_email.call_args.args[1], "carTOGO.mnl | Owner PIN: Update site settings and page content")
+		handler.send_json.assert_called_once_with(200, {
+			"challengeId": "owner-change-challenge",
+			"ownerEmail": "owner@example.com",
+			"expiresIn": 300,
+		})
+		self.assertEqual(challenge["requester_email"], "staff@example.com")
+		self.assertEqual(challenge["resource"], "site_content")
+		self.assertEqual(challenge["data"], {"settings": {"companyName": "carTOGO"}})
+
+	def test_valid_owner_pin_applies_only_its_bound_change(self):
+		challenge_id = "owner-change-challenge"
+		code = "012345"
+		challenge = {
+			"resource": "site_content",
+			"owner_email": "owner@example.com",
+			"action": "update",
+			"data": {"labels": {"about": {"title": "Updated"}}},
+			"code_hash": hashlib.sha256(f"{challenge_id}:{code}".encode()).hexdigest(),
+			"expires_at": time.time() + 60,
+			"attempts": 0,
+		}
+		handler = self.make_handler({"challengeId": challenge_id, "code": code})
+		handler.execute_owner_change = Mock(return_value={"labels": {"about": {"title": "Updated"}}})
+		with patch.dict("server.UNIT_APPROVALS", {challenge_id: challenge}, clear=True):
+			handler.approve_owner_change()
+
+		handler.execute_owner_change.assert_called_once_with(challenge)
+		handler.send_json.assert_called_once_with(
+			200,
+			{
+				"data": {"labels": {"about": {"title": "Updated"}}},
+				"resource": "site_content",
+			},
+		)
+		self.assertNotIn(challenge_id, UNIT_APPROVALS)
+
+	def test_owner_change_after_owner_rotation_is_rejected(self):
+		challenge_id = "old-owner-challenge"
+		code = "123456"
+		challenge = {
+			"resource": "site_content",
+			"owner_email": "former-owner@example.com",
+			"action": "update",
+			"data": {"settings": {"companyName": "Should not apply"}},
+			"code_hash": hashlib.sha256(f"{challenge_id}:{code}".encode()).hexdigest(),
+			"expires_at": time.time() + 60,
+			"attempts": 0,
+		}
+		handler = self.make_handler({"challengeId": challenge_id, "code": code})
+		handler.execute_owner_change = Mock()
+		with patch.dict("server.UNIT_APPROVALS", {challenge_id: challenge}, clear=True):
+			handler.approve_owner_change()
+
+		handler.execute_owner_change.assert_not_called()
+		handler.send_json.assert_called_once_with(
+			403,
+			{"error": "The owner account changed. Request a new approval PIN."},
+		)
+
+	def test_approved_chat_delete_reports_when_session_no_longer_exists(self):
+		handler = object.__new__(WebsiteHandler)
+		response = MagicMock()
+		response.__enter__.return_value = response
+		response.read.return_value = b"[]"
+
+		with patch.dict("os.environ", {
+			"SUPABASE_URL": "https://example.supabase.co",
+			"SUPABASE_SERVICE_ROLE_KEY": "service-role-key",
+		}), patch("server.urlopen", return_value=response):
+			with self.assertRaisesRegex(RuntimeError, "session no longer exists"):
+				handler.delete_chat_session_with_service_role("session-1")
 
 
 if __name__ == "__main__":

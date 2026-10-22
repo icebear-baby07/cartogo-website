@@ -11,7 +11,7 @@
 
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-<link rel="stylesheet" href="css/admin.css?v=site-assets-2">
+<link rel="stylesheet" href="css/admin.css?v=step10.10-inquiry-enhancements">
 </head>
 <body class="admin-body">
 
@@ -154,15 +154,10 @@
           <button class="btn btn-dark btn-sm" id="exportCsvBtn" type="button" title="Export inquiries as CSV" aria-label="Export inquiries as CSV"><i class="fa-solid fa-file-csv" aria-hidden="true"></i><span class="admin-action-label">Export CSV</span></button>
         </div>
       </div>
-      <div class="admin-card">
-        <div class="admin-table-scroll" style="overflow-x:auto;">
-          <table class="admin-table">
-            <thead>
-              <tr><th>Submitted</th><th>Client</th><th>Car</th><th>Dates</th><th>Pickup</th><th>Status</th><th></th></tr>
-            </thead>
-            <tbody id="inquiriesTableBody"></tbody>
-          </table>
-        </div>
+      <div class="inquiry-metrics" id="inquiryMetrics" aria-label="Inquiry totals by status"></div>
+      <p class="inquiry-filter-hint">Select one or more categories to filter. Clear all selections to show every inquiry.</p>
+      <div id="inquiriesContent" aria-live="polite">
+        <div class="empty-state">Loading inquiries from the database…</div>
       </div>
     </section>
 
@@ -232,22 +227,53 @@
       <div class="inquiry-details" id="inquiryDetails"></div>
     </div>
   </div>
+  <div class="admin-modal inquiry-rejection-modal" id="inquiryRejectionModal" hidden role="dialog" aria-modal="true" aria-labelledby="inquiryRejectionTitle" aria-describedby="inquiryRejectionDescription">
+    <div class="admin-modal-panel inquiry-rejection-panel">
+      <header class="admin-modal-header">
+        <div>
+          <p class="eyebrow">Customer notification</p>
+          <h2 id="inquiryRejectionTitle">Reject this inquiry?</h2>
+          <p class="admin-modal-meta" id="inquiryRejectionDescription"></p>
+        </div>
+        <button class="icon-btn" id="closeInquiryRejection" type="button" title="Cancel rejection" aria-label="Cancel rejection"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+      </header>
+      <form id="inquiryRejectionForm" class="inquiry-rejection-form">
+        <label class="label-field" for="inquiryRejectionReason">Reason for rejection
+          <textarea id="inquiryRejectionReason" rows="4" maxlength="3000" required aria-describedby="inquiryRejectionWordCount" placeholder="Briefly explain why this request can't be accommodated."></textarea>
+        </label>
+        <p class="inquiry-rejection-guidance">This explanation will be included in the email sent to the customer. Keep it professional and within 250 words.</p>
+        <p class="inquiry-rejection-word-count" id="inquiryRejectionWordCount" aria-live="polite">0 / 250 words</p>
+        <section class="inquiry-rejection-preview" aria-labelledby="inquiryRejectionPreviewTitle">
+          <h3 id="inquiryRejectionPreviewTitle">Email preview</h3>
+          <p id="inquiryRejectionPreviewGreeting">Dear customer,</p>
+          <p id="inquiryRejectionPreviewBody">We’re sorry, but we’re unable to proceed with your reservation inquiry.</p>
+          <p><strong>Reason:</strong> <span id="inquiryRejectionPreviewReason">Your explanation will appear here.</span></p>
+          <p>Thank you for considering carTOGO.mnl. Please contact our team if you have questions or would like help with another option.</p>
+        </section>
+        <p class="inquiry-rejection-error" id="inquiryRejectionError" role="alert" hidden></p>
+        <div class="inquiry-rejection-actions">
+          <button class="btn btn-ghost" id="cancelInquiryRejection" type="button">Cancel</button>
+          <button class="btn btn-primary inquiry-rejection-proceed" id="proceedInquiryRejection" type="submit"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Reject and email customer</button>
+        </div>
+      </form>
+    </div>
+  </div>
   <div class="admin-modal unit-approval-modal" id="unitApprovalModal" hidden role="dialog" aria-modal="true" aria-labelledby="unitApprovalTitle" aria-describedby="unitApprovalDescription">
     <div class="admin-modal-panel unit-approval-panel">
       <header class="admin-modal-header">
         <div>
-          <p class="eyebrow">Email approval</p>
-          <h2 id="unitApprovalTitle" tabindex="-1">Enter approval code</h2>
+          <p class="eyebrow">Owner email approval</p>
+          <h2 id="unitApprovalTitle" tabindex="-1">Enter owner PIN</h2>
           <p class="admin-modal-meta" id="unitApprovalDescription"></p>
         </div>
         <button class="icon-btn" id="closeUnitApproval" type="button" title="Cancel approval" aria-label="Cancel approval"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
       </header>
       <div class="unit-approval-loading" id="unitApprovalLoading" role="status" aria-live="polite" hidden>
         <span class="unit-approval-spinner" aria-hidden="true"></span>
-        <p id="unitApprovalLoadingText">Sending approval code...</p>
+        <p id="unitApprovalLoadingText">Sending owner PIN...</p>
       </div>
       <form id="unitApprovalForm" class="unit-approval-form">
-        <label class="label-field" for="unitApprovalCode">Six-digit code
+        <label class="label-field" for="unitApprovalCode">Six-digit owner PIN
           <input id="unitApprovalCode" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" required>
         </label>
         <p class="unit-approval-error" id="unitApprovalError" role="alert" hidden></p>
@@ -263,7 +289,7 @@
 <div class="auth-toast" id="adminToast" role="status" aria-live="polite"></div>
 <script src="../config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="../back/js/data.js?v=step8-mongodb-1"></script>
-<script src="../back/js/admin.js?v=step8-mongodb-1"></script>
+<script src="../back/js/data.js?v=step11-owner-approval"></script>
+<script src="../back/js/admin.js?v=step11-owner-approval"></script>
 </body>
 </html>

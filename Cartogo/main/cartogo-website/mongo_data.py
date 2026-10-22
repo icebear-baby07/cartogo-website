@@ -93,6 +93,39 @@ class MongoDataStore:
 			raise RuntimeError("That inquiry no longer exists. Refresh the list and try again.")
 		return self._public_document(updated)
 
+	def get_inquiry(self, inquiry_id):
+		document = self.inquiries.find_one({"_id": inquiry_id})
+		return self._public_document(document) if document else None
+
+	def reject_inquiry(self, inquiry_id, reason):
+		updated = self.inquiries.find_one_and_update(
+			{"_id": inquiry_id, "status": {"$ne": "rejected"}},
+			{"$set": {
+				"status": "rejected",
+				"rejection_reason": reason,
+				"rejection_email_sent": False,
+			}},
+			return_document=ReturnDocument.AFTER,
+		)
+		if updated is None:
+			if self.inquiries.find_one({"_id": inquiry_id}) is None:
+				raise RuntimeError("That inquiry no longer exists. Refresh the list and try again.")
+			raise RuntimeError("This inquiry has already been rejected.")
+		return self._public_document(updated)
+
+	def mark_inquiry_rejection_email_sent(self, inquiry_id):
+		updated = self.inquiries.find_one_and_update(
+			{"_id": inquiry_id, "status": "rejected"},
+			{"$set": {
+				"rejection_email_sent": True,
+				"rejection_email_sent_at": datetime.now(timezone.utc).isoformat(),
+			}},
+			return_document=ReturnDocument.AFTER,
+		)
+		if updated is None:
+			raise RuntimeError("The rejected inquiry no longer exists. Refresh the list and try again.")
+		return self._public_document(updated)
+
 	def delete_inquiry(self, inquiry_id):
 		result = self.inquiries.delete_one({"_id": inquiry_id})
 		if result.deleted_count == 0:

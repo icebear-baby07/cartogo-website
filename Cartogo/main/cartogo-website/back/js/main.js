@@ -29,6 +29,15 @@ let BOOKING_DURATION_SELECTED = false;
 let BOOKING_GEOCODE_CONTROLLER = null;
 let BOOKING_LAST_GEOCODE_AT = 0;
 const BOOKING_GEOCODE_CACHE = new Map();
+let HOW_SLIDESHOW_INDEX = 0;
+let HOW_SLIDESHOW_TIMER = null;
+let HOW_SLIDESHOW_HOVERED = false;
+let HOW_SLIDESHOW_FOCUSED = false;
+const HOW_SLIDESHOW_INTERVAL = 7000;
+const HOW_IT_WORKS_PROCEDURE = {
+  title: "Return the vehicle",
+  description: "Bring the car back at the agreed time and place. Contact our team in advance if you need to request a change."
+};
 
 document.addEventListener("DOMContentLoaded", async () => {
   try {
@@ -199,14 +208,95 @@ function renderFleet() {
 /* ---------- How it works ---------- */
 function renderHowItWorks() {
   const wrap = document.getElementById("markersGrid");
-  wrap.innerHTML = LABELS.howItWorks.map((step, i) => `
-    <div class="marker">
-      <div class="num">0${i + 1}</div>
+  const steps = [...(Array.isArray(LABELS.howItWorks) ? LABELS.howItWorks : [])];
+  if (!steps.some(step => step.title?.trim().toLowerCase() === HOW_IT_WORKS_PROCEDURE.title.toLowerCase())) {
+    steps.push(HOW_IT_WORKS_PROCEDURE);
+  }
+  const stage = wrap.querySelector(".how-slideshow-stage");
+  stage.removeAttribute("aria-hidden");
+  stage.innerHTML = steps.map((step, index) => `
+    <article class="marker how-slide" role="group" aria-roledescription="slide" aria-label="Step ${index + 1} of ${steps.length}" aria-hidden="true" inert>
+      <div class="num">${String(index + 1).padStart(2, "0")}</div>
+      <p class="how-slide-count">Step ${index + 1} of ${steps.length}</p>
       <h3>${escapeHtml(step.title)}</h3>
       <p>${escapeHtml(step.description)}</p>
-    </div>
+    </article>
   `).join("");
+  wrap.querySelector(".how-slide-indicators").innerHTML = steps.map((step, index) => `
+    <button class="how-slide-indicator" type="button" data-how-action="go" data-how-index="${index}" aria-label="Go to step ${index + 1}: ${escapeHtml(step.title)}" aria-pressed="false">
+      <span aria-hidden="true"></span>
+    </button>
+  `).join("");
+  wrap.querySelectorAll(".how-slide-control").forEach(button => { button.disabled = steps.length < 2; });
+  wrap.addEventListener("click", handleHowSlideshowClick);
+  wrap.addEventListener("pointerenter", () => {
+    HOW_SLIDESHOW_HOVERED = true;
+    updateHowSlideshowTimer();
+  });
+  wrap.addEventListener("pointerleave", () => {
+    HOW_SLIDESHOW_HOVERED = false;
+    updateHowSlideshowTimer();
+  });
+  wrap.addEventListener("focusin", () => {
+    HOW_SLIDESHOW_FOCUSED = true;
+    updateHowSlideshowTimer();
+  });
+  wrap.addEventListener("focusout", event => {
+    if (!(event.relatedTarget instanceof Element) || !wrap.contains(event.relatedTarget)) {
+      HOW_SLIDESHOW_FOCUSED = false;
+      updateHowSlideshowTimer();
+    }
+  });
+  document.addEventListener("visibilitychange", updateHowSlideshowTimer);
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  reducedMotion.addEventListener?.("change", updateHowSlideshowTimer);
+  showHowItWorksSlide(0);
+  updateHowSlideshowTimer();
   finishLoading(wrap);
+  wrap.setAttribute("aria-label", "Rental procedure slideshow");
+}
+
+function showHowItWorksSlide(index, announce = false) {
+  const wrap = document.getElementById("markersGrid");
+  const slides = [...wrap.querySelectorAll(".how-slide")];
+  if (!slides.length) return;
+  HOW_SLIDESHOW_INDEX = (index + slides.length) % slides.length;
+  slides.forEach((slide, slideIndex) => {
+    const isActive = slideIndex === HOW_SLIDESHOW_INDEX;
+    slide.classList.toggle("is-active", isActive);
+    slide.setAttribute("aria-hidden", String(!isActive));
+    slide.inert = !isActive;
+  });
+  wrap.querySelectorAll(".how-slide-indicator").forEach((indicator, indicatorIndex) => {
+    indicator.setAttribute("aria-pressed", String(indicatorIndex === HOW_SLIDESHOW_INDEX));
+  });
+  if (announce) {
+    document.getElementById("howSlideAnnouncement").textContent =
+      `Step ${HOW_SLIDESHOW_INDEX + 1} of ${slides.length}: ${slides[HOW_SLIDESHOW_INDEX].querySelector("h3").textContent}`;
+  }
+}
+
+function handleHowSlideshowClick(event) {
+  const control = event.target.closest("[data-how-action]");
+  if (!control || control.disabled) return;
+  const action = control.dataset.howAction;
+  const nextIndex = action === "previous"
+    ? HOW_SLIDESHOW_INDEX - 1
+    : action === "next"
+      ? HOW_SLIDESHOW_INDEX + 1
+      : Number(control.dataset.howIndex);
+  showHowItWorksSlide(nextIndex, true);
+  updateHowSlideshowTimer();
+}
+
+function updateHowSlideshowTimer() {
+  window.clearTimeout(HOW_SLIDESHOW_TIMER);
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (HOW_SLIDESHOW_HOVERED || HOW_SLIDESHOW_FOCUSED || document.hidden || reducedMotion) return;
+  HOW_SLIDESHOW_TIMER = window.setTimeout(() => {
+    showHowItWorksSlide(HOW_SLIDESHOW_INDEX + 1);
+    updateHowSlideshowTimer();
+  }, HOW_SLIDESHOW_INTERVAL);
 }
 
 /* ---------- Why choose us ---------- */
@@ -227,8 +317,8 @@ function renderRates() {
   const tbody = document.getElementById("ratesBody");
   const publicCars = CARS.filter(car => car.status !== "Inactive");
   tbody.innerHTML = publicCars.length
-    ? publicCars.map(car => `
-      <tr>
+    ? publicCars.map((car, index) => `
+      <tr style="--rate-row-index:${index}">
         <td>${escapeHtml(car.name)}</td>
         <td>${escapeHtml(car.category)}</td>
         <td class="num">${escapeHtml(formatCurrency(car.in12_rate, SETTINGS.currency))}</td>
@@ -252,7 +342,7 @@ function renderRates() {
     <button class="fee-chip" type="button" aria-expanded="false" aria-controls="feeChipDetail${index}" aria-label="${escapeHtml(item.label)}: ${escapeHtml(item.value)}">
       <b>${escapeHtml(item.value)}</b>
       <span>${escapeHtml(item.label)}</span>
-      <span class="fee-chip-detail" id="feeChipDetail${index}" hidden>${escapeHtml(item.detail)}</span>
+      <span class="fee-chip-detail" id="feeChipDetail${index}" aria-hidden="true" inert><span>${escapeHtml(item.detail)}</span></span>
     </button>
   `).join("");
   feesGrid.querySelectorAll(".fee-chip").forEach(chip => {
@@ -264,9 +354,8 @@ function renderRates() {
       chip.classList.toggle("is-expanded", isExpanded);
       chip.setAttribute("aria-expanded", String(isExpanded));
       chip.style.zIndex = isExpanded ? "20" : "";
-      detail.hidden = !isExpanded;
-      chip.style.borderColor = isExpanded ? "var(--signal)" : "";
-      chip.style.backgroundColor = isExpanded ? "#fff8f6" : "";
+      detail.setAttribute("aria-hidden", String(!isExpanded));
+      detail.inert = !isExpanded;
     };
     chip.addEventListener("pointerenter", () => {
       pointerInside = true;

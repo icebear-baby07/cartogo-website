@@ -23,7 +23,8 @@
       { "title": "Choose your ride", "description": "Filter the fleet by category and pick the car that fits your trip." },
       { "title": "Pick your dates", "description": "Set pickup and return dates — we hold your quoted rate for 24 hours." },
       { "title": "Confirm the details", "description": "Submit your info below; our team confirms availability within 2 hours." },
-      { "title": "Pick up & go", "description": "Bring your license and ID to your chosen pickup point and hit the road." }
+      { "title": "Pick up & go", "description": "Bring your license and ID to your chosen pickup point and hit the road." },
+      { "title": "Return the vehicle", "description": "Bring the car back at the agreed time and place. Contact our team in advance if you need to request a change." }
     ],
     "whyChooseUs": [
       { "icon": "car", "title": "Choice of vehicles", "description": "Pick from compact sedans or a spacious SUV based on your trip." },

@@ -109,3 +109,18 @@ ANIMATIONS, DESIGN, AND LAYOUT:
 9.5. Upgrade the email content
 - Have a followup email kinda like this "Thanks for inquiring with us, we'll take it from here", but I want you to make it professional but concise. Offer suggestions as well, add some design
 - Apply design to all email inbox processes to those parts that uses it
+
+10. (Admin Side)
+The plan: to prepare a UI that displays every fetched data from mongodb (excluding the chatbot's knowledge base). This will be used for monitoring. The changes to be apply should make the admin side dynamic in terms of design (based on content count per section) and includes a progressive disclosure affordance (similar to "read more") 
+10.2. Start with inquiries tab, it should fetch data from mongodb and displays it dynamically to the site's interface.
+10.3. Have an icon button in TARGET COORDINATES that goes "Show coordinates in map" when hovered. Once clicked, it should open a tab for google maps to reveal where the location is.
+10.4. Highlight the whole tab of clicked part of each inquiry so that it doesn't cause confusion by displaying its boundaries.
+10.5. Make these parts; Pending Review, Contacted, Confirmed, and Rejected to be clickable. This will be the logic: 1. Highlight a selected category (could be more than one), 2. If there is no selected category, it should display everything
+10.6. "Pending Review" shouldn't be among in the drop down as to not tamper the "seen" inquiry.
+10.7. Any changes to the category of each inquiry should prompt a toast for successful modification.
+10.8. If the number goes beyond 99, consider stop the display at 99 then put a "+" symbol beside it.
+10.9. Replace the "Rejected" selection into a button for each inquiry. Upon clicking, it should pop a confirmation question, a textfield to reason why the admin reject an inquiry (instruct the admin that the reason he/she will put is a preview of the actual message that the user will see to his/her gmail), and proceed/cancellation buttons (highlight proceed option). Place this rejection icon beside the drop down spinner.
+- Following this, the user should receive a notice that the inquiry had been decline through a customized email (with similar design to other email formats that this site uses) sent to them.
+10.10. Change the font color of lists of CONTACTED, CONFIRMED, and PENDING to their respective font colors at the categorization.
+
+Additional: Include animations for clicks, hovers, and other interactions to this changes

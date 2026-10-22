@@ -484,18 +484,26 @@ input, select, textarea{ font-family: inherit; font-size: 1rem; }
 .skeleton-select:disabled{ color:transparent; border-color:transparent; background-color:var(--concrete-deep); background-image:linear-gradient(100deg, var(--concrete-deep) 20%, #F2F0EE 40%, var(--concrete-deep) 60%); background-size:200% 100%; animation:skeleton-shimmer 1.4s ease-in-out infinite; }
 
 /* ---------- 8. HOW IT WORKS (mile markers) ---------- */
-.markers{
-  display:grid; grid-template-columns: repeat(4, 1fr);
-  gap: 1.5rem;
-  position: relative;
+.how-slideshow{ max-width:760px; margin:0 auto; }
+.how-slideshow-stage{
+  display:grid;
+  min-height:240px;
+  padding:clamp(1.5rem, 5vw, 3.25rem);
+  border:1px solid var(--line);
+  border-radius:var(--radius-md);
+  background:var(--paper);
+  box-shadow:var(--shadow-card);
 }
-.markers::before{
-  content:"";
-  position:absolute; top:19px; left: 6%; right: 6%; height:0;
-  border-top: 3px dashed var(--concrete-deep);
-  z-index:0;
+.marker.how-slide{
+  grid-area:1 / 1;
+  align-self:center;
+  min-width:0;
+  opacity:0;
+  transform:translateX(18px);
+  visibility:hidden;
+  transition:opacity 520ms cubic-bezier(0.22,1,0.36,1), transform 650ms cubic-bezier(0.22,1,0.36,1), visibility 650ms;
 }
-.marker{ position:relative; z-index:1; }
+.marker.how-slide.is-active{ opacity:1; transform:translateX(0); visibility:visible; }
 .marker .num{
   width:40px; height:40px; border-radius:50%;
   background: var(--asphalt); color: var(--signal);
@@ -503,8 +511,23 @@ input, select, textarea{ font-family: inherit; font-size: 1rem; }
   display:flex; align-items:center; justify-content:center;
   margin-bottom: 1.1rem;
 }
-.marker h3{ font-size: 1.05rem; }
-.marker p{ font-size: 0.9rem; }
+.marker .how-slide-count{ margin:0 0 0.45rem; color:var(--signal-deep); font-family:var(--font-mono); font-size:0.72rem; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; }
+.marker h3{ margin-bottom:0.65rem; font-size:clamp(1.2rem, 3vw, 1.55rem); }
+.marker p{ max-width:60ch; margin-bottom:0; color:var(--slate); font-size:0.95rem; line-height:1.7; }
+.how-slideshow-controls{ display:flex; min-height:48px; align-items:center; justify-content:center; gap:0.75rem; margin-top:1rem; }
+.how-slide-control,.how-slide-indicator{ color:var(--ink); cursor:pointer; }
+.how-slide-control{
+  display:grid; width:42px; height:42px; flex:none; place-items:center;
+  border:1px solid var(--line); border-radius:50%; background:var(--paper);
+  transition:transform 360ms cubic-bezier(0.22,1,0.36,1), color 360ms ease, background-color 360ms ease, border-color 360ms ease, box-shadow 360ms ease;
+}
+.how-slide-control:hover:not(:disabled),.how-slide-control:focus-visible{ transform:translateY(-2px); border-color:var(--signal); background:#fff8f6; color:var(--signal-deep); box-shadow:0 5px 14px rgba(20,20,20,0.1); }
+.how-slide-control:disabled{ opacity:0.5; cursor:not-allowed; }
+.how-slide-indicators{ display:flex; align-items:center; justify-content:center; gap:0.45rem; }
+.how-slide-indicator{ display:grid; width:28px; height:32px; place-items:center; padding:0; border:0; background:transparent; }
+.how-slide-indicator span{ width:8px; height:8px; border-radius:999px; background:var(--concrete-deep); transition:width 420ms cubic-bezier(0.22,1,0.36,1), background-color 420ms ease; }
+.how-slide-indicator[aria-pressed="true"] span{ width:24px; background:var(--signal); }
+.how-slide-indicator:focus-visible{ border-radius:999px; outline:2px solid var(--route-blue); outline-offset:1px; }
 
 /* ---------- 9. WHY CHOOSE US ---------- */
 .why-grid{ display:grid; grid-template-columns: repeat(3, 1fr); gap: 1.75rem; }
@@ -531,7 +554,9 @@ table.rates thead th{
 table.rates td{ padding: 0.95em 1.1em; border-bottom: 1px solid var(--line); }
 table.rates tbody tr:last-child td{ border-bottom:none; }
 table.rates td.num{ font-family: var(--font-mono); }
-table.rates tbody tr:hover{ background: rgba(214,40,40,0.05); }
+table.rates tbody tr{ animation:rate-row-in 560ms cubic-bezier(0.22,1,0.36,1) both; animation-delay:calc(var(--rate-row-index, 0) * 45ms); transition:background-color 420ms cubic-bezier(0.22,1,0.36,1); }
+table.rates tbody tr:hover{ background: rgba(214,40,40,0.07); }
+@keyframes rate-row-in{ from{ opacity:0; transform:translateY(7px); } to{ opacity:1; transform:translateY(0); } }
 table.rates td.rates-empty{ padding:1.5rem; color:var(--slate); text-align:center; }
 table.rates .skeleton-line{ height:0.7rem; }
 .fee-skeleton{ min-height:4.25rem; display:flex; flex-direction:column; justify-content:center; gap:0.55rem; padding:0.9rem 1rem; background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-sm); }
@@ -548,15 +573,15 @@ table.rates .skeleton-line{ height:0.7rem; }
   background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius-sm);
   padding: 0.9rem 1rem;
   cursor:pointer;
-  transition:border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+  transition:transform 420ms cubic-bezier(0.22,1,0.36,1), border-color 420ms cubic-bezier(0.22,1,0.36,1), background-color 420ms cubic-bezier(0.22,1,0.36,1), box-shadow 420ms cubic-bezier(0.22,1,0.36,1);
 }
 .fee-chip b{ display:block; font-family: var(--font-mono); color: var(--route-blue); }
 .fee-chip>span:not(.fee-chip-detail){ font-size: 0.82rem; color: var(--slate); }
-.fee-chip:hover,.fee-chip.is-expanded{ z-index:20; outline:none; border-color:var(--signal); background:#fff8f6; box-shadow:0 7px 18px rgba(20,20,20,0.12); }
-.fee-chip:focus-visible{ z-index:20; outline:none; border-color:var(--signal); background:#fff8f6; box-shadow:0 7px 18px rgba(20,20,20,0.12); }
-.fee-chip-detail{ display:block; position:static; margin:0; padding:0.7rem; border:1px solid var(--signal); border-radius:var(--radius-sm); background:#fff0ee; color:var(--ink); font-size:0.8rem; line-height:1.45; }
-.fee-chip-detail[hidden]{ display:none!important; }
-.fee-chip.is-expanded .fee-chip-detail{ margin-top:0.65rem; }
+.fee-chip:hover,.fee-chip.is-expanded{ z-index:20; transform:translateY(-3px); outline:none; border-color:var(--signal); background:#fff8f6; box-shadow:0 9px 22px rgba(20,20,20,0.14); }
+.fee-chip:focus-visible{ z-index:20; outline:2px solid var(--route-blue); outline-offset:2px; border-color:var(--signal); background:#fff8f6; box-shadow:0 9px 22px rgba(20,20,20,0.14); }
+.fee-chip-detail{ display:grid; grid-template-rows:0fr; overflow:hidden; margin-top:0; border:0 solid transparent; border-radius:var(--radius-sm); opacity:0; transform:translateY(-5px); transition:grid-template-rows 480ms cubic-bezier(0.22,1,0.36,1), margin-top 480ms cubic-bezier(0.22,1,0.36,1), opacity 360ms ease, transform 480ms cubic-bezier(0.22,1,0.36,1), border-width 480ms cubic-bezier(0.22,1,0.36,1); }
+.fee-chip-detail>span{ min-height:0; overflow:hidden; padding:0.7rem; background:#fff0ee; color:var(--ink); font-size:0.8rem; line-height:1.55; }
+.fee-chip.is-expanded .fee-chip-detail{ grid-template-rows:1fr; margin-top:0.65rem; border-width:1px; border-color:var(--signal); opacity:1; transform:translateY(0); }
 
 /* ---------- 11. BOOKING FORM ---------- */
 .booking-panel{
@@ -809,7 +834,11 @@ body.has-contact-map-fullscreen{ overflow:hidden; }
   .live-agent-card:hover,.contact-location-option:hover,.footer-grid ul a:hover,.social-row a:hover{ transform:none; }
   .insurance-footer-cta>a:hover{ transform:none; }
   .live-agent-card:hover .live-agent-title-row h3 i{ animation:none; }
-  .fee-chip,.fee-chip-detail{ transition:none; }
+  .how-slide,.how-slide-control,.how-slide-indicator span,.fee-chip,.fee-chip-detail,table.rates tbody tr{ animation:none; transition:none; }
+  .marker.how-slide{ transform:none; }
+  .fee-chip:hover,.fee-chip.is-expanded{ transform:none; }
+  .fee-chip-detail{ grid-template-rows:0fr; }
+  .fee-chip.is-expanded .fee-chip-detail{ grid-template-rows:1fr; }
   .signout-confirmation[open]{ animation:none; }
 }
 
@@ -862,8 +891,6 @@ body.has-contact-map-fullscreen{ overflow:hidden; }
   .quick-search{ grid-template-columns: 1fr 1fr; transform: translateY(-26%); }
   .fleet-grid{ grid-template-columns: repeat(2,1fr); }
   .why-grid, .trust-grid, .testi-grid{ grid-template-columns: repeat(2,1fr); }
-  .markers{ grid-template-columns: repeat(2,1fr); row-gap: 2rem; }
-  .markers::before{ display:none; }
   .footer-grid{ grid-template-columns: 1fr 1fr; }
   .contact-grid, .booking-panel{ grid-template-columns: minmax(0, 1fr); }
 }
@@ -882,7 +909,9 @@ body.has-contact-map-fullscreen{ overflow:hidden; }
   .quick-search{ grid-template-columns: minmax(0, 1fr); min-width:0; transform:none; margin-top:2rem; }
   .fleet-grid{ grid-template-columns: 1fr; }
   .why-grid, .trust-grid, .testi-grid, .fees-note{ grid-template-columns: 1fr; }
-  .markers{ grid-template-columns: 1fr; }
+  .how-slideshow-stage{ min-height:220px; padding:1.35rem; }
+  .how-slideshow-controls{ gap:0.35rem; }
+  .how-slide-control{ width:38px; height:38px; }
   .form-grid{ grid-template-columns: minmax(0, 1fr); }
   .booking-panel{ gap:1.25rem; padding:1rem; }
   .booking-info,.booking-panel #bookingForm{ min-width:0; }

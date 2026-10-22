@@ -25,7 +25,7 @@ from pymongo.errors import PyMongoError
 
 ROOT = Path(__file__).resolve().parent
 ENV_KEYS = {
-	"SUPABASE_URL", "SUPABASE_ANON_KEY",
+	"SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY",
 	"MONGODB_URI", "MONGODB_DATABASE", "MONGODB_UNITS_COLLECTION",
 	"MONGODB_SITE_ASSETS_COLLECTION", "MONGODB_SITE_CONTENT_COLLECTION",
 	"MONGODB_INQUIRIES_COLLECTION", "MONGODB_SEQUENCES_COLLECTION",
@@ -145,6 +145,36 @@ def send_inquiry_confirmation(inquiry):
 	)
 
 
+def send_inquiry_rejection(inquiry):
+	reason = str(inquiry.get("rejection_reason") or "").strip()
+	if not reason:
+		raise ValueError("A rejection reason is required before sending the customer notification.")
+	recipient = inquiry.get("email")
+	if not isinstance(recipient, str) or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", recipient):
+		raise ValueError("This inquiry does not have a valid email address for the rejection notice.")
+	name = str(inquiry.get("name") or "customer")
+	content_html = (
+		'<div style="padding:16px;border:1px solid #f1d4d1;border-radius:9px;'
+		'background:#fff6f5;color:#343a40;font-size:14px;line-height:1.7;">'
+		'<strong>Reason for this decision</strong><br>'
+		f'<span style="white-space:pre-wrap;">{html.escape(reason)}</span></div>'
+		'<p style="margin:20px 0 0;color:#565e67;font-size:14px;line-height:1.65;">'
+		'Thank you for considering carTOGO.mnl. Please contact our team if you have questions '
+		'or would like help with another option.</p>'
+	)
+	send_branded_email(
+		recipient,
+		"carTOGO.mnl | Update about your reservation inquiry",
+		"We’re unable to proceed with your reservation inquiry.",
+		"Update on your reservation inquiry",
+		f"Dear {name}, we’re sorry, but we’re unable to proceed with your reservation inquiry.",
+		content_html,
+		f"Dear {name},\n\nWe’re sorry, but we’re unable to proceed with your reservation inquiry.\n\n"
+		f"Reason: {reason}\n\nThank you for considering carTOGO.mnl. Please contact our team if you have "
+		"questions or would like help with another option.",
+	)
+
+
 def get_mongo_store():
 	global MONGO_STORE
 	if MONGO_STORE is not None:
@@ -222,6 +252,10 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			self.request_site_asset_change()
 		elif request_path == "/api/site-assets/approve":
 			self.approve_site_asset_change()
+		elif request_path == "/api/admin/owner-change/request":
+			self.request_owner_change()
+		elif request_path == "/api/admin/owner-change/approve":
+			self.approve_owner_change()
 		elif request_path == "/api/site-content/update":
 			self.update_site_content()
 		elif request_path == "/api/inquiries":
@@ -260,18 +294,7 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			self.send_json(503, {"error": message})
 
 	def update_site_content(self):
-		try:
-			self.get_authorized_admin()
-			updates = self.read_json()
-			content = get_mongo_store().update_site_content(updates)
-			self.send_json(200, {"data": content})
-		except ValueError as error:
-			self.send_json(400, {"error": str(error)})
-		except PermissionError as error:
-			self.send_json(403, {"error": str(error)})
-		except (RuntimeError, PyMongoError) as error:
-			message = str(error) if isinstance(error, RuntimeError) else "MongoDB could not update site content."
-			self.send_json(503, {"error": message})
+		self.send_json(403, {"error": "Owner approval is required. Request a PIN before changing site content."})
 
 	def get_admin_inquiries(self):
 		try:
@@ -450,10 +473,34 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			store = get_mongo_store()
 			if action == "update":
 				status = payload.get("status")
-				if not isinstance(status, str) or status not in {"pending_review", "contacted", "confirmed", "rejected"}:
+				if not isinstance(status, str) or status not in {"contacted", "confirmed"}:
 					raise ValueError("Choose a valid inquiry status.")
 				result = store.update_inquiry_status(inquiry_id, status)
 				self.send_json(200, {"data": result})
+			elif action == "reject":
+				reason = payload.get("reason")
+				if not isinstance(reason, str):
+					raise ValueError("Enter a reason to include in the rejection email.")
+				reason = reason.strip()
+				if not reason:
+					raise ValueError("Enter a reason to include in the rejection email.")
+				if len(reason) > 3000:
+					raise ValueError("The rejection reason is too long.")
+				if len(reason.split()) > 250:
+					raise ValueError("The rejection explanation must be no more than 250 words.")
+				result = store.reject_inquiry(inquiry_id, reason)
+				email_sent = self.send_rejection_email(store, result)
+				result["rejection_email_sent"] = email_sent
+				self.send_json(200, {"data": result, "emailSent": email_sent})
+			elif action == "resend_rejection":
+				result = store.get_inquiry(inquiry_id)
+				if not result or result.get("status") != "rejected":
+					raise RuntimeError("Only a rejected inquiry can receive a rejection email.")
+				if result.get("rejection_email_sent"):
+					raise RuntimeError("The rejection email has already been sent.")
+				email_sent = self.send_rejection_email(store, result)
+				result["rejection_email_sent"] = email_sent
+				self.send_json(200, {"data": result, "emailSent": email_sent})
 			elif action == "delete":
 				store.delete_inquiry(inquiry_id)
 				self.send_json(200, {"data": {"id": inquiry_id}})
@@ -467,6 +514,19 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			self.send_json(404 if "no longer exists" in str(error) else 503, {"error": str(error)})
 		except PyMongoError:
 			self.send_json(503, {"error": "MongoDB could not apply the inquiry change."})
+
+	def send_rejection_email(self, store, inquiry):
+		try:
+			send_inquiry_rejection(inquiry)
+			store.mark_inquiry_rejection_email_sent(inquiry["id"])
+			return True
+		except (OSError, RuntimeError, smtplib.SMTPException, ValueError) as error:
+			self.log_message(
+				"Inquiry %s was rejected, but its notification email could not be sent: %s",
+				inquiry.get("id", "unknown"),
+				error,
+			)
+			return False
 
 	def read_json(self):
 		try:
@@ -670,7 +730,27 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 		)
 		if is_admin is not True:
 			raise PermissionError("This account is not an authorized administrator.")
-		return {"id": str(user["id"]), "email": str(user["email"]).strip().lower()}
+		return {
+			"id": str(user["id"]),
+			"email": str(user["email"]).strip().lower(),
+			"access_token": access_token,
+		}
+
+	def get_cartogo_owner_email(self, admin):
+		base_url = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+		anon_key = os.environ.get("SUPABASE_ANON_KEY", "").strip()
+		owner_email = self.supabase_request(
+			f"{base_url}/rest/v1/rpc/get_cartogo_owner_email",
+			anon_key,
+			admin["access_token"],
+			method="POST",
+			body=b"{}",
+		)
+		if not isinstance(owner_email, str) or not re.fullmatch(
+			r"[^@\s]+@[^@\s]+\.[^@\s]+", owner_email
+		):
+			raise RuntimeError("The database did not return a valid owner email. Run the owner-approval migration.")
+		return owner_email.strip().lower()
 
 	def get_verified_google_user(self):
 		token = self.headers.get("Authorization", "")
@@ -869,60 +949,10 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 
 	def request_unit_change(self):
 		try:
+			admin = self.get_authorized_admin()
 			payload = self.read_json()
 			action, unit = self.normalize_unit_change(payload)
-			admin = self.get_authorized_admin()
-			if not os.environ.get("SMTP_USER", "").strip() or not os.environ.get("SMTP_APP_PASSWORD", "").strip():
-				raise RuntimeError("Configure Gmail SMTP credentials in the website server environment first.")
-			with OTP_REQUESTS_LOCK:
-				last_request = OTP_REQUESTS.get(admin["id"], 0)
-				if time.time() - last_request < 60:
-					raise RuntimeError("Wait one minute before requesting another approval code.")
-				OTP_REQUESTS[admin["id"]] = time.time()
-			challenge_id = secrets.token_urlsafe(24)
-			code = f"{secrets.randbelow(1000000):06d}"
-			unit_name = unit.get("display_name", f"unit #{unit.get('id')}")
-			operation = {"add": "Add", "update": "Update", "delete": "Delete"}[action]
-			requested_values = json.dumps(unit, ensure_ascii=False, indent=2)
-			content_html = (
-				f'<p style="margin:0 0 10px;color:#565e67;font-size:14px;line-height:1.6;">'
-				f'Requested action: <strong>{html.escape(operation)} {html.escape(str(unit_name))}</strong></p>'
-				'<pre style="overflow-wrap:anywhere;white-space:pre-wrap;padding:14px;border-radius:8px;'
-				'background:#f3f5f7;color:#343a40;font-size:12px;line-height:1.5;">'
-				f'{html.escape(requested_values)}</pre>'
-				'<div style="margin-top:16px;padding:16px;border:1px solid #f1d4d1;border-radius:9px;'
-				'background:#fff6f5;text-align:center;">'
-				'<div style="color:#6b7280;font-size:12px;text-transform:uppercase;">Approval code · expires in 5 minutes</div>'
-				f'<strong style="display:block;margin-top:8px;color:#202020;font-family:monospace;'
-				f'font-size:30px;letter-spacing:7px;">{code}</strong></div>'
-			)
-			with UNIT_APPROVALS_LOCK:
-				UNIT_APPROVALS[challenge_id] = {
-					"user_id": admin["id"],
-					"email": admin["email"],
-					"action": action,
-					"unit": unit,
-					"code_hash": hashlib.sha256(f"{challenge_id}:{code}".encode()).hexdigest(),
-					"expires_at": time.time() + 300,
-					"attempts": 0,
-				}
-			try:
-				send_branded_email(
-					admin["email"],
-					f"carTOGO.mnl | Unit approval: {operation} {unit_name}",
-					"An administrator requested a unit change that needs your approval.",
-					"Unit change approval",
-					f"Review the requested {operation.lower()} action and enter its one-time code in the admin panel.",
-					content_html,
-					f"A carTOGO administrator requested this unit change: {operation} {unit_name}.\n\n"
-					f"Requested values:\n{requested_values}\n\nApproval code: {code}\n"
-					"This code expires in 5 minutes and can approve only this requested change.",
-				)
-			except (OSError, smtplib.SMTPException, ValueError):
-				with UNIT_APPROVALS_LOCK:
-					UNIT_APPROVALS.pop(challenge_id, None)
-				raise RuntimeError("Gmail could not send the approval code. Check the SMTP settings.") from None
-			self.send_json(200, {"challengeId": challenge_id, "expiresIn": 300})
+			self.send_json(200, self.create_owner_approval(admin, "unit", action, unit))
 		except ValueError as error:
 			self.send_json(400, {"error": str(error)})
 		except PermissionError as error:
@@ -932,103 +962,132 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 
 	def request_site_asset_change(self):
 		try:
+			admin = self.get_authorized_admin()
 			payload = self.read_json()
 			action, asset = self.normalize_site_asset_change(payload)
-			admin = self.get_authorized_admin()
-			if not os.environ.get("SMTP_USER", "").strip() or not os.environ.get("SMTP_APP_PASSWORD", "").strip():
-				raise RuntimeError("Configure Gmail SMTP credentials in the website server environment first.")
-			with OTP_REQUESTS_LOCK:
-				last_request = OTP_REQUESTS.get(admin["id"], 0)
-				if time.time() - last_request < 60:
-					raise RuntimeError("Wait one minute before requesting another approval code.")
-				OTP_REQUESTS[admin["id"]] = time.time()
-			challenge_id = secrets.token_urlsafe(24)
-			code = f"{secrets.randbelow(1000000):06d}"
-			asset_name = asset.get("display_name", asset.get("loc_name", "contact details"))
-			operation = {"add": "Add", "update": "Update", "delete": "Delete"}[action]
-			requested_values = json.dumps(asset, ensure_ascii=False, indent=2)
-			content_html = (
-				f'<p style="margin:0 0 10px;color:#565e67;font-size:14px;line-height:1.6;">'
-				f'Requested action: <strong>{html.escape(operation)} {html.escape(str(asset_name))}</strong></p>'
-				'<pre style="overflow-wrap:anywhere;white-space:pre-wrap;padding:14px;border-radius:8px;'
-				'background:#f3f5f7;color:#343a40;font-size:12px;line-height:1.5;">'
-				f'{html.escape(requested_values)}</pre>'
-				'<div style="margin-top:16px;padding:16px;border:1px solid #f1d4d1;border-radius:9px;'
-				'background:#fff6f5;text-align:center;">'
-				'<div style="color:#6b7280;font-size:12px;text-transform:uppercase;">Approval code · expires in 5 minutes</div>'
-				f'<strong style="display:block;margin-top:8px;color:#202020;font-family:monospace;'
-				f'font-size:30px;letter-spacing:7px;">{code}</strong></div>'
-			)
-			with UNIT_APPROVALS_LOCK:
-				UNIT_APPROVALS[challenge_id] = {
-					"resource": "site_assets",
-					"user_id": admin["id"],
-					"email": admin["email"],
-					"action": action,
-					"unit": asset,
-					"code_hash": hashlib.sha256(f"{challenge_id}:{code}".encode()).hexdigest(),
-					"expires_at": time.time() + 300,
-					"attempts": 0,
-				}
-			try:
-				send_branded_email(
-					admin["email"],
-					f"carTOGO.mnl | Site asset approval: {operation} {asset_name}",
-					"An administrator requested a site asset change that needs your approval.",
-					"Site asset change approval",
-					f"Review the requested {operation.lower()} action and enter its one-time code in the admin panel.",
-					content_html,
-					f"A carTOGO administrator requested this site asset change: {operation} {asset_name}.\n\n"
-					f"Requested values:\n{requested_values}\n\nApproval code: {code}\n"
-					"This code expires in 5 minutes and can approve only this requested change.",
-				)
-			except (OSError, smtplib.SMTPException, ValueError):
-				with UNIT_APPROVALS_LOCK:
-					UNIT_APPROVALS.pop(challenge_id, None)
-				raise RuntimeError("Gmail could not send the approval code. Check the SMTP settings.") from None
-			self.send_json(200, {"challengeId": challenge_id, "expiresIn": 300})
+			self.send_json(200, self.create_owner_approval(admin, "site_assets", action, asset))
 		except ValueError as error:
 			self.send_json(400, {"error": str(error)})
 		except PermissionError as error:
 			self.send_json(403, {"error": str(error)})
 		except RuntimeError as error:
 			self.send_json(503, {"error": str(error)})
+
+	def request_owner_change(self):
+		try:
+			admin = self.get_authorized_admin()
+			payload = self.read_json()
+			resource = payload.get("resource")
+			action = payload.get("action")
+			data = payload.get("data")
+			if resource == "unit":
+				action, data = self.normalize_unit_change({"action": action, "unit": data})
+			elif resource == "site_assets":
+				action, data = self.normalize_site_asset_change({"action": action, "asset": data})
+			elif resource == "site_content":
+				if action != "update" or not isinstance(data, dict) or not data:
+					raise ValueError("Choose valid site content changes.")
+				if set(data) - {"settings", "labels"}:
+					raise ValueError("Only settings and page labels can be updated.")
+			elif resource == "admin_accounts":
+				if action not in {"add", "remove"} or not isinstance(data, dict):
+					raise ValueError("Choose a valid administrator account change.")
+				email = data.get("email")
+				if not isinstance(email, str) or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email.strip()):
+					raise ValueError("Enter a valid administrator email.")
+				data = {"email": email.strip().lower()}
+			elif resource == "chat_sessions":
+				if action != "delete" or not isinstance(data, dict):
+					raise ValueError("Choose a valid chat-session change.")
+				session_id = data.get("id")
+				if not isinstance(session_id, str) or not session_id or len(session_id) > 200:
+					raise ValueError("Choose a valid chat session.")
+				data = {"id": session_id}
+			else:
+				raise ValueError("Choose a supported owner-approved change.")
+			result = self.create_owner_approval(admin, resource, action, data)
+			self.send_json(200, result)
+		except ValueError as error:
+			self.send_json(400, {"error": str(error)})
+		except PermissionError as error:
+			self.send_json(403, {"error": str(error)})
+		except RuntimeError as error:
+			self.send_json(503, {"error": str(error)})
+
+	def create_owner_approval(self, admin, resource, action, data):
+		if not os.environ.get("SMTP_USER", "").strip() or not os.environ.get("SMTP_APP_PASSWORD", "").strip():
+			raise RuntimeError("Configure Gmail SMTP credentials in the website server environment first.")
+		owner_email = self.get_cartogo_owner_email(admin)
+		with OTP_REQUESTS_LOCK:
+			last_request = OTP_REQUESTS.get(owner_email, 0)
+			if time.time() - last_request < 60:
+				raise RuntimeError("Wait one minute before requesting another owner approval PIN.")
+			OTP_REQUESTS[owner_email] = time.time()
+
+		challenge_id = secrets.token_urlsafe(24)
+		code = f"{secrets.randbelow(1000000):06d}"
+		operation = {"add": "Add", "update": "Update", "delete": "Delete", "remove": "Remove"}.get(action, "Change")
+		pretty_resource = {
+			"unit": "fleet unit",
+			"site_assets": "site asset",
+			"site_content": "site settings and page content",
+			"admin_accounts": "administrator account",
+			"chat_sessions": "chat session",
+		}[resource]
+		requested_values = json.dumps(data, ensure_ascii=False, indent=2)
+		content_html = (
+			f'<p style="margin:0 0 10px;color:#565e67;font-size:14px;line-height:1.6;">'
+			f'Requested by <strong>{html.escape(admin["email"])}</strong>: '
+			f'<strong>{html.escape(operation)} {html.escape(pretty_resource)}</strong></p>'
+			'<pre style="overflow-wrap:anywhere;white-space:pre-wrap;padding:14px;border-radius:8px;'
+			'background:#f3f5f7;color:#343a40;font-size:12px;line-height:1.5;">'
+			f'{html.escape(requested_values)}</pre>'
+			'<div style="margin-top:16px;padding:16px;border:1px solid #f1d4d1;border-radius:9px;'
+			'background:#fff6f5;text-align:center;">'
+			'<div style="color:#6b7280;font-size:12px;text-transform:uppercase;">Owner PIN · expires in 5 minutes</div>'
+			f'<strong style="display:block;margin-top:8px;color:#202020;font-family:monospace;'
+			f'font-size:30px;letter-spacing:7px;">{code}</strong></div>'
+		)
+		with UNIT_APPROVALS_LOCK:
+			UNIT_APPROVALS[challenge_id] = {
+				"resource": resource,
+				"requester_id": admin["id"],
+				"requester_email": admin["email"],
+				"owner_email": owner_email,
+				"action": action,
+				"data": data,
+				"code_hash": hashlib.sha256(f"{challenge_id}:{code}".encode()).hexdigest(),
+				"expires_at": time.time() + 300,
+				"attempts": 0,
+			}
+		try:
+			send_branded_email(
+				owner_email,
+				f"carTOGO.mnl | Owner PIN: {operation} {pretty_resource}",
+				"An admin change is awaiting your approval.",
+				"Owner approval required",
+				f"{admin['email']} requested to {action} {pretty_resource}. Review the request before sharing your one-time PIN.",
+				content_html,
+				f"Requested by {admin['email']}: {operation} {pretty_resource}.\n\n"
+				f"Requested values:\n{requested_values}\n\nOwner PIN: {code}\n"
+				"This PIN expires in 5 minutes and authorizes only this change.",
+			)
+		except (OSError, smtplib.SMTPException, ValueError):
+			with UNIT_APPROVALS_LOCK:
+				UNIT_APPROVALS.pop(challenge_id, None)
+			raise RuntimeError("Gmail could not send the owner approval PIN. Check the SMTP settings.") from None
+		return {"challengeId": challenge_id, "ownerEmail": owner_email, "expiresIn": 300}
 
 	def approve_unit_change(self):
-		try:
-			payload = self.read_json()
-			challenge_id = payload.get("challengeId")
-			code = payload.get("code")
-			if not isinstance(challenge_id, str) or not isinstance(code, str) or not code.isdigit() or len(code) != 6:
-				raise ValueError("Enter the six-digit approval code.")
-			admin = self.get_authorized_admin()
-			with UNIT_APPROVALS_LOCK:
-				challenge = UNIT_APPROVALS.get(challenge_id)
-				if not challenge or challenge.get("resource", "unit") != "unit" or challenge["expires_at"] < time.time():
-					UNIT_APPROVALS.pop(challenge_id, None)
-					raise PermissionError("That approval code expired. Request a new one.")
-				if challenge["user_id"] != admin["id"]:
-					raise PermissionError("This approval code belongs to a different account.")
-				challenge["attempts"] += 1
-				expected_hash = challenge["code_hash"]
-				provided_hash = hashlib.sha256(f"{challenge_id}:{code}".encode()).hexdigest()
-				if challenge["attempts"] > 5 or not hmac.compare_digest(expected_hash, provided_hash):
-					if challenge["attempts"] >= 5:
-						UNIT_APPROVALS.pop(challenge_id, None)
-					raise PermissionError("The approval code is invalid or has expired.")
-				UNIT_APPROVALS.pop(challenge_id, None)
-			result = self.execute_unit_change(challenge["action"], challenge["unit"])
-			self.send_json(200, {"data": result})
-		except ValueError as error:
-			self.send_json(400, {"error": str(error)})
-		except PermissionError as error:
-			self.send_json(403, {"error": str(error)})
-		except RuntimeError as error:
-			self.send_json(503, {"error": str(error)})
-		except PyMongoError:
-			self.send_json(503, {"error": "MongoDB could not apply the approved unit change."})
+		self.process_owner_approval("unit")
 
 	def approve_site_asset_change(self):
+		self.process_owner_approval("site_assets")
+
+	def approve_owner_change(self):
+		self.process_owner_approval()
+
+	def process_owner_approval(self, expected_resource=None):
 		try:
 			payload = self.read_json()
 			challenge_id = payload.get("challengeId")
@@ -1036,13 +1095,16 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			if not isinstance(challenge_id, str) or not isinstance(code, str) or not code.isdigit() or len(code) != 6:
 				raise ValueError("Enter the six-digit approval code.")
 			admin = self.get_authorized_admin()
+			owner_email = self.get_cartogo_owner_email(admin)
 			with UNIT_APPROVALS_LOCK:
 				challenge = UNIT_APPROVALS.get(challenge_id)
-				if not challenge or challenge.get("resource") != "site_assets" or challenge["expires_at"] < time.time():
+				if (not challenge or challenge.get("expires_at", 0) < time.time()
+						or (expected_resource and challenge.get("resource") != expected_resource)):
 					UNIT_APPROVALS.pop(challenge_id, None)
 					raise PermissionError("That approval code expired. Request a new one.")
-				if challenge["user_id"] != admin["id"]:
-					raise PermissionError("This approval code belongs to a different account.")
+				if challenge.get("owner_email") != owner_email:
+					UNIT_APPROVALS.pop(challenge_id, None)
+					raise PermissionError("The owner account changed. Request a new approval PIN.")
 				challenge["attempts"] += 1
 				expected_hash = challenge["code_hash"]
 				provided_hash = hashlib.sha256(f"{challenge_id}:{code}".encode()).hexdigest()
@@ -1051,8 +1113,8 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 						UNIT_APPROVALS.pop(challenge_id, None)
 					raise PermissionError("The approval code is invalid or has expired.")
 				UNIT_APPROVALS.pop(challenge_id, None)
-			result = self.execute_site_asset_change(challenge["action"], challenge["unit"])
-			self.send_json(200, {"data": result})
+			result = self.execute_owner_change(challenge)
+			self.send_json(200, {"data": result, "resource": challenge["resource"]})
 		except ValueError as error:
 			self.send_json(400, {"error": str(error)})
 		except PermissionError as error:
@@ -1060,13 +1122,95 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 		except RuntimeError as error:
 			self.send_json(503, {"error": str(error)})
 		except PyMongoError:
-			self.send_json(503, {"error": "MongoDB could not apply the approved site asset change."})
+			self.send_json(503, {"error": "MongoDB could not apply the owner-approved change."})
 
 	def execute_unit_change(self, action, unit):
 		return get_mongo_store().apply_unit_change(action, unit)
 
 	def execute_site_asset_change(self, action, asset):
 		return get_mongo_store().apply_site_asset_change(action, asset)
+
+	def execute_owner_change(self, challenge):
+		resource = challenge["resource"]
+		action = challenge["action"]
+		data = challenge["data"]
+		if resource == "unit":
+			return self.execute_unit_change(action, data)
+		if resource == "site_assets":
+			return self.execute_site_asset_change(action, data)
+		if resource == "site_content":
+			return get_mongo_store().update_site_content(data)
+		if resource == "admin_accounts":
+			function = "add_cartogo_admin_email" if action == "add" else "remove_cartogo_admin_email"
+			return self.call_supabase_service_rpc(function, {"p_email": data["email"]})
+		if resource == "chat_sessions":
+			if action != "delete":
+				raise ValueError("Choose a valid chat-session change.")
+			self.delete_chat_session_with_service_role(data["id"])
+			return {"id": data["id"]}
+		raise ValueError("Choose a supported owner-approved change.")
+
+	def call_supabase_service_rpc(self, function, parameters):
+		service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+		base_url = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+		if not base_url:
+			raise RuntimeError("Supabase URL is not configured on the website server.")
+		if not service_key:
+			raise RuntimeError("Set SUPABASE_SERVICE_ROLE_KEY on the website server to apply owner-approved admin-account changes.")
+		request = Request(
+			f"{base_url}/rest/v1/rpc/{function}",
+			data=json.dumps(parameters).encode("utf-8"),
+			headers={
+				"apikey": service_key,
+				"Authorization": f"Bearer {service_key}",
+				"Content-Type": "application/json",
+			},
+			method="POST",
+		)
+		try:
+			with urlopen(request, timeout=10) as response:
+				content = response.read()
+		except HTTPError as error:
+			if error.code == 400:
+				try:
+					message = json.loads(error.read()).get("message")
+				except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+					message = None
+				raise ValueError(message or "Supabase rejected the administrator account change.") from None
+			raise RuntimeError("Supabase could not apply the approved administrator account change.") from None
+		except (URLError, TimeoutError):
+			raise RuntimeError("Could not connect to Supabase to apply the administrator account change.") from None
+		try:
+			return json.loads(content) if content else None
+		except json.JSONDecodeError:
+			raise RuntimeError("Supabase returned an invalid administrator account response.") from None
+
+	def delete_chat_session_with_service_role(self, session_id):
+		service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+		base_url = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+		if not base_url:
+			raise RuntimeError("Supabase URL is not configured on the website server.")
+		if not service_key:
+			raise RuntimeError("Set SUPABASE_SERVICE_ROLE_KEY on the website server to delete owner-approved chat sessions.")
+		query = urlencode({"id": f"eq.{session_id}"})
+		request = Request(
+			f"{base_url}/rest/v1/chat_sessions?{query}",
+			headers={
+				"apikey": service_key,
+				"Authorization": f"Bearer {service_key}",
+				"Prefer": "return=representation",
+			},
+			method="DELETE",
+		)
+		try:
+			with urlopen(request, timeout=10) as response:
+				deleted = json.loads(response.read())
+			if not isinstance(deleted, list) or not deleted:
+				raise RuntimeError("That chat session no longer exists. Refresh the list and try again.")
+		except HTTPError:
+			raise RuntimeError("Supabase could not delete the approved chat session.") from None
+		except (URLError, TimeoutError):
+			raise RuntimeError("Could not connect to Supabase to delete the chat session.") from None
 
 	def send_json(self, status, payload):
 		body = json.dumps(payload).encode("utf-8")

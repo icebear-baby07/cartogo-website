@@ -51,12 +51,6 @@ async function adminRequest(path, payload) {
   });
 }
 
-async function updateSiteContent(payload) {
-  const result = await adminRequest("/api/site-content/update", payload);
-  SITE_CONTENT_CACHE = result.data;
-  return result.data;
-}
-
 /* ---------- Public DB API ---------- */
 const DB = {
   async getSiteContent() {
@@ -64,21 +58,16 @@ const DB = {
     SITE_CONTENT_CACHE = await siteDataRequest("/api/site-content");
     return SITE_CONTENT_CACHE;
   },
+  async getSiteContentDefaults() {
+    return siteDataRequest("/api/site-content/defaults");
+  },
   // --- Public settings and page copy ---
   async getSettings() {
     const content = SITE_CONTENT_CACHE || await this.getSiteContent();
     return content.settings;
   },
-  async saveSettings(settings) {
-    const content = await updateSiteContent({ settings });
-    return content.settings;
-  },
   async getLabels() {
     const content = SITE_CONTENT_CACHE || await this.getSiteContent();
-    return content.labels;
-  },
-  async saveLabels(labels) {
-    const content = await updateSiteContent({ labels });
     return content.labels;
   },
 
@@ -117,10 +106,10 @@ const DB = {
     });
   },
   async requestUnitChange(action, unit) {
-    return adminRequest("/api/unit-data/request", { action, unit });
+    return adminRequest("/api/admin/owner-change/request", { resource: "unit", action, data: unit });
   },
   async approveUnitChange(challengeId, code) {
-    return adminRequest("/api/unit-data/approve", { challengeId, code });
+    return adminRequest("/api/admin/owner-change/approve", { challengeId, code });
   },
 
   async getSiteAssets({ admin = false } = {}) {
@@ -134,10 +123,18 @@ const DB = {
     });
   },
   async requestSiteAssetChange(action, asset) {
-    return adminRequest("/api/site-assets/request", { action, asset });
+    return adminRequest("/api/admin/owner-change/request", { resource: "site_assets", action, data: asset });
   },
   async approveSiteAssetChange(challengeId, code) {
-    return adminRequest("/api/site-assets/approve", { challengeId, code });
+    return adminRequest("/api/admin/owner-change/approve", { challengeId, code });
+  },
+  async requestOwnerChange(resource, action, data) {
+    return adminRequest("/api/admin/owner-change/request", { resource, action, data });
+  },
+  async approveOwnerChange(challengeId, code) {
+    const result = await adminRequest("/api/admin/owner-change/approve", { challengeId, code });
+    if (result.resource === "site_content") SITE_CONTENT_CACHE = result.data;
+    return result;
   },
 
   // --- Inquiries (this is the "client information" store) ---
@@ -233,6 +230,19 @@ const DB = {
     });
     return result.data;
   },
+  async rejectInquiry(id, reason) {
+    return adminRequest("/api/admin/inquiries", {
+      action: "reject",
+      id,
+      reason
+    });
+  },
+  async resendInquiryRejection(id) {
+    return adminRequest("/api/admin/inquiries", {
+      action: "resend_rejection",
+      id
+    });
+  },
   async deleteInquiry(id) {
     await adminRequest("/api/admin/inquiries", { action: "delete", id });
     return true;
@@ -240,16 +250,6 @@ const DB = {
 
   async getAdminEmails() {
     const { data, error } = await supa.rpc("get_cartogo_admin_emails");
-    if (error) throw error;
-    return data;
-  },
-  async addAdminEmail(email) {
-    const { data, error } = await supa.rpc("add_cartogo_admin_email", { p_email: email });
-    if (error) throw error;
-    return data;
-  },
-  async removeAdminEmail(email) {
-    const { data, error } = await supa.rpc("remove_cartogo_admin_email", { p_email: email });
     if (error) throw error;
     return data;
   },
@@ -285,21 +285,6 @@ const DB = {
     if (remote.error) throw remote.error;
     return session;
   },
-  async deleteChatSession(id) {
-    const remote = await supa.from("chat_sessions").delete().eq("id", id);
-    if (remote.error) throw remote.error;
-    return true;
-  },
-
-  // --- Danger zone: reset everything back to the seed content ---
-  async resetAll() {
-    const defaults = await siteDataRequest("/api/site-content/defaults");
-    await updateSiteContent({
-      settings: defaults.settings,
-      labels: defaults.labels
-    });
-    return true;
-  }
 };
 
 /* ---------- Small shared helpers used by both main.js and admin.js ---------- */

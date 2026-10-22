@@ -17,6 +17,9 @@ let CHAT_SESSIONS = [];
 let SITE_ASSETS = [];
 let SITE_ASSETS_ERROR = "";
 let SELECTED_INQUIRY = null;
+let SELECTED_INQUIRY_CARD_ID = null;
+let INQUIRY_FILTERS = new Set();
+let REJECTING_INQUIRY = null;
 let CURRENT_ADMIN_EMAIL = "";
 let UNIT_APPROVAL_CHALLENGE_ID = "";
 let UNIT_APPROVAL_RESOLVE = null;
@@ -126,7 +129,6 @@ async function loadAll() {
   SETTINGS = await DB.getSettings();
   LABELS = await DB.getLabels();
   UNITS = await DB.getUnits({ admin: true });
-  INQUIRIES = await DB.getInquiries();
   try {
     SITE_ASSETS = await DB.getSiteAssets({ admin: true });
     SITE_ASSETS_ERROR = "";
@@ -247,20 +249,20 @@ function renderFleetTab() {
 }
 
 async function requestAndApproveUnitChange(action, unit) {
-  return requestAndApproveAdminChange("unit", action, unit, DB.requestUnitChange, DB.approveUnitChange);
+  return requestAndApproveAdminChange("fleet unit", action, unit, DB.requestUnitChange, DB.approveUnitChange);
 }
 
 async function requestAndApproveSiteAssetChange(action, asset) {
   return requestAndApproveAdminChange("site asset", action, asset, DB.requestSiteAssetChange, DB.approveSiteAssetChange);
 }
 
-async function requestAndApproveAdminChange(resource, action, asset, requestChange, approveChange) {
-  const operation = action === "add" ? "Add" : action === "update" ? "Update" : "Delete";
-  const assetName = asset.display_name || asset.loc_name || "contact details";
-  showUnitApprovalLoading(operation, assetName, resource);
+async function requestAndApproveAdminChange(resource, action, data, requestChange, approveChange) {
+  const operation = action === "add" ? "Add" : action === "update" ? "Update" : action === "remove" ? "Remove" : "Delete";
+  const targetName = data.display_name || data.loc_name || data.email || data.id || "requested change";
+  showUnitApprovalLoading(operation, targetName, resource);
   try {
-    const { challengeId } = await requestChange(action, asset);
-    const approved = await openUnitApprovalDialog(challengeId, operation, assetName, resource, approveChange);
+    const { challengeId, ownerEmail } = await requestChange(action, data);
+    const approved = await openUnitApprovalDialog(challengeId, operation, targetName, resource, ownerEmail, approveChange);
     if (!approved) throw new Error("Approval cancelled. The code will expire in five minutes.");
   } catch (error) {
     UNIT_APPROVAL_REQUEST_PENDING = false;
@@ -273,8 +275,8 @@ function showUnitApprovalLoading(operation, unitName, resource) {
   const modal = document.getElementById("unitApprovalModal");
   const closeButtons = [document.getElementById("closeUnitApproval"), document.getElementById("cancelUnitApproval")];
   document.getElementById("unitApprovalTitle").textContent = `${operation} ${resource}`;
-  document.getElementById("unitApprovalDescription").textContent = `Requesting an approval code for ${unitName}. It will be sent to ${CURRENT_ADMIN_EMAIL}.`;
-  document.getElementById("unitApprovalLoadingText").textContent = "Sending approval code...";
+  document.getElementById("unitApprovalDescription").textContent = `Requesting the owner's approval PIN for ${unitName}.`;
+  document.getElementById("unitApprovalLoadingText").textContent = "Sending owner PIN...";
   document.getElementById("unitApprovalLoading").hidden = false;
   document.getElementById("unitApprovalForm").hidden = true;
   document.getElementById("unitApprovalError").hidden = true;
@@ -287,12 +289,12 @@ function showUnitApprovalLoading(operation, unitName, resource) {
   document.getElementById("unitApprovalTitle").focus();
 }
 
-function openUnitApprovalDialog(challengeId, operation, unitName, resource, approveChange) {
+function openUnitApprovalDialog(challengeId, operation, unitName, resource, ownerEmail, approveChange) {
   const modal = document.getElementById("unitApprovalModal");
   const codeInput = document.getElementById("unitApprovalCode");
   const closeButtons = [document.getElementById("closeUnitApproval"), document.getElementById("cancelUnitApproval")];
   document.getElementById("unitApprovalTitle").textContent = `${operation} ${resource}: ${unitName}`;
-  document.getElementById("unitApprovalDescription").textContent = `Enter the six-digit code sent to ${CURRENT_ADMIN_EMAIL}. It approves only this ${resource} change and expires in five minutes.`;
+  document.getElementById("unitApprovalDescription").textContent = `Enter the six-digit owner PIN sent to ${ownerEmail}. It approves only this ${resource} change and expires in five minutes.`;
   document.getElementById("unitApprovalLoading").hidden = true;
   document.getElementById("unitApprovalForm").hidden = false;
   document.getElementById("unitApprovalError").hidden = true;
@@ -339,7 +341,7 @@ function bindUnitApprovalDialog() {
     const code = codeInput.value.trim();
     const error = document.getElementById("unitApprovalError");
     if (!/^\d{6}$/.test(code)) {
-      error.textContent = "Enter the six-digit code from your email.";
+      error.textContent = "Enter the six-digit owner PIN from the email.";
       error.hidden = false;
       codeInput.focus();
       return;
@@ -574,6 +576,13 @@ function bindSiteAssetsTab() {
 function renderLabelsTab() {
   const wrap = document.getElementById("labelsForm");
   const editableTrustItems = LABELS.trustStrip.filter(item => !isAutomaticFleetStat(item));
+  const howItWorksSteps = [...(Array.isArray(LABELS.howItWorks) ? LABELS.howItWorks : [])];
+  if (!howItWorksSteps.some(step => step.title?.trim().toLowerCase() === "return the vehicle")) {
+    howItWorksSteps.push({
+      title: "Return the vehicle",
+      description: "Bring the car back at the agreed time and place. Contact our team in advance if you need to request a change."
+    });
+  }
 
   wrap.innerHTML = `
     <div class="label-group">
@@ -611,14 +620,14 @@ function renderLabelsTab() {
     </div>
 
     <div class="label-group">
-      <h3>How it works (4 steps)</h3>
-      <div id="howRepeat">${LABELS.howItWorks.map((step) => `
+      <h3>How it works slideshow</h3>
+      <div id="howRepeat">${howItWorksSteps.map((step) => `
         <div class="repeat-item">
           <div class="label-field"><label>Step title</label><input class="how-title" value="${attr(step.title)}"></div>
           <div class="label-field"><label>Step description</label><textarea class="how-desc" rows="2">${text(step.description)}</textarea></div>
         </div>
       `).join("")}</div>
-      <p style="font-size:0.8rem; color:var(--slate-light); margin-top:-0.4rem;">These are numbered 01–04 automatically on the site, in the order shown here.</p>
+      <p style="font-size:0.8rem; color:var(--slate-light); margin-top:-0.4rem;">Steps appear in this order in the public slideshow. The return procedure is added automatically if it is missing.</p>
     </div>
 
     <div class="label-group">
@@ -732,9 +741,19 @@ function renderLabelsTab() {
       }))
     };
     delete newLabels.contact;
-    await DB.saveLabels(newLabels);
-    LABELS = await DB.getLabels();
-    toast("Labels saved. Refresh the main site to see changes.");
+    try {
+      await requestAndApproveAdminChange(
+        "site content",
+        "update",
+        { labels: newLabels },
+        (action, data) => DB.requestOwnerChange("site_content", action, data),
+        DB.approveOwnerChange
+      );
+      LABELS = await DB.getLabels();
+      toast("Labels saved. Refresh the main site to see changes.");
+    } catch (error) {
+      toast(`Could not save labels: ${error.message}`);
+    }
   });
 }
 
@@ -747,75 +766,165 @@ function bindRemoveButtons() {
 /* ==========================================================================
    INQUIRIES TAB — the client/booking data collected from the public site
    ========================================================================== */
-async function renderInquiriesTab() {
-  INQUIRIES = await DB.getInquiries();
-  const tbody = document.getElementById("inquiriesTableBody");
-
-  if (INQUIRIES.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state">No inquiries yet — they'll appear here as soon as someone submits the booking form on the main site.</div></td></tr>`;
-    document.getElementById("inquiryCount").textContent = "0 inquiries";
-    return;
+async function renderInquiriesTab({ reload = true } = {}) {
+  const content = document.getElementById("inquiriesContent");
+  const countBadge = document.getElementById("inquiryCount");
+  const metrics = document.getElementById("inquiryMetrics");
+  if (reload) {
+    try {
+      INQUIRIES = await DB.getInquiries();
+    } catch (error) {
+      countBadge.textContent = "Unavailable";
+      metrics.replaceChildren();
+      content.innerHTML = `<div class="empty-state inquiry-load-error" role="alert">Could not load inquiries from MongoDB: ${text(error.message)} <button class="btn btn-ghost btn-sm" id="retryInquiriesBtn" type="button"><i class="fa-solid fa-rotate" aria-hidden="true"></i> Try again</button></div>`;
+      return false;
+    }
   }
 
-  document.getElementById("inquiryCount").textContent = `${INQUIRIES.length} inquir${INQUIRIES.length === 1 ? "y" : "ies"}`;
-
-  tbody.innerHTML = INQUIRIES.map(inq => `
-    <tr data-id="${inq.id}">
-<td>${inq.created_at ? new Date(inq.created_at).toLocaleDateString() : "N/A"}</td>
-<td>
-    <strong>${text(inq.name)}</strong><br>
-  <span style="font-size:0.85rem; color:var(--slate-light);">${text(inq.email)} - ${text(inq.phone)}${inq.secondary_phone ? ` - ${text(inq.secondary_phone)}` : ""}</span>
-</td>
-<td><strong>${text(inq.car_name || "N/A")}</strong></td>
-<td>${text(inq.pickup_date || "N/A")} ${text(inq.pickup_time || "")} &rarr; ${text(inq.return_date || "N/A")}</td>
-<td>${text(inq.location || "-")}</td>
-      <td>
-        <select class="status-select status-${inq.status}">
-          ${[["pending_review", "Pending review"], ["contacted", "Contacted"], ["confirmed", "Confirmed"], ["rejected", "Rejected"]].map(([value, label]) =>
-            `<option value="${value}" ${inq.status === value ? "selected" : ""}>${label}</option>`
-          ).join("")}
-        </select>
-      </td>
-      <td class="row-actions">
-        <button class="icon-btn view-inquiry" title="View full inquiry" aria-label="View full inquiry"><i class="fa-solid fa-eye" aria-hidden="true"></i></button>
-        <button class="icon-btn danger delete-inquiry" title="Delete"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
-      </td>
-    </tr>
+  const count = INQUIRIES.length;
+  countBadge.textContent = `${displayInquiryCount(count)} inquir${count === 1 ? "y" : "ies"}`;
+  const statuses = [
+    ["pending_review", "Pending review"],
+    ["contacted", "Contacted"],
+    ["confirmed", "Confirmed"],
+    ["rejected", "Rejected"]
+  ];
+  const statusCounts = new Map(statuses.map(([value]) => [value, 0]));
+  INQUIRIES.forEach(inquiry => {
+    const status = statusCounts.has(inquiry.status) ? inquiry.status : "pending_review";
+    statusCounts.set(status, statusCounts.get(status) + 1);
+  });
+  metrics.innerHTML = statuses.map(([value, label]) => `
+    <button class="inquiry-metric inquiry-metric-${value}${INQUIRY_FILTERS.has(value) ? " is-filtered" : ""}" type="button" data-inquiry-filter="${value}" aria-pressed="${INQUIRY_FILTERS.has(value)}">
+      <span class="inquiry-metric-count">${displayInquiryCount(statusCounts.get(value))}</span>
+      <span class="inquiry-metric-label">${label}</span>
+    </button>
   `).join("");
 
-  tbody.querySelectorAll(".status-select").forEach(sel => {
-    sel.addEventListener("change", async (e) => {
-      const id = e.target.closest("tr").dataset.id;
-      try {
-        await DB.updateInquiry(id, { status: e.target.value });
-        e.target.className = `status-select status-${e.target.value}`;
-        toast("Inquiry status updated.");
-      } catch (error) {
-        toast(`Could not update inquiry: ${error.message}`);
-        await renderInquiriesTab();
-      }
-    });
-  });
+  if (count === 0) {
+    content.innerHTML = `<div class="admin-card"><div class="empty-state">No inquiries yet — new booking submissions will appear here.</div></div>`;
+    return true;
+  }
 
-  tbody.querySelectorAll(".delete-inquiry").forEach(btn => {
-    btn.addEventListener("click", async (e) => {
-      const id = Number(e.target.closest("tr").dataset.id);
-      if (!confirm("Delete this inquiry permanently?")) return;
-      await DB.deleteInquiry(id);
-      await renderInquiriesTab();
-      toast("Inquiry deleted.");
-    });
-  });
+  const sections = statuses
+    .map(([value, label]) => ({
+      value,
+      label,
+      inquiries: INQUIRIES.filter(inquiry => (statusCounts.has(inquiry.status) ? inquiry.status : "pending_review") === value)
+    }))
+    .filter(section => INQUIRY_FILTERS.size === 0 || INQUIRY_FILTERS.has(section.value))
+    .filter(section => section.inquiries.length > 0);
 
-  tbody.querySelectorAll(".view-inquiry").forEach(btn => {
-    btn.addEventListener("click", (e) => showInquiryDetails(e.target.closest("tr").dataset.id));
-  });
+  if (sections.length === 0) {
+    content.innerHTML = `<div class="admin-card"><div class="empty-state">No inquiries match the selected categories. Clear the category selections to show all inquiries.</div></div>`;
+    return true;
+  }
 
+  content.innerHTML = sections.map(section => `
+    <section class="admin-card inquiry-status-section inquiry-status-section-${section.value}" aria-labelledby="inquiry-section-${section.value}">
+      <header class="inquiry-section-header">
+        <div>
+          <h2 id="inquiry-section-${section.value}">${section.label}</h2>
+          <p>${displayInquiryCount(section.inquiries.length)} ${section.inquiries.length === 1 ? "inquiry" : "inquiries"}</p>
+        </div>
+        <span class="inquiry-section-count">${displayInquiryCount(section.inquiries.length)}</span>
+      </header>
+      <div class="inquiry-card-grid ${section.inquiries.length === 1 ? "is-single" : section.inquiries.length >= 8 ? "is-dense" : "is-standard"}" data-count="${section.inquiries.length}">
+        ${section.inquiries.map(inq => {
+          const submitted = inquiryDisplayDate(inq.created_at || inq.submittedAt);
+          const status = statusCounts.has(inq.status) ? inq.status : "pending_review";
+          const rental = inq.rental_mode === "hourly"
+            ? `${text(inq.rental_period_hours ?? "—")}-hour rental`
+            : `${text(inq.rental_days ?? "—")} custom days`;
+          const coordinates = getInquiryCoordinates(inq);
+          const isRejected = status === "rejected";
+          return `
+            <article class="inquiry-card inquiry-card-${status}${String(inq.id) === String(SELECTED_INQUIRY_CARD_ID) ? " is-selected" : ""}" data-id="${attr(inq.id)}" tabindex="0" aria-label="Inquiry from ${attr(inq.name || "Unnamed customer")}">
+              <div class="inquiry-card-topline">
+                <span class="inquiry-card-submitted">${text(submitted)}</span>
+                <div class="inquiry-card-controls">
+                  ${isRejected
+                    ? `<span class="inquiry-status-badge status-rejected">Rejected</span>`
+                    : `<label class="inquiry-status-control">
+                        <span class="sr-only">Inquiry status</span>
+                        <select class="status-select status-${status}" aria-label="Inquiry status">
+                          ${status === "pending_review" ? `<option value="" selected disabled>Mark status…</option>` : ""}
+                          <option value="contacted" ${status === "contacted" ? "selected" : ""}>Contacted</option>
+                          <option value="confirmed" ${status === "confirmed" ? "selected" : ""}>Confirmed</option>
+                        </select>
+                      </label>`}
+                  ${isRejected
+                    ? inq.rejection_email_sent === false
+                      ? `<button class="icon-btn retry-rejection-email" type="button" title="Retry rejection email" aria-label="Retry rejection email"><i class="fa-solid fa-envelope" aria-hidden="true"></i></button>`
+                      : `<button class="icon-btn inquiry-reject-action is-complete" type="button" disabled title="Inquiry already rejected" aria-label="Inquiry already rejected"><i class="fa-solid fa-ban" aria-hidden="true"></i></button>`
+                    : `<button class="icon-btn inquiry-reject-action" type="button" title="Reject inquiry and email customer" aria-label="Reject inquiry and email customer"><i class="fa-solid fa-ban" aria-hidden="true"></i></button>`}
+                </div>
+              </div>
+              <h3 class="inquiry-card-name">${text(inq.name || "Unnamed customer")}</h3>
+              <p class="inquiry-card-contact">${text(inq.email || "No email")} <span aria-hidden="true">·</span> ${text(inq.phone || "No phone")}</p>
+              <div class="inquiry-card-summary">
+                <div><span>Vehicle</span><strong>${text(inq.car_name || inq.carName || "—")}</strong></div>
+                <div><span>Dates</span><strong>${text(inq.pickup_date || inq.pickupDate || "—")} ${text(inq.pickup_time || inq.pickupTime || "")} → ${text(inq.return_date || inq.returnDate || "—")}</strong></div>
+                <div><span>Destination</span><strong>${text(inq.location || "—")}</strong></div>
+              </div>
+              <details class="inquiry-disclosure">
+                <summary><span>Read more</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
+                <dl class="inquiry-card-details">
+                  <div><dt>Capacity</dt><dd>${text(inq.capacity ?? "—")}</dd></div>
+                  <div><dt>Rental arrangement</dt><dd>${rental}</dd></div>
+                  <div><dt>Rate region</dt><dd>${text(inq.rate_region || "—")}</dd></div>
+                  <div><dt>Quoted rate</dt><dd>${text(inq.quoted_rate ?? "—")}</dd></div>
+                  <div><dt>Discount</dt><dd>${text(inq.discount_percent ?? 0)}% · ${text(inq.discount_amount ?? 0)}</dd></div>
+                  <div><dt>Nearest pickup</dt><dd>${text(inq.nearest_pickup_name || "—")} · ${text(inq.nearest_pickup_distance_km ?? "—")} km</dd></div>
+                  <div class="inquiry-card-detail-wide"><dt>Target coordinates</dt><dd>${text(coordinates ? `${coordinates.latitude}, ${coordinates.longitude}` : "—")} ${coordinates ? `<a class="inquiry-map-link" href="${getGoogleMapsUrl(coordinates)}" target="_blank" rel="noopener noreferrer" title="Show coordinates in map" aria-label="Show coordinates in map"><i class="fa-solid fa-map-location-dot" aria-hidden="true"></i></a>` : ""}</dd></div>
+                  ${inq.rejection_reason ? `<div class="inquiry-card-detail-wide"><dt>Rejection reason</dt><dd class="preserve-lines">${text(inq.rejection_reason)}</dd></div>` : ""}
+                  ${inq.notes ? `<div class="inquiry-card-detail-wide"><dt>Notes</dt><dd class="preserve-lines">${text(inq.notes)}</dd></div>` : ""}
+                </dl>
+                <div class="inquiry-card-actions">
+                  <button class="btn btn-ghost btn-sm view-inquiry" type="button"><i class="fa-solid fa-eye" aria-hidden="true"></i> Full record</button>
+                  <button class="icon-btn danger delete-inquiry" type="button" title="Delete inquiry" aria-label="Delete inquiry"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
+                </div>
+              </details>
+            </article>
+          `;
+        }).join("")}
+      </div>
+    </section>
+  `).join("");
+  return true;
+}
+
+function displayInquiryCount(count) {
+  return count > 99 ? "99+" : String(count);
+}
+
+function getInquiryCoordinates(inquiry) {
+  const rawLatitude = inquiry.target_latitude ?? inquiry.targetLatitude;
+  const rawLongitude = inquiry.target_longitude ?? inquiry.targetLongitude;
+  if (rawLatitude === null || rawLatitude === undefined || rawLatitude === ""
+    || rawLongitude === null || rawLongitude === undefined || rawLongitude === "") return null;
+  const latitude = Number(rawLatitude);
+  const longitude = Number(rawLongitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)
+    || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
+  return { latitude, longitude };
+}
+
+function getGoogleMapsUrl(coordinates) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${coordinates.latitude},${coordinates.longitude}`)}`;
+}
+
+function inquiryDisplayDate(value) {
+  if (!value) return "Submission date unavailable";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "Submission date unavailable"
+    : date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
 function exportInquiryCsv(inquiry) {
   const row = [
-    ["Submitted", "Name", "Email", "Phone", "Secondary phone", "Unit", "Unit ID", "Capacity", "Pickup date", "Pickup time", "Return date", "Target location", "Target latitude", "Target longitude", "Nearest pickup", "Distance km", "Rate region", "Rental mode", "Rate period hours", "Estimated hours", "Rental days", "Rate per period", "Discount percent", "Discount amount", "Quoted rate", "Status", "Notes"],
+    ["Submitted", "Name", "Email", "Phone", "Secondary phone", "Unit", "Unit ID", "Capacity", "Pickup date", "Pickup time", "Return date", "Target location", "Target latitude", "Target longitude", "Nearest pickup", "Distance km", "Rate region", "Rental mode", "Rate period hours", "Estimated hours", "Rental days", "Rate per period", "Discount percent", "Discount amount", "Quoted rate", "Status", "Rejection reason", "Rejection email sent", "Notes"],
     [
       inquiry.created_at || inquiry.submittedAt || "",
       inquiry.name || "",
@@ -843,6 +952,8 @@ function exportInquiryCsv(inquiry) {
       inquiry.discount_amount ?? "",
       inquiry.quoted_rate ?? "",
       inquiry.status || "New",
+      inquiry.rejection_reason || "",
+      inquiry.rejection_email_sent ? "yes" : "no",
       inquiry.notes || ""
     ]
   ];
@@ -862,6 +973,7 @@ function showInquiryDetails(id) {
   if (!inquiry) return;
   SELECTED_INQUIRY = inquiry;
   const submitted = inquiry.created_at || inquiry.submittedAt;
+  const coordinates = getInquiryCoordinates(inquiry);
   document.getElementById("inquiryDetailTitle").textContent = inquiry.name || "Inquiry details";
   document.getElementById("inquiryDetailMeta").textContent = submitted ? `Submitted ${formatDate(submitted)}` : "Submission time unavailable";
   document.getElementById("inquiryDetails").innerHTML = `
@@ -879,10 +991,12 @@ function showInquiryDetails(id) {
       <div><dt>Pickup time</dt><dd>${text(inquiry.pickup_time || inquiry.pickupTime || "—")}</dd></div>
       <div><dt>Return date</dt><dd>${text(inquiry.return_date || inquiry.returnDate || "—")}</dd></div>
       <div><dt>Target location</dt><dd>${text(inquiry.location || "—")}</dd></div>
-      <div><dt>Target coordinates</dt><dd>${text(inquiry.target_latitude ?? "—")}, ${text(inquiry.target_longitude ?? "—")}</dd></div>
+      <div><dt>Target coordinates</dt><dd>${text(coordinates ? `${coordinates.latitude}, ${coordinates.longitude}` : "—")} ${coordinates ? `<a class="inquiry-map-link" href="${getGoogleMapsUrl(coordinates)}" target="_blank" rel="noopener noreferrer" title="Show coordinates in map" aria-label="Show coordinates in map"><i class="fa-solid fa-map-location-dot" aria-hidden="true"></i></a>` : ""}</dd></div>
       <div><dt>Nearest pickup</dt><dd>${text(inquiry.nearest_pickup_name || "—")} · ${text(inquiry.nearest_pickup_distance_km ?? "—")} km</dd></div>
       <div><dt>Quoted rate</dt><dd>${text(inquiry.rate_region || "—")} · ${inquiry.rental_mode === "hourly" ? `${text(inquiry.rental_period_hours ?? "—")}-hour rental` : `${text(inquiry.rental_days ?? "—")} custom days`} · ${text(inquiry.quoted_rate ?? "—")}</dd></div>
       <div><dt>Promo discount</dt><dd>${text(inquiry.discount_percent ?? 0)}% · ${text(inquiry.discount_amount ?? 0)}</dd></div>
+      ${inquiry.rejection_reason ? `<div class="inquiry-detail-wide"><dt>Rejection reason</dt><dd class="preserve-lines">${text(inquiry.rejection_reason)}</dd></div>` : ""}
+      ${inquiry.status === "rejected" ? `<div><dt>Rejection email</dt><dd>${inquiry.rejection_email_sent ? "Sent" : "Not sent — retry from the inquiry card"}</dd></div>` : ""}
       <div class="inquiry-detail-wide"><dt>Notes</dt><dd class="preserve-lines">${text(inquiry.notes || "—")}</dd></div>
     </div>
   `;
@@ -890,20 +1004,173 @@ function showInquiryDetails(id) {
   document.getElementById("closeInquiryDetail").focus();
 }
 
+function openInquiryRejection(id) {
+  const inquiry = INQUIRIES.find(item => String(item.id) === String(id));
+  if (!inquiry || inquiry.status === "rejected") return;
+  REJECTING_INQUIRY = inquiry;
+  const modal = document.getElementById("inquiryRejectionModal");
+  const reasonInput = document.getElementById("inquiryRejectionReason");
+  document.getElementById("inquiryRejectionDescription").textContent =
+    `${inquiry.name || "This customer"} will receive an email at ${inquiry.email || "the address on their inquiry"}.`;
+  reasonInput.value = "";
+  updateRejectionPreview();
+  document.getElementById("inquiryRejectionError").hidden = true;
+  document.getElementById("proceedInquiryRejection").disabled = false;
+  modal.hidden = false;
+  reasonInput.focus();
+}
+
+function updateRejectionPreview() {
+  const reason = document.getElementById("inquiryRejectionReason").value.trim();
+  const words = reason ? reason.split(/\s+/).length : 0;
+  document.getElementById("inquiryRejectionWordCount").textContent = `${words} / 250 words`;
+  document.getElementById("inquiryRejectionWordCount").classList.toggle("is-over-limit", words > 250);
+  document.getElementById("inquiryRejectionPreviewReason").textContent =
+    reason || "Your explanation will appear here.";
+  const name = REJECTING_INQUIRY?.name || "customer";
+  document.getElementById("inquiryRejectionPreviewGreeting").textContent = `Dear ${name},`;
+}
+
+function closeInquiryRejection() {
+  const modal = document.getElementById("inquiryRejectionModal");
+  modal.hidden = true;
+  REJECTING_INQUIRY = null;
+}
+
 function bindInquiryTools() {
   document.getElementById("refreshInquiriesBtn").addEventListener("click", async () => {
-    await renderInquiriesTab();
-    toast("Inquiries refreshed.");
+    toast(await renderInquiriesTab() ? "Inquiries refreshed." : "Could not refresh inquiries.");
+  });
+
+  document.getElementById("inquiriesContent").addEventListener("click", async event => {
+    const card = event.target.closest(".inquiry-card");
+    if (event.target.closest("#retryInquiriesBtn")) {
+      toast(await renderInquiriesTab() ? "Inquiries refreshed." : "Could not refresh inquiries.");
+      return;
+    }
+    if (!card) return;
+    SELECTED_INQUIRY_CARD_ID = card.dataset.id;
+    document.querySelectorAll(".inquiry-card.is-selected").forEach(selected => selected.classList.remove("is-selected"));
+    card.classList.add("is-selected");
+    if (event.target.closest(".view-inquiry")) {
+      showInquiryDetails(card.dataset.id);
+      return;
+    }
+    if (event.target.closest(".inquiry-reject-action") && !event.target.closest(".inquiry-reject-action").disabled) {
+      openInquiryRejection(card.dataset.id);
+      return;
+    }
+    if (event.target.closest(".retry-rejection-email")) {
+      const button = event.target.closest(".retry-rejection-email");
+      button.disabled = true;
+      try {
+        const result = await DB.resendInquiryRejection(card.dataset.id);
+        await renderInquiriesTab();
+        toast(result.emailSent ? "Rejection email sent." : "Inquiry is rejected, but the email could not be sent. Check SMTP and retry.");
+      } catch (error) {
+        toast(`Could not resend rejection email: ${error.message}`);
+        button.disabled = false;
+      }
+      return;
+    }
+    if (!event.target.closest(".delete-inquiry")) return;
+    if (!confirm("Delete this inquiry permanently?")) return;
+    try {
+      await DB.deleteInquiry(Number(card.dataset.id));
+      if (String(SELECTED_INQUIRY_CARD_ID) === String(card.dataset.id)) SELECTED_INQUIRY_CARD_ID = null;
+      toast(await renderInquiriesTab() ? "Inquiry deleted." : "Inquiry deleted, but the list could not be refreshed.");
+    } catch (error) {
+      toast(`Could not delete inquiry: ${error.message}`);
+    }
+  });
+
+  document.getElementById("inquiriesContent").addEventListener("change", async event => {
+    const select = event.target.closest(".status-select");
+    if (!select) return;
+    const card = select.closest(".inquiry-card");
+    const inquiry = INQUIRIES.find(item => String(item.id) === card?.dataset.id);
+    if (!card || !inquiry) return;
+    const previousStatus = inquiry.status;
+    const nextStatus = select.value;
+    if (!nextStatus) return;
+    select.disabled = true;
+    try {
+      await DB.updateInquiry(card.dataset.id, { status: nextStatus });
+      toast(await renderInquiriesTab() ? "Inquiry status updated successfully." : "Status updated, but the list could not be refreshed.");
+    } catch (error) {
+      toast(`Could not update inquiry: ${error.message}`);
+      select.value = previousStatus;
+      select.disabled = false;
+    }
+  });
+
+  document.getElementById("inquiryMetrics").addEventListener("click", async event => {
+    const filter = event.target.closest("[data-inquiry-filter]");
+    if (!filter) return;
+    const value = filter.dataset.inquiryFilter;
+    if (INQUIRY_FILTERS.has(value)) INQUIRY_FILTERS.delete(value);
+    else INQUIRY_FILTERS.add(value);
+    await renderInquiriesTab({ reload: false });
+  });
+
+  document.getElementById("inquiriesContent").addEventListener("keydown", event => {
+    const card = event.target.closest(".inquiry-card");
+    if (!card || event.target !== card || !["Enter", " "].includes(event.key)) return;
+    event.preventDefault();
+    SELECTED_INQUIRY_CARD_ID = card.dataset.id;
+    document.querySelectorAll(".inquiry-card.is-selected").forEach(selected => selected.classList.remove("is-selected"));
+    card.classList.add("is-selected");
+  });
+
+  const rejectionModal = document.getElementById("inquiryRejectionModal");
+  const rejectionForm = document.getElementById("inquiryRejectionForm");
+  const closeRejection = () => closeInquiryRejection();
+  document.getElementById("closeInquiryRejection").addEventListener("click", closeRejection);
+  document.getElementById("cancelInquiryRejection").addEventListener("click", closeRejection);
+  document.getElementById("inquiryRejectionReason").addEventListener("input", updateRejectionPreview);
+  rejectionModal.addEventListener("click", event => {
+    if (event.target === rejectionModal) closeRejection();
+  });
+  rejectionForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!REJECTING_INQUIRY) return;
+    const reason = document.getElementById("inquiryRejectionReason").value.trim();
+    const words = reason ? reason.split(/\s+/).length : 0;
+    const error = document.getElementById("inquiryRejectionError");
+    if (!reason || words > 250) {
+      error.textContent = !reason ? "Enter a reason before proceeding." : "Keep the explanation within 250 words.";
+      error.hidden = false;
+      return;
+    }
+    const inquiryId = REJECTING_INQUIRY.id;
+    const proceed = document.getElementById("proceedInquiryRejection");
+    proceed.disabled = true;
+    proceed.innerHTML = '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i> Sending…';
+    error.hidden = true;
+    try {
+      const result = await DB.rejectInquiry(inquiryId, reason);
+      closeInquiryRejection();
+      await renderInquiriesTab();
+      toast(result.emailSent
+        ? "Inquiry rejected and customer email sent."
+        : "Inquiry rejected, but the customer email could not be sent. Use the retry email button after checking SMTP.");
+    } catch (requestError) {
+      error.textContent = `Could not reject inquiry: ${requestError.message}`;
+      error.hidden = false;
+    } finally {
+      proceed.disabled = false;
+      proceed.innerHTML = '<i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Reject and email customer';
+    }
   });
 
   document.getElementById("exportCsvBtn").addEventListener("click", () => {
     if (INQUIRIES.length === 0) { toast("No inquiries to export yet."); return; }
-    const headers = ["Submitted", "Name", "Email", "Phone", "Unit", "Capacity", "Pickup Date", "Pickup Time", "Return Date", "Location", "Rate Region", "Rental Mode", "Rental Days", "Rate Period Hours", "Discount Percent", "Discount Amount", "Quoted Rate", "Status", "Notes"];
+    const headers = ["Submitted", "Name", "Email", "Phone", "Unit", "Capacity", "Pickup Date", "Pickup Time", "Return Date", "Location", "Rate Region", "Rental Mode", "Rental Days", "Rate Period Hours", "Discount Percent", "Discount Amount", "Quoted Rate", "Status", "Rejection Reason", "Rejection Email Sent", "Notes"];
     const rows = INQUIRIES.map(i => [
       i.submittedAt || i.created_at || "", i.name, i.email, i.phone, i.carName || i.car_name, i.capacity ?? "",
       i.pickupDate || i.pickup_date, i.pickup_time || i.pickupTime || "", i.returnDate || i.return_date, i.location || "", i.rate_region || "",
       i.rental_mode || "", i.rental_days ?? "", i.rental_period_hours ?? "", i.discount_percent ?? "", i.discount_amount ?? "",
-      i.quoted_rate ?? "", i.status, (i.notes || "").replace(/\n/g, " ")
+      i.quoted_rate ?? "", i.status, i.rejection_reason || "", i.rejection_email_sent ? "yes" : "no", (i.notes || "").replace(/\n/g, " ")
     ]);
     const csv = [headers, ...rows]
       .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(","))
@@ -959,10 +1226,20 @@ async function renderChatMonitor() {
     button.addEventListener("click", async event => {
       const id = event.target.closest("tr").dataset.id;
       if (!confirm("Delete this chat session permanently?")) return;
-      await DB.deleteChatSession(id);
-      closeChatTranscriptModal();
-      await renderChatMonitor();
-      toast("Chat session deleted.");
+      try {
+        await requestAndApproveAdminChange(
+          "chat session",
+          "delete",
+          { id },
+          (action, data) => DB.requestOwnerChange("chat_sessions", action, data),
+          DB.approveOwnerChange
+        );
+        closeChatTranscriptModal();
+        await renderChatMonitor();
+        toast("Chat session deleted.");
+      } catch (error) {
+        toast(`Could not delete chat session: ${error.message}`);
+      }
     });
   });
 }
@@ -997,10 +1274,14 @@ function bindChatMonitor() {
   document.getElementById("inquiryDetailModal").addEventListener("click", event => {
     if (event.target.id === "inquiryDetailModal") closeInquiryDetailModal();
   });
+  document.getElementById("inquiryRejectionModal").addEventListener("click", event => {
+    if (event.target.id === "inquiryRejectionModal") closeInquiryRejection();
+  });
   document.addEventListener("keydown", event => {
     if (event.key === "Escape") {
       closeChatTranscriptModal();
       closeInquiryDetailModal();
+      closeInquiryRejection();
     }
   });
 }
@@ -1054,7 +1335,13 @@ function renderSettingsTab() {
     const email = input.value.trim().toLowerCase();
     if (!input.reportValidity()) return;
     try {
-      await DB.addAdminEmail(email);
+      await requestAndApproveAdminChange(
+        "administrator account",
+        "add",
+        { email },
+        (action, data) => DB.requestOwnerChange("admin_accounts", action, data),
+        DB.approveOwnerChange
+      );
       SETTINGS.adminEmails = await DB.getAdminEmails();
       input.value = "";
       renderAdminAccounts();
@@ -1070,7 +1357,13 @@ function renderSettingsTab() {
     const email = button.dataset.removeAdmin;
     if (!confirm(`Remove ${email} from administrator accounts?`)) return;
     try {
-      await DB.removeAdminEmail(email);
+      await requestAndApproveAdminChange(
+        "administrator account",
+        "remove",
+        { email },
+        (action, data) => DB.requestOwnerChange("admin_accounts", action, data),
+        DB.approveOwnerChange
+      );
       SETTINGS.adminEmails = await DB.getAdminEmails();
       renderAdminAccounts();
       toast("Administrator account removed.");
@@ -1081,14 +1374,21 @@ function renderSettingsTab() {
 
   document.getElementById("saveSettingsBtn").addEventListener("click", async () => {
     try {
-      await DB.saveSettings({
-      companyName: document.getElementById("setCompanyName").value.trim(),
-      currency: document.getElementById("setCurrency").value.trim() || "$",
-      depositPercent: Number(document.getElementById("setDeposit").value) || 0,
-      extraDriverFee: Number(document.getElementById("setExtraDriver").value) || 0,
-      childSeatFee: Number(document.getElementById("setChildSeat").value) || 0,
+      const settings = {
+        companyName: document.getElementById("setCompanyName").value.trim(),
+        currency: document.getElementById("setCurrency").value.trim() || "$",
+        depositPercent: Number(document.getElementById("setDeposit").value) || 0,
+        extraDriverFee: Number(document.getElementById("setExtraDriver").value) || 0,
+        childSeatFee: Number(document.getElementById("setChildSeat").value) || 0,
         lateFeePerHour: Number(document.getElementById("setLateFee").value) || 0
-      });
+      };
+      await requestAndApproveAdminChange(
+        "site settings",
+        "update",
+        { settings },
+        (action, data) => DB.requestOwnerChange("site_content", action, data),
+        DB.approveOwnerChange
+      );
       SETTINGS = { ...SETTINGS, ...await DB.getSettings() };
       toast("Settings saved.");
     } catch (error) {
@@ -1098,15 +1398,26 @@ function renderSettingsTab() {
 
   document.getElementById("resetAllBtn").addEventListener("click", async () => {
     if (!confirm("Reset public settings and page copy to defaults? Fleet, site assets, booking inquiries, and chat sessions will remain unchanged.")) return;
-    await DB.resetAll();
-    await loadAll();
-    SETTINGS.adminEmails = await DB.getAdminEmails();
-    renderFleetTab();
-    renderLabelsTab();
-    await renderInquiriesTab();
-    await renderChatMonitor();
-    renderSettingsTab();
-    toast("Everything reset to defaults.");
+    try {
+      const defaults = await DB.getSiteContentDefaults();
+      await requestAndApproveAdminChange(
+        "site settings and page content",
+        "update",
+        { settings: defaults.settings, labels: defaults.labels },
+        (action, data) => DB.requestOwnerChange("site_content", action, data),
+        DB.approveOwnerChange
+      );
+      await loadAll();
+      SETTINGS.adminEmails = await DB.getAdminEmails();
+      renderFleetTab();
+      renderLabelsTab();
+      await renderInquiriesTab();
+      await renderChatMonitor();
+      renderSettingsTab();
+      toast("Everything reset to defaults.");
+    } catch (error) {
+      toast(`Could not reset site content: ${error.message}`);
+    }
   });
 }
 
