@@ -106,3 +106,6 @@ ANIMATIONS, DESIGN, AND LAYOUT:
 - When an email is verified, remove the "RESEND CODE" from the display, then place the "Email verified. You can submit your inquiry" to its place.
 - Blur the background when "RESERVATION RECAP" toast appears, then remove the blur once complete or cancelled.
 - Fix the UI in smaller devices interfaces.
+9.5. Upgrade the email content
+- Have a followup email kinda like this "Thanks for inquiring with us, we'll take it from here", but I want you to make it professional but concise. Offer suggestions as well, add some design
+- Apply design to all email inbox processes to those parts that uses it

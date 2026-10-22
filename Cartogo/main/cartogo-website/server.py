@@ -1,6 +1,7 @@
 import json
 import hashlib
 import hmac
+import html
 import math
 import os
 import re
@@ -44,6 +45,104 @@ UNIT_RATE_FIELDS = ("in12_rate", "in24_rate", "out12_rate", "out24_rate", "luzon
 MAX_API_BODY_BYTES = 16 * 1024
 MONGO_STORE = None
 MONGO_STORE_LOCK = Lock()
+
+
+def build_branded_email(subject, preheader, heading, intro, content_html, text_content):
+	message = EmailMessage()
+	message["Subject"] = subject.replace("\r", " ").replace("\n", " ").strip()
+	message.set_content(text_content)
+	message.add_alternative(
+		f"""<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>{html.escape(heading)}</title></head>
+<body style="margin:0;padding:0;background:#f3f5f7;font-family:Arial,Helvetica,sans-serif;color:#252525;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">{html.escape(preheader)}</div>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f3f5f7;padding:28px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;">
+        <tr><td style="padding:22px 28px;background:#202020;border-bottom:4px solid #d62828;color:#ffffff;">
+          <div style="font-size:20px;font-weight:800;letter-spacing:.3px;">carTOGO<span style="color:#ff665e;">.mnl</span></div>
+          <div style="margin-top:4px;color:#c9c9c9;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;">Reliable cars · Easy booking</div>
+        </td></tr>
+        <tr><td style="padding:30px 28px 22px;">
+          <h1 style="margin:0 0 12px;color:#202020;font-size:23px;line-height:1.3;">{html.escape(heading)}</h1>
+          <p style="margin:0 0 22px;color:#565e67;font-size:15px;line-height:1.65;">{html.escape(intro)}</p>
+          {content_html}
+        </td></tr>
+        <tr><td style="padding:16px 28px;border-top:1px solid #e5e7eb;color:#6b7280;font-size:12px;line-height:1.6;">
+          This is an automated message from carTOGO.mnl. If you did not expect it, you can safely ignore it.
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>""",
+		subtype="html",
+	)
+	return message
+
+
+def send_branded_email(recipient, subject, preheader, heading, intro, content_html, text_content):
+	smtp_user = os.environ.get("SMTP_USER", "").strip()
+	smtp_password = os.environ.get("SMTP_APP_PASSWORD", "").strip()
+	if not smtp_user or not smtp_password:
+		raise RuntimeError("Email delivery is unavailable until Gmail SMTP is configured.")
+	message = build_branded_email(subject, preheader, heading, intro, content_html, text_content)
+	message["From"] = os.environ.get("SMTP_FROM", "").strip() or smtp_user
+	message["To"] = recipient
+	with smtplib.SMTP(
+		os.environ.get("SMTP_HOST", "smtp.gmail.com").strip(),
+		int(os.environ.get("SMTP_PORT", "587")),
+		timeout=10,
+	) as mail_server:
+		mail_server.starttls(context=ssl.create_default_context())
+		mail_server.login(smtp_user, smtp_password)
+		mail_server.send_message(message)
+
+
+def send_inquiry_confirmation(inquiry):
+	name = inquiry["name"]
+	rental_description = (
+		f'{inquiry["rental_period_hours"]}-hour rental'
+		if inquiry["rental_mode"] == "hourly"
+		else f'{inquiry["rental_days"]}-day custom arrangement'
+	)
+	quote = inquiry.get("quoted_rate")
+	quote_text = f'₱{quote:,.2f} estimated' if isinstance(quote, (int, float)) else "To be confirmed"
+	details = [
+		("Vehicle", inquiry["car_name"]),
+		("Rental", rental_description),
+		("Pickup", f'{inquiry["pickup_date"]} at {inquiry["pickup_time"]}'),
+		("Return", inquiry["return_date"]),
+		("Destination", inquiry["location"]),
+		("Estimated rental", quote_text),
+	]
+	details_html = "".join(
+		f'<tr><td style="padding:9px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280;font-size:13px;">'
+		f'{html.escape(label)}</td><td style="padding:9px 12px;border-bottom:1px solid #e5e7eb;'
+		f'color:#252525;font-size:13px;font-weight:600;">{html.escape(str(value))}</td></tr>'
+		for label, value in details
+	)
+	body_html = (
+		'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" '
+		'style="border:1px solid #e5e7eb;border-radius:9px;overflow:hidden;">'
+		f"{details_html}</table>"
+		'<div style="margin-top:20px;padding:15px 16px;border-left:3px solid #d62828;'
+		'background:#fff6f5;color:#444;font-size:13px;line-height:1.65;">'
+		'<strong>What happens next?</strong><br>Our team will review availability and follow up using the contact details you provided. '
+		'Keep your phone nearby, and have your driver’s license and ID ready. No payment is due now.</div>'
+	)
+	text_details = "\n".join(f"{label}: {value}" for label, value in details)
+	send_branded_email(
+		inquiry["email"],
+		"carTOGO.mnl | We received your inquiry",
+		"Your booking inquiry has been received. Our team will follow up shortly.",
+		"We’ve received your inquiry",
+		f"Thank you, {name}. Our team will review your request and follow up shortly.",
+		body_html,
+		f"Thank you, {name}. We’ve received your inquiry and our team will review your request and follow up shortly.\n\n"
+		f"{text_details}\n\nWhat happens next? Keep your phone nearby, and have your driver’s license and ID ready. "
+		"No payment is due now.",
+	)
 
 
 def get_mongo_store():
@@ -201,7 +300,17 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 				raise
 			if email_verification_token:
 				self.finish_guest_email_verification(email_verification_token, consume=True)
-			self.send_json(201, {"data": result})
+			email_notification_sent = True
+			try:
+				send_inquiry_confirmation(inquiry)
+			except (OSError, RuntimeError, smtplib.SMTPException, ValueError) as error:
+				email_notification_sent = False
+				self.log_message(
+					"Inquiry %s was saved, but its confirmation email could not be sent: %s",
+					result.get("id", "unknown"),
+					error,
+				)
+			self.send_json(201, {"data": result, "emailNotificationSent": email_notification_sent})
 		except ValueError as error:
 			self.send_json(400, {"error": str(error)})
 		except PermissionError as error:
@@ -249,23 +358,25 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 					"expires_at": now + 600,
 					"attempts": 0,
 				}
-			message = EmailMessage()
-			message["Subject"] = "carTOGO email verification code"
-			message["From"] = os.environ.get("SMTP_FROM", "").strip() or smtp_user
-			message["To"] = email
-			message.set_content(
-				f"Your carTOGO email verification code is: {code}\n\n"
-				"This code expires in 10 minutes and can be used once. If you did not request this, ignore this email."
+			code_html = (
+				'<div style="padding:18px 20px;border:1px solid #f1d4d1;border-radius:10px;'
+				'background:#fff6f5;text-align:center;">'
+				'<div style="color:#6b7280;font-size:12px;letter-spacing:1px;text-transform:uppercase;">Verification code</div>'
+				f'<div style="margin:8px 0;color:#202020;font-family:monospace;font-size:34px;'
+				f'font-weight:700;letter-spacing:8px;">{code}</div>'
+				'<div style="color:#6b7280;font-size:13px;">Expires in 10 minutes · single use</div></div>'
 			)
 			try:
-				with smtplib.SMTP(
-					os.environ.get("SMTP_HOST", "smtp.gmail.com").strip(),
-					int(os.environ.get("SMTP_PORT", "587")),
-					timeout=10,
-				) as mail_server:
-					mail_server.starttls(context=ssl.create_default_context())
-					mail_server.login(smtp_user, smtp_password)
-					mail_server.send_message(message)
+				send_branded_email(
+					email,
+					"carTOGO.mnl | Verify your email",
+					"Use this one-time code to verify your email address.",
+					"Verify your email address",
+					"Enter this code on the booking page to continue with your inquiry.",
+					code_html,
+					f"Your carTOGO.mnl verification code is {code}. It expires in 10 minutes and can be used once. "
+					"If you did not request this code, ignore this email.",
+				)
 			except (OSError, smtplib.SMTPException, ValueError):
 				with GUEST_EMAIL_LOCK:
 					GUEST_EMAIL_CHALLENGES.pop(challenge_id, None)
@@ -772,14 +883,18 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			code = f"{secrets.randbelow(1000000):06d}"
 			unit_name = unit.get("display_name", f"unit #{unit.get('id')}")
 			operation = {"add": "Add", "update": "Update", "delete": "Delete"}[action]
-			message = EmailMessage()
-			message["Subject"] = f"carTOGO unit change approval: {operation} {unit_name}"
-			message["From"] = os.environ.get("SMTP_FROM", "").strip() or os.environ["SMTP_USER"].strip()
-			message["To"] = admin["email"]
-			message.set_content(
-				f"A carTOGO administrator requested this unit change: {operation} {unit_name}.\n\n"
-				f"Requested values:\n{json.dumps(unit, ensure_ascii=False, indent=2)}\n\n"
-				f"Approval code: {code}\n\nThis code expires in 5 minutes and can approve only this requested change."
+			requested_values = json.dumps(unit, ensure_ascii=False, indent=2)
+			content_html = (
+				f'<p style="margin:0 0 10px;color:#565e67;font-size:14px;line-height:1.6;">'
+				f'Requested action: <strong>{html.escape(operation)} {html.escape(str(unit_name))}</strong></p>'
+				'<pre style="overflow-wrap:anywhere;white-space:pre-wrap;padding:14px;border-radius:8px;'
+				'background:#f3f5f7;color:#343a40;font-size:12px;line-height:1.5;">'
+				f'{html.escape(requested_values)}</pre>'
+				'<div style="margin-top:16px;padding:16px;border:1px solid #f1d4d1;border-radius:9px;'
+				'background:#fff6f5;text-align:center;">'
+				'<div style="color:#6b7280;font-size:12px;text-transform:uppercase;">Approval code · expires in 5 minutes</div>'
+				f'<strong style="display:block;margin-top:8px;color:#202020;font-family:monospace;'
+				f'font-size:30px;letter-spacing:7px;">{code}</strong></div>'
 			)
 			with UNIT_APPROVALS_LOCK:
 				UNIT_APPROVALS[challenge_id] = {
@@ -792,14 +907,17 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 					"attempts": 0,
 				}
 			try:
-				with smtplib.SMTP(
-					os.environ.get("SMTP_HOST", "smtp.gmail.com").strip(),
-					int(os.environ.get("SMTP_PORT", "587")),
-					timeout=10,
-				) as mail_server:
-					mail_server.starttls(context=ssl.create_default_context())
-					mail_server.login(os.environ["SMTP_USER"].strip(), os.environ["SMTP_APP_PASSWORD"].strip())
-					mail_server.send_message(message)
+				send_branded_email(
+					admin["email"],
+					f"carTOGO.mnl | Unit approval: {operation} {unit_name}",
+					"An administrator requested a unit change that needs your approval.",
+					"Unit change approval",
+					f"Review the requested {operation.lower()} action and enter its one-time code in the admin panel.",
+					content_html,
+					f"A carTOGO administrator requested this unit change: {operation} {unit_name}.\n\n"
+					f"Requested values:\n{requested_values}\n\nApproval code: {code}\n"
+					"This code expires in 5 minutes and can approve only this requested change.",
+				)
 			except (OSError, smtplib.SMTPException, ValueError):
 				with UNIT_APPROVALS_LOCK:
 					UNIT_APPROVALS.pop(challenge_id, None)
@@ -828,14 +946,18 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			code = f"{secrets.randbelow(1000000):06d}"
 			asset_name = asset.get("display_name", asset.get("loc_name", "contact details"))
 			operation = {"add": "Add", "update": "Update", "delete": "Delete"}[action]
-			message = EmailMessage()
-			message["Subject"] = f"carTOGO site asset approval: {operation} {asset_name}"
-			message["From"] = os.environ.get("SMTP_FROM", "").strip() or os.environ["SMTP_USER"].strip()
-			message["To"] = admin["email"]
-			message.set_content(
-				f"A carTOGO administrator requested this site asset change: {operation} {asset_name}.\n\n"
-				f"Requested values:\n{json.dumps(asset, ensure_ascii=False, indent=2)}\n\n"
-				f"Approval code: {code}\n\nThis code expires in 5 minutes and can approve only this requested change."
+			requested_values = json.dumps(asset, ensure_ascii=False, indent=2)
+			content_html = (
+				f'<p style="margin:0 0 10px;color:#565e67;font-size:14px;line-height:1.6;">'
+				f'Requested action: <strong>{html.escape(operation)} {html.escape(str(asset_name))}</strong></p>'
+				'<pre style="overflow-wrap:anywhere;white-space:pre-wrap;padding:14px;border-radius:8px;'
+				'background:#f3f5f7;color:#343a40;font-size:12px;line-height:1.5;">'
+				f'{html.escape(requested_values)}</pre>'
+				'<div style="margin-top:16px;padding:16px;border:1px solid #f1d4d1;border-radius:9px;'
+				'background:#fff6f5;text-align:center;">'
+				'<div style="color:#6b7280;font-size:12px;text-transform:uppercase;">Approval code · expires in 5 minutes</div>'
+				f'<strong style="display:block;margin-top:8px;color:#202020;font-family:monospace;'
+				f'font-size:30px;letter-spacing:7px;">{code}</strong></div>'
 			)
 			with UNIT_APPROVALS_LOCK:
 				UNIT_APPROVALS[challenge_id] = {
@@ -849,14 +971,17 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 					"attempts": 0,
 				}
 			try:
-				with smtplib.SMTP(
-					os.environ.get("SMTP_HOST", "smtp.gmail.com").strip(),
-					int(os.environ.get("SMTP_PORT", "587")),
-					timeout=10,
-				) as mail_server:
-					mail_server.starttls(context=ssl.create_default_context())
-					mail_server.login(os.environ["SMTP_USER"].strip(), os.environ["SMTP_APP_PASSWORD"].strip())
-					mail_server.send_message(message)
+				send_branded_email(
+					admin["email"],
+					f"carTOGO.mnl | Site asset approval: {operation} {asset_name}",
+					"An administrator requested a site asset change that needs your approval.",
+					"Site asset change approval",
+					f"Review the requested {operation.lower()} action and enter its one-time code in the admin panel.",
+					content_html,
+					f"A carTOGO administrator requested this site asset change: {operation} {asset_name}.\n\n"
+					f"Requested values:\n{requested_values}\n\nApproval code: {code}\n"
+					"This code expires in 5 minutes and can approve only this requested change.",
+				)
 			except (OSError, smtplib.SMTPException, ValueError):
 				with UNIT_APPROVALS_LOCK:
 					UNIT_APPROVALS.pop(challenge_id, None)

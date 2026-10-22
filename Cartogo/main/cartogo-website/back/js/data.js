@@ -197,7 +197,10 @@ const DB = {
       headers: requestHeaders,
       body: JSON.stringify(payload)
     });
-    return result.data;
+    return {
+      data: result.data,
+      emailNotificationSent: result.emailNotificationSent === true
+    };
   },
   async requestGuestEmailCode(email) {
     try {

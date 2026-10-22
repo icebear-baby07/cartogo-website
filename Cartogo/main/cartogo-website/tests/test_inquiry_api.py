@@ -9,6 +9,9 @@ from server import (
 	GUEST_EMAIL_REQUESTS,
 	GUEST_EMAIL_VERIFICATIONS,
 	WebsiteHandler,
+	build_branded_email,
+	send_branded_email,
+	send_inquiry_confirmation,
 )
 
 
@@ -241,7 +244,9 @@ class GuestEmailVerificationTests(unittest.TestCase):
 		self.assertEqual(status, 200)
 		self.assertEqual(result, {"challengeId": "challenge-test", "expiresIn": 600})
 		message = smtp_context.send_message.call_args.args[0]
-		self.assertIn("123456", message.get_content())
+		self.assertIn("123456", message.get_body(preferencelist=("plain",)).get_content())
+		self.assertIn("carTOGO", message.get_body(preferencelist=("html",)).get_content())
+		self.assertEqual(message["Subject"], "carTOGO.mnl | Verify your email")
 		challenge = GUEST_EMAIL_CHALLENGES["challenge-test"]
 		self.assertEqual(challenge["email"], "customer@example.com")
 		self.assertNotIn("123456", challenge["code_hash"])
@@ -308,6 +313,132 @@ class GuestEmailVerificationTests(unittest.TestCase):
 		self.assertFalse(WebsiteHandler.claim_guest_email_verification(token, "customer@example.com"))
 		WebsiteHandler.finish_guest_email_verification(token, consume=True)
 		self.assertNotIn(token, GUEST_EMAIL_VERIFICATIONS)
+
+
+class BrandedEmailTests(unittest.TestCase):
+	def setUp(self):
+		self.inquiry = {
+			"name": "Alex <Customer>",
+			"email": "customer@example.com",
+			"phone": "+63 912 345 6789",
+			"car_name": "Honda <City>",
+			"rental_mode": "custom_days",
+			"rental_period_hours": 24,
+			"rental_days": 4,
+			"pickup_date": "2026-10-21",
+			"pickup_time": "09:30",
+			"return_date": "2026-10-25",
+			"location": "Fairview & Quezon City",
+			"quoted_rate": 7600,
+		}
+
+	def test_branded_email_has_text_and_responsive_html_alternative(self):
+		message = build_branded_email(
+			"Example\r\nInjected header",
+			"Preview text",
+			"Email heading",
+			"Intro text",
+			"<strong>Details</strong>",
+			"Plain text details",
+		)
+
+		self.assertEqual(message["Subject"], "Example  Injected header")
+		self.assertIn("Plain text details", message.get_body(preferencelist=("plain",)).get_content())
+		html_content = message.get_body(preferencelist=("html",)).get_content()
+		self.assertIn("carTOGO", html_content)
+		self.assertIn("Email heading", html_content)
+		self.assertIn("max-width:600px", html_content)
+		self.assertIn("<strong>Details</strong>", html_content)
+
+	@patch("server.smtplib.SMTP")
+	@patch.dict("os.environ", {"SMTP_USER": "mailer@example.com", "SMTP_APP_PASSWORD": "test-password"})
+	def test_shared_sender_uses_configured_smtp_and_both_message_parts(self, smtp_factory):
+		send_branded_email(
+			"customer@example.com",
+			"carTOGO.mnl | Test",
+			"Preview",
+			"Test heading",
+			"Test introduction",
+			"<p>HTML details</p>",
+			"Plain details",
+		)
+
+		smtp_factory.assert_called_once()
+		mail_server = smtp_factory.return_value.__enter__.return_value
+		mail_server.starttls.assert_called_once()
+		mail_server.login.assert_called_once_with("mailer@example.com", "test-password")
+		message = mail_server.send_message.call_args.args[0]
+		self.assertEqual(message["To"], "customer@example.com")
+		self.assertIn("Plain details", message.get_body(preferencelist=("plain",)).get_content())
+		self.assertIn("HTML details", message.get_body(preferencelist=("html",)).get_content())
+
+	@patch("server.send_branded_email")
+	def test_inquiry_confirmation_is_concise_branded_and_escapes_customer_values(self, send_email):
+		send_inquiry_confirmation(self.inquiry)
+
+		args = send_email.call_args.args
+		self.assertEqual(args[0], "customer@example.com")
+		self.assertIn("We received your inquiry", args[1])
+		self.assertIn("have your driver’s license and ID ready", args[6])
+		self.assertIn("No payment is due now", args[6])
+		self.assertIn("Honda &lt;City&gt;", args[5])
+		self.assertIn("Fairview &amp; Quezon City", args[5])
+		self.assertNotIn("Alex <Customer>", args[5])
+
+	def test_saved_inquiry_succeeds_when_confirmation_email_fails(self):
+		token = "receipt-test-token"
+		GUEST_EMAIL_VERIFICATIONS[token] = {
+			"email": "customer@example.com",
+			"expires_at": time.time() + 60,
+		}
+		payload = {
+			"name": "Ignored name",
+			"firstName": "Alex",
+			"lastName": "Customer",
+			"middleName": "",
+			"suffix": "",
+			"email": "customer@example.com",
+			"emailVerificationToken": token,
+			"phone": "+63 912 345 6789",
+			"carId": "4",
+			"carName": "Honda City",
+			"capacity": 5,
+			"pickupDate": "2026-10-21",
+			"pickupTime": "09:30",
+			"returnDate": "2026-10-25",
+			"location": "Fairview",
+			"targetLatitude": 14.75,
+			"targetLongitude": 121.05,
+			"nearestPickupName": "Fairview",
+			"nearestPickupDistanceKm": 2.5,
+			"rateRegion": "in",
+			"rentalMode": "custom_days",
+			"rentalPeriodHours": 24,
+			"estimatedRentalHours": 96,
+			"ratePerPeriod": 2000,
+			"rentalDays": 4,
+			"discountPercent": 5,
+			"discountAmount": 400,
+			"quotedRate": 7600,
+			"notes": "",
+		}
+		handler = object.__new__(WebsiteHandler)
+		handler.headers = {}
+		handler.read_json = Mock(return_value=payload)
+		handler.send_json = Mock()
+		handler.log_message = Mock()
+		store = Mock()
+		store.add_inquiry.return_value = {"id": 42}
+		with patch("server.get_mongo_store", return_value=store), \
+			patch("server.send_inquiry_confirmation", side_effect=RuntimeError("SMTP unavailable")):
+			handler.create_inquiry()
+
+		handler.send_json.assert_called_once_with(
+			201,
+			{"data": {"id": 42}, "emailNotificationSent": False},
+		)
+		self.assertNotIn(token, GUEST_EMAIL_VERIFICATIONS)
+		handler.log_message.assert_called_once()
 
 
 if __name__ == "__main__":

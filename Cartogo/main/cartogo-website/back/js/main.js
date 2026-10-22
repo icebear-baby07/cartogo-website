@@ -1392,11 +1392,13 @@ function bindBookingForm() {
   };
 
   const persistInquiry = async (inquiry, options) => {
-    await DB.addInquiry({ ...inquiry, ...options });
+    const result = await DB.addInquiry({ ...inquiry, ...options });
     sessionStorage.removeItem(draftKey);
     form.reset();
     msg.className = "form-msg success";
-    msg.textContent = `Thanks, ${inquiry.name}. Your inquiry is confirmed.`;
+    msg.textContent = result.emailNotificationSent
+      ? `Thanks, ${inquiry.name}. Your inquiry is confirmed. A confirmation email is on its way.`
+      : `Thanks, ${inquiry.name}. Your inquiry was received, but we couldn't send the confirmation email. Our team will follow up using your phone number.`;
     updateVerificationUI();
   };
 
