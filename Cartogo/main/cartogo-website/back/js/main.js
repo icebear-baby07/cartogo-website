@@ -29,6 +29,10 @@ let BOOKING_DURATION_SELECTED = false;
 let BOOKING_GEOCODE_CONTROLLER = null;
 let BOOKING_LAST_GEOCODE_AT = 0;
 const BOOKING_GEOCODE_CACHE = new Map();
+let BOOKING_PREVIEW_LOOKUP_TIMER = null;
+let BOOKING_PREVIEW_LOOKUP_CONTROLLER = null;
+let BOOKING_PREVIEW_LOOKUP_SEQUENCE = 0;
+const BOOKING_PREVIEW_NAME_CACHE = new Map();
 let HOW_SLIDESHOW_INDEX = 0;
 let HOW_SLIDESHOW_TIMER = null;
 let HOW_SLIDESHOW_HOVERED = false;
@@ -712,36 +716,87 @@ function regionDisplayName(region) {
   return ({ in: "Metro Manila", out: "Nearby areas", luzon: "Luzon" })[region] || "Unclassified destination";
 }
 
+function setBookingLocationPreview(label, prefix = "Hovered location: ") {
+  document.getElementById("bookingMapPreviewPrefix").textContent = prefix;
+  document.getElementById("bookingMapPreviewName").textContent = label;
+  document.getElementById("bookingMapPreview").hidden = !label;
+}
+
+function cancelBookingLocationPreview() {
+  window.clearTimeout(BOOKING_PREVIEW_LOOKUP_TIMER);
+  BOOKING_PREVIEW_LOOKUP_TIMER = null;
+  BOOKING_PREVIEW_LOOKUP_SEQUENCE += 1;
+  BOOKING_PREVIEW_LOOKUP_CONTROLLER?.abort();
+  BOOKING_PREVIEW_LOOKUP_CONTROLLER = null;
+}
+
+function scheduleBookingLocationPreview(location) {
+  window.clearTimeout(BOOKING_PREVIEW_LOOKUP_TIMER);
+  BOOKING_PREVIEW_LOOKUP_CONTROLLER?.abort();
+  BOOKING_PREVIEW_LOOKUP_CONTROLLER = null;
+  const sequence = ++BOOKING_PREVIEW_LOOKUP_SEQUENCE;
+  BOOKING_PREVIEW_LOOKUP_TIMER = window.setTimeout(async () => {
+    const cacheKey = `${location.lat.toFixed(4)},${location.lng.toFixed(4)}`;
+    let result = BOOKING_PREVIEW_NAME_CACHE.get(cacheKey);
+    if (!result) {
+      setBookingLocationPreview("Looking up the mapped location...");
+      BOOKING_PREVIEW_LOOKUP_CONTROLLER = new AbortController();
+      try {
+        const response = await fetch("/api/target-location/validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ latitude: location.lat, longitude: location.lng }),
+          signal: BOOKING_PREVIEW_LOOKUP_CONTROLLER.signal
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Location lookup is temporarily unavailable.");
+        result = data;
+        BOOKING_PREVIEW_NAME_CACHE.set(cacheKey, result);
+        if (BOOKING_PREVIEW_NAME_CACHE.size > 200) {
+          BOOKING_PREVIEW_NAME_CACHE.delete(BOOKING_PREVIEW_NAME_CACHE.keys().next().value);
+        }
+      } catch (error) {
+        if (error.name === "AbortError" || sequence !== BOOKING_PREVIEW_LOOKUP_SEQUENCE) return;
+        setBookingLocationPreview(error.message || "Could not look up this location.");
+        return;
+      }
+    }
+    if (sequence !== BOOKING_PREVIEW_LOOKUP_SEQUENCE || BOOKING_TARGET) return;
+    setBookingLocationPreview(result.label || "No exact mapped place name is available here.");
+  }, 650);
+}
+
 function setBookingTarget(location) {
+  cancelBookingLocationPreview();
   const nearest = findNearestPickup(location);
   BOOKING_TARGET = {
     lat: location.lat,
     lng: location.lng,
     label: `${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}`,
     rateRegion: null,
+    verified: false,
     nearestPickupName: nearest.name,
     nearestPickupDistanceKm: nearest.distanceKm
   };
+  BOOKING_TARGET_MARKER?.remove();
+  BOOKING_TARGET_MARKER = null;
   document.getElementById("bookingTargetLat").value = location.lat.toFixed(6);
   document.getElementById("bookingTargetLng").value = location.lng.toFixed(6);
   document.getElementById("bookingTargetLabel").value = BOOKING_TARGET.label;
   document.getElementById("bookingTargetRegion").value = "";
   document.getElementById("bookingNearestPickupName").value = nearest.name;
   document.getElementById("bookingNearestPickupDistance").value = nearest.distanceKm.toFixed(3);
-  document.getElementById("bookingTargetStatus").textContent = "Looking up the destination and pricing region...";
-  updateMapDistance(location, "Selected: ");
+  document.getElementById("bookingTargetStatus").textContent = "Checking that this is a mapped residential location...";
+  setBookingLocationPreview("");
+  updateMapDistance(location, "Checking: ");
   BOOKING_PREVIEW_MARKER?.remove();
   BOOKING_PREVIEW_MARKER = null;
-  if (BOOKING_TARGET_MARKER) BOOKING_TARGET_MARKER.setLatLng([location.lat, location.lng]);
-  else BOOKING_TARGET_MARKER = window.L.marker([location.lat, location.lng], {
-    icon: createBookingLocationIcon(nearest.color)
-  }).addTo(BOOKING_MAP);
   renderBookingEstimate();
   BOOKING_TARGET_REGION_LOOKUP = resolveBookingTargetRegion(BOOKING_TARGET);
 }
 
 async function resolveBookingTargetRegion(target) {
-  const cacheKey = `${target.lat.toFixed(4)},${target.lng.toFixed(4)}`;
+  const cacheKey = `${target.lat.toFixed(6)},${target.lng.toFixed(6)}`;
   let result = BOOKING_GEOCODE_CACHE.get(cacheKey);
   if (!result) {
     BOOKING_GEOCODE_CONTROLLER?.abort();
@@ -750,38 +805,42 @@ async function resolveBookingTargetRegion(target) {
     if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
     if (BOOKING_TARGET !== target) return;
     BOOKING_LAST_GEOCODE_AT = Date.now();
-    const query = new URLSearchParams({
-      format: "jsonv2",
-      lat: String(target.lat),
-      lon: String(target.lng),
-      zoom: "10",
-      addressdetails: "1"
-    });
     try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${query}`, {
-        headers: { "Accept-Language": "en" },
+      const response = await fetch("/api/target-location/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ latitude: target.lat, longitude: target.lng }),
         signal: BOOKING_GEOCODE_CONTROLLER.signal
       });
-      if (!response.ok) throw new Error("Location lookup is temporarily unavailable.");
       const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Location verification is temporarily unavailable.");
       result = {
-        label: data.display_name || `${target.lat.toFixed(6)}, ${target.lng.toFixed(6)}`,
+        ...data,
         rateRegion: classifyTargetRegion(data.address)
       };
       BOOKING_GEOCODE_CACHE.set(cacheKey, result);
     } catch (error) {
       if (error.name === "AbortError" || BOOKING_TARGET !== target) return;
-      document.getElementById("bookingTargetStatus").textContent = "Could not identify this destination. Click a clearer map location and try again.";
-      renderBookingEstimate();
+      clearBookingTarget(error.message || "Location verification failed. Click a different map location and try again.");
       return;
     }
   }
 
   if (BOOKING_TARGET !== target) return;
-  target.label = result.label;
+  if (!result.valid) {
+    clearBookingTarget(result.reason || "This location could not be verified as a residential destination. Choose another map location.");
+    return;
+  }
+  target.label = result.label || `${target.lat.toFixed(6)}, ${target.lng.toFixed(6)}`;
   target.rateRegion = result.rateRegion;
+  target.verified = true;
   document.getElementById("bookingTargetLabel").value = target.label;
   document.getElementById("bookingTargetRegion").value = target.rateRegion || "";
+  document.getElementById("bookingNearestPickupName").value = target.nearestPickupName;
+  document.getElementById("bookingNearestPickupDistance").value = target.nearestPickupDistanceKm.toFixed(3);
+  BOOKING_TARGET_MARKER = window.L.marker([target.lat, target.lng], {
+    icon: createBookingLocationIcon(findNearestPickup(target).color)
+  }).addTo(BOOKING_MAP);
   if (target.rateRegion) {
     document.getElementById("bookingTargetStatus").textContent = `${target.label} · ${regionDisplayName(target.rateRegion)} rates`;
   } else {
@@ -789,6 +848,21 @@ async function resolveBookingTargetRegion(target) {
   }
   updateBookingPeriodOptions(target.rateRegion);
   document.getElementById("bookingPickup").dispatchEvent(new Event("change"));
+  renderBookingEstimate();
+}
+
+function clearBookingTarget(message) {
+  BOOKING_TARGET = null;
+  BOOKING_TARGET_REGION_LOOKUP = null;
+  BOOKING_TARGET_MARKER?.remove();
+  BOOKING_TARGET_MARKER = null;
+  ["bookingTargetLat", "bookingTargetLng", "bookingTargetLabel", "bookingTargetRegion", "bookingNearestPickupName", "bookingNearestPickupDistance"].forEach(id => {
+    document.getElementById(id).value = "";
+  });
+  document.getElementById("bookingTargetStatus").textContent = message;
+  setBookingLocationPreview("");
+  document.getElementById("bookingMapDistancePrompt").hidden = false;
+  document.getElementById("bookingMapDistanceResult").hidden = true;
   renderBookingEstimate();
 }
 
@@ -834,20 +908,16 @@ function restoreBookingTargetFromDraft() {
     lng: longitude,
     label: document.getElementById("bookingTargetLabel").value,
     rateRegion: document.getElementById("bookingTargetRegion").value || null,
+    verified: false,
     nearestPickupName: document.getElementById("bookingNearestPickupName").value || nearest.name,
     nearestPickupDistanceKm: Number(document.getElementById("bookingNearestPickupDistance").value) || nearest.distanceKm
   };
   BOOKING_MAP.setView([latitude, longitude], Math.max(BOOKING_MAP.getZoom(), 13));
-  BOOKING_TARGET_MARKER = window.L.marker([latitude, longitude], {
-    icon: createBookingLocationIcon(nearest.color)
-  }).addTo(BOOKING_MAP);
-  updateMapDistance(BOOKING_TARGET, "Selected: ");
-  document.getElementById("bookingTargetStatus").textContent = `${BOOKING_TARGET.label} · ${regionDisplayName(BOOKING_TARGET.rateRegion)} rates`;
-  updateBookingPeriodOptions(BOOKING_TARGET.rateRegion);
+  document.getElementById("bookingTargetStatus").textContent = "Checking that this is a mapped residential location...";
+  setBookingLocationPreview("");
+  updateMapDistance(BOOKING_TARGET, "Checking: ");
   BOOKING_RENTAL_MODE = document.querySelector('input[name="bookingMode"]:checked')?.value || BOOKING_RENTAL_MODE;
-  if (!BOOKING_TARGET.rateRegion) {
-    BOOKING_TARGET_REGION_LOOKUP = resolveBookingTargetRegion(BOOKING_TARGET);
-  }
+  BOOKING_TARGET_REGION_LOOKUP = resolveBookingTargetRegion(BOOKING_TARGET);
 }
 
 function bindBookingMap() {
@@ -879,6 +949,7 @@ function bindBookingMap() {
     if (BOOKING_TARGET) return;
     const position = { lat: event.latlng.lat, lng: event.latlng.lng };
     const nearest = updateMapDistance(position);
+    scheduleBookingLocationPreview(position);
     if (BOOKING_PREVIEW_MARKER) BOOKING_PREVIEW_MARKER.setLatLng(event.latlng);
     else BOOKING_PREVIEW_MARKER = window.L.marker(event.latlng, {
       icon: createBookingLocationIcon(nearest.color, true),
@@ -889,6 +960,8 @@ function bindBookingMap() {
   BOOKING_MAP.on("mouseout", () => {
     if (BOOKING_TARGET) updateMapDistance(BOOKING_TARGET, "Selected: ");
     else {
+      cancelBookingLocationPreview();
+      setBookingLocationPreview("");
       document.getElementById("bookingMapDistancePrompt").hidden = false;
       document.getElementById("bookingMapDistanceResult").hidden = true;
       BOOKING_PREVIEW_MARKER?.remove();
@@ -946,6 +1019,8 @@ function bindBookingMap() {
       BOOKING_RATE_QUOTE = null;
       BOOKING_TARGET_REGION_LOOKUP = null;
       BOOKING_GEOCODE_CONTROLLER?.abort();
+      cancelBookingLocationPreview();
+      setBookingLocationPreview("");
       BOOKING_TARGET_MARKER?.remove();
       BOOKING_TARGET_MARKER = null;
       ["bookingTargetLat", "bookingTargetLng", "bookingTargetLabel", "bookingTargetRegion", "bookingNearestPickupName", "bookingNearestPickupDistance"].forEach(id => {
@@ -1752,7 +1827,7 @@ function bindBookingForm() {
     msg.textContent = "";
     if (isResolvingDestination) return;
     const selectedTarget = BOOKING_TARGET;
-    if (selectedTarget && !selectedTarget.rateRegion && BOOKING_TARGET_REGION_LOOKUP) {
+    if (selectedTarget && !selectedTarget.verified && BOOKING_TARGET_REGION_LOOKUP) {
       isResolvingDestination = true;
       const submitLabel = submitButton.textContent;
       submitButton.disabled = true;
@@ -1840,6 +1915,11 @@ function bindBookingForm() {
       msg.className = "form-msg error";
       msg.textContent = "Choose your target location on the map before continuing.";
       document.getElementById("bookingMap").scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    if (!BOOKING_TARGET.verified) {
+      msg.className = "form-msg error";
+      msg.textContent = "Wait for the map to verify your destination, or choose another location.";
       return;
     }
     if (!BOOKING_TARGET.rateRegion) {

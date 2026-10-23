@@ -20,6 +20,8 @@ For phone testing, open the printed LAN URL on a device connected to the same tr
 
 The server exposes these public settings through `/config.js` and blocks direct requests for dotfiles. Restart the server after changing `.env`.
 
+The booking map verifies selected destinations on the server through OpenStreetMap Nominatim. A valid pin must resolve to a mapped road and populated neighborhood; water, natural terrain, mapped non-residential sites, and locations without enough map data are rejected. Hovering over the map shows the mapped place name above the distance readout; the name is also shown for a selected destination. Set the optional `GEOCODING_CONTACT_EMAIL` in `.env` to identify an operational contact in Nominatim requests. The server caches results and spaces uncached requests to respect the public service's usage policy.
+
 ## Supabase and Google sign-in
 
 Use one Supabase project consistently for the site URL, public key, Google provider, and database migrations. A mismatched URL/key pair causes authentication requests to fail.
@@ -98,3 +100,14 @@ Customers can submit inquiries either with Google sign-in or as a guest. Google-
 Booking inquiries, including customer-selected target coordinates and quote snapshots, use MongoDB collection `inquiries`; Supabase authentication/admin authorization remain in Supabase. Public units, pickup/contact records, rates, page copy, social links, and promo rules use MongoDB. The public Contact map and booking distance calculations use the same pickup locations from MongoDB `site_assets`; hovering or focusing a Contact location highlights its map pin. Rates list all public units without requiring a booking, and fee explanations expand on hover or keyboard focus. The footer insurance CTA links to the live-agent section. The chatbot launcher corner and shape (horizontal, square, or vertical icon-only) are stored in the visitor's browser. Fleet and site-asset writes are performed by the website server only after owner PIN approval.
 
 The base chat schema grants anonymous clients broad access to `public.chat_sessions`, including read and delete. Applying `back/db/admin_owner_approval.sql` revokes direct delete access from anonymous and authenticated clients so chat-session deletion must pass through server-side owner approval; the migration does not tighten read access. Review and restrict the remaining chat policies before using that schema with real or sensitive conversations in production. The chatbot service and its optional MongoDB request logging use separate collections from website inquiries.
+
+## Technical overview
+
+- **Python and the standard-library HTTP server** power the website and chatbot backends. They serve the browser application, expose API endpoints, handle inquiry and chat workflows, and keep database and email operations on the server.
+- **HTML, CSS, and browser JavaScript** build the customer-facing site and admin panel. They provide the rental inquiry flow, fleet and rate views, interactive maps, and administration without a separate frontend framework.
+- **MongoDB with PyMongo** stores the live vehicle catalog, pickup and contact locations, site content, inquiries, chatbot knowledge, and optional chat logs. The website and chatbot use separate collections for their respective data.
+- **Supabase and Google OAuth** provide sign-in and administrator authorization. Supabase also holds the existing inquiry source records and access policies; its service role is reserved for server-side operations.
+- **Amazon Bedrock, accessed through Boto3 in the chatbot**, supplies the AI responses. The chatbot can also look up vehicle availability and use company knowledge stored in MongoDB.
+- **SMTP** sends guest email-verification codes, inquiry confirmations, and owner-approval PINs, helping verify guest email ownership and notify customers and administrators.
+- **Leaflet, OpenStreetMap, and Nominatim** support the interactive pickup-location map and geocoding used to determine a booking's rate region and distance. Map and geocoding usage must follow their respective service policies.
+- **The Supabase-to-MongoDB migration script** imports the existing catalog, site assets, and inquiries while preserving IDs and avoiding overwrites, enabling the site-data transition without deleting the source records.

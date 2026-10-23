@@ -30,6 +30,7 @@ ENV_KEYS = {
 	"MONGODB_SITE_ASSETS_COLLECTION", "MONGODB_SITE_CONTENT_COLLECTION",
 	"MONGODB_INQUIRIES_COLLECTION", "MONGODB_SEQUENCES_COLLECTION",
 	"SMTP_USER", "SMTP_APP_PASSWORD", "SMTP_HOST", "SMTP_PORT", "SMTP_FROM",
+	"GEOCODING_CONTACT_EMAIL",
 	"HOST", "PORT",
 }
 UNIT_APPROVALS = {}
@@ -45,6 +46,15 @@ UNIT_RATE_FIELDS = ("in12_rate", "in24_rate", "out12_rate", "out24_rate", "luzon
 MAX_API_BODY_BYTES = 16 * 1024
 MONGO_STORE = None
 MONGO_STORE_LOCK = Lock()
+TARGET_LOCATION_CACHE = {}
+TARGET_LOCATION_CACHE_LOCK = Lock()
+TARGET_LOCATION_REQUEST_LOCK = Lock()
+TARGET_LOCATION_LAST_REQUEST_AT = 0
+TARGET_LOCATION_CACHE_TTL = 86400
+
+
+class TargetLocationServiceError(RuntimeError):
+	pass
 
 
 def build_branded_email(subject, preheader, heading, intro, content_html, text_content):
@@ -204,6 +214,105 @@ def load_local_environment():
 		os.environ[name] = value
 
 
+def assess_target_location(result):
+	label = str(result.get("display_name") or "") if isinstance(result, dict) else ""
+	if not isinstance(result, dict) or not isinstance(result.get("address"), dict):
+		return {
+			"valid": False,
+			"label": label,
+			"reason": "We couldn't verify this location. Choose a mapped residential area near a road.",
+		}
+
+	address = result["address"]
+	category = str(result.get("category") or result.get("class") or "").lower()
+	feature_type = str(result.get("type") or "").lower()
+	blocked_categories = {
+		"natural", "waterway", "railway", "aeroway", "military",
+		"amenity", "shop", "office", "tourism", "leisure", "craft",
+	}
+	blocked_types = {
+		"bay", "beach", "cliff", "coastline", "forest", "glacier", "lake", "marsh",
+		"mountain", "ocean", "peak", "reservoir", "river", "sea", "wetland", "wood",
+		"airport", "commercial", "industrial", "retail", "warehouse", "island", "islet",
+	}
+	has_road = any(address.get(key) for key in ("road", "pedestrian", "living_street"))
+	has_settlement = any(address.get(key) for key in (
+		"neighbourhood", "suburb", "city_district", "city", "town", "village", "hamlet"
+	))
+	residential_context = (
+		(category == "building" and feature_type in {
+			"apartments", "bungalow", "detached", "house", "residential", "semidetached_house", "terrace"
+		})
+		or (category == "landuse" and feature_type == "residential")
+		or (category == "place" and feature_type in {"neighbourhood", "suburb", "village", "hamlet"})
+		or (category == "highway" and feature_type in {
+			"living_street", "residential", "road", "service", "tertiary", "tertiary_link", "unclassified"
+		})
+	)
+	if category in blocked_categories or feature_type in blocked_types:
+		return {
+			"valid": False,
+			"label": label,
+			"reason": "Choose a road-connected residential location, not water, natural terrain, or a non-residential site.",
+		}
+	if not has_road or not has_settlement or not residential_context:
+		return {
+			"valid": False,
+			"label": label,
+			"reason": "We couldn't verify a mapped residential road or building in a populated area. Choose a clearer location within a town or neighborhood.",
+		}
+	return {
+		"valid": True,
+		"label": label,
+		"address": address,
+		"category": category,
+		"type": feature_type,
+	}
+
+
+def lookup_target_location(latitude, longitude):
+	global TARGET_LOCATION_LAST_REQUEST_AT
+	cache_key = (round(latitude, 6), round(longitude, 6))
+	now = time.time()
+	with TARGET_LOCATION_CACHE_LOCK:
+		cached = TARGET_LOCATION_CACHE.get(cache_key)
+		if cached and now - cached[0] < TARGET_LOCATION_CACHE_TTL:
+			return cached[1]
+
+	query = urlencode({
+		"format": "jsonv2",
+		"lat": f"{latitude:.6f}",
+		"lon": f"{longitude:.6f}",
+		"zoom": "18",
+		"addressdetails": "1",
+	})
+	contact_email = os.environ.get("GEOCODING_CONTACT_EMAIL", "").strip()
+	user_agent = "carTOGO.mnl website location validation"
+	if contact_email:
+		user_agent += f" ({contact_email})"
+	request = Request(
+		f"https://nominatim.openstreetmap.org/reverse?{query}",
+		headers={"Accept": "application/json", "User-Agent": user_agent},
+	)
+	with TARGET_LOCATION_REQUEST_LOCK:
+		wait_seconds = max(0, 1.1 - (time.time() - TARGET_LOCATION_LAST_REQUEST_AT))
+		if wait_seconds:
+			time.sleep(wait_seconds)
+		TARGET_LOCATION_LAST_REQUEST_AT = time.time()
+		try:
+			with urlopen(request, timeout=8) as response:
+				result = json.loads(response.read())
+		except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as error:
+			raise TargetLocationServiceError(
+				"Location verification is temporarily unavailable. Please try again."
+			) from error
+
+	assessment = assess_target_location(result)
+	with TARGET_LOCATION_CACHE_LOCK:
+		TARGET_LOCATION_CACHE[cache_key] = (time.time(), assessment)
+	return assessment
+
+
 class WebsiteHandler(SimpleHTTPRequestHandler):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, directory=str(ROOT), **kwargs)
@@ -260,6 +369,8 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			self.update_site_content()
 		elif request_path == "/api/inquiries":
 			self.create_inquiry()
+		elif request_path == "/api/target-location/validate":
+			self.validate_target_location()
 		elif request_path == "/api/email-verification/request":
 			self.request_guest_email_verification()
 		elif request_path == "/api/email-verification/verify":
@@ -310,6 +421,11 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			payload = self.read_json()
 			user = self.get_verified_google_user() if self.headers.get("Authorization") else None
 			inquiry = self.normalize_public_inquiry(payload, user)
+			location_result = lookup_target_location(
+				inquiry["target_latitude"], inquiry["target_longitude"]
+			)
+			if not location_result["valid"]:
+				raise ValueError(location_result["reason"])
 			email_verification_token = None
 			if not user:
 				email_verification_token = payload.get("emailVerificationToken")
@@ -338,8 +454,25 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			self.send_json(400, {"error": str(error)})
 		except PermissionError as error:
 			self.send_json(403, {"error": str(error)})
+		except TargetLocationServiceError as error:
+			self.send_json(503, {"error": str(error)})
 		except (RuntimeError, PyMongoError):
 			self.send_json(503, {"error": "MongoDB could not save the inquiry."})
+
+	def validate_target_location(self):
+		try:
+			payload = self.read_json()
+			latitude = payload.get("latitude")
+			longitude = payload.get("longitude")
+			if isinstance(latitude, bool) or not isinstance(latitude, (int, float)) or not -90 <= latitude <= 90:
+				raise ValueError("Latitude must be between -90 and 90.")
+			if isinstance(longitude, bool) or not isinstance(longitude, (int, float)) or not -180 <= longitude <= 180:
+				raise ValueError("Longitude must be between -180 and 180.")
+			self.send_json(200, lookup_target_location(float(latitude), float(longitude)))
+		except ValueError as error:
+			self.send_json(400, {"error": str(error)})
+		except RuntimeError as error:
+			self.send_json(503, {"error": str(error)})
 
 	def request_guest_email_verification(self):
 		try:

@@ -34,6 +34,7 @@ document.addEventListener("DOMContentLoaded", initAdmin);
 
 async function initAdmin() {
   bindLogin();
+  bindMobileSidebarMenu();
   if (!window.CARTOGO_CONFIG?.supabaseUrl || !window.CARTOGO_CONFIG?.supabaseAnonKey) {
     showLoginError("Supabase configuration is missing. Start the site with Cartogo/start_site.cmd after setting SUPABASE_URL and SUPABASE_ANON_KEY in main/cartogo-website/.env.");
     document.getElementById("adminGoogleSignIn").disabled = true;
@@ -56,6 +57,44 @@ async function initAdmin() {
   } else {
     sessionStorage.removeItem(ADMIN_SIGN_IN_PENDING_KEY);
   }
+}
+
+function bindMobileSidebarMenu() {
+  const toggle = document.getElementById("adminMobileMenuToggle");
+  const actions = document.getElementById("adminSidebarActions");
+  const sidebar = document.querySelector(".admin-sidebar");
+  const mobileViewport = window.matchMedia("(max-width: 820px)");
+  const setExpanded = expanded => {
+    toggle.setAttribute("aria-expanded", String(expanded));
+    toggle.setAttribute("aria-label", expanded ? "Close admin menu" : "Open admin menu");
+    actions.hidden = mobileViewport.matches && !expanded;
+  };
+
+  const syncViewport = () => setExpanded(false);
+  setExpanded(false);
+  mobileViewport.addEventListener("change", syncViewport);
+  toggle.addEventListener("click", () => {
+    setExpanded(toggle.getAttribute("aria-expanded") !== "true");
+  });
+  document.addEventListener("pointerdown", event => {
+    if (mobileViewport.matches && !sidebar.contains(event.target)) setExpanded(false);
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && mobileViewport.matches && toggle.getAttribute("aria-expanded") === "true") {
+      setExpanded(false);
+      toggle.focus();
+    }
+  });
+  actions.querySelectorAll("a, button").forEach(action => {
+    action.addEventListener("click", () => {
+      if (mobileViewport.matches) setExpanded(false);
+    });
+  });
+  document.querySelectorAll(".admin-tab-btn").forEach(tab => {
+    tab.addEventListener("click", () => {
+      if (mobileViewport.matches) setExpanded(false);
+    });
+  });
 }
 
 function showLoginError(message) {
@@ -95,6 +134,8 @@ function bindLogin() {
 
 async function enterAdmin() {
   const errorBox = document.getElementById("loginError");
+  const loadingScreen = document.getElementById("adminLoginLoading");
+  loadingScreen.hidden = false;
   try {
     if (!await DB.isAdmin()) {
       await supa.auth.signOut();
@@ -117,7 +158,9 @@ async function enterAdmin() {
       document.getElementById("chatSessionsTableBody").innerHTML = `<tr><td colspan="6"><div class="empty-state">Chat monitor unavailable: ${text(error.message)}</div></td></tr>`;
     }
     renderSettingsTab();
+    loadingScreen.hidden = true;
   } catch (error) {
+    loadingScreen.hidden = true;
     document.getElementById("adminShell").classList.remove("visible");
     document.getElementById("loginScreen").style.display = "flex";
     errorBox.textContent = `Admin access unavailable: ${error.message}`;

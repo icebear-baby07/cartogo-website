@@ -13,7 +13,7 @@
 <!-- Styles -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="css/style.css?v=step10.12-how-slideshow-controls">
+<link rel="stylesheet" href="css/style.css?v=step11.2-map-hover-location-preview">
 </head>
 <body>
 
@@ -310,6 +310,9 @@
                     <button class="icon-btn booking-map-fullscreen" id="bookingMapFullscreen" type="button" aria-label="Expand target map to fullscreen" aria-pressed="false" title="Expand map"><i class="fa-solid fa-expand" aria-hidden="true"></i></button>
                   </div>
                   <div id="bookingMap" class="booking-map" role="application" aria-label="Map. Move the cursor to preview distance, click to select your target location."></div>
+                  <p class="booking-map-preview" id="bookingMapPreview" role="status" aria-live="polite" hidden>
+                    <span id="bookingMapPreviewPrefix">Hovered location: </span><strong id="bookingMapPreviewName"></strong>
+                  </p>
                   <p class="booking-map-distance" id="bookingMapDistance" role="status" aria-live="polite">
                     <span id="bookingMapDistancePrompt">Move the cursor over the map to preview distance from the nearest pickup point.</span>
                     <span id="bookingMapDistanceResult" hidden><span id="bookingMapDistancePrefix"></span><strong id="bookingMapDistanceValue"></strong> km distance from the nearest pickup location (<span id="bookingMapNearestPickup"></span>)</span>
@@ -533,7 +536,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="../back/js/data.js?v=step9.5-email-design"></script>
-<script src="../back/js/main.js?v=step10.12-how-slideshow-controls"></script>
+<script src="../back/js/main.js?v=step11.2-map-hover-location-preview"></script>
 <script src="../back/js/chatbot.js?v=step6-6"></script>
 </body>
 </html>

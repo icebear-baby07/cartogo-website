@@ -110,7 +110,7 @@ ANIMATIONS, DESIGN, AND LAYOUT:
 - Have a followup email kinda like this "Thanks for inquiring with us, we'll take it from here", but I want you to make it professional but concise. Offer suggestions as well, add some design
 - Apply design to all email inbox processes to those parts that uses it
 
-10. (Admin Side)
+10. (Initialization Of The Admin Side)
 The plan: to prepare a UI that displays every fetched data from mongodb (excluding the chatbot's knowledge base). This will be used for monitoring. The changes to be apply should make the admin side dynamic in terms of design (based on content count per section) and includes a progressive disclosure affordance (similar to "read more") 
 10.2. Start with inquiries tab, it should fetch data from mongodb and displays it dynamically to the site's interface.
 10.3. Have an icon button in TARGET COORDINATES that goes "Show coordinates in map" when hovered. Once clicked, it should open a tab for google maps to reveal where the location is.
@@ -124,3 +124,19 @@ The plan: to prepare a UI that displays every fetched data from mongodb (excludi
 10.10. Change the font color of lists of CONTACTED, CONFIRMED, and PENDING to their respective font colors at the categorization.
 
 Additional: Include animations for clicks, hovers, and other interactions to this changes
+
+=======================
+CARTOGO (V.1.1)
+=======================
+
+11. Geographical Map improvements
+11.1. The map should be logically correct
+11.1.1. The marker shouldn't accept invalid locations (e.g. remotely-mountainous terrain, oceans and other bodies of water, unverified locations, etc.)
+- It shouldn't also accept non-residential and completely remote areas.
+11.2. Include a bolded preview of the hovered pointed marker below the map and above the "[numbers] km distance from the nearest pickup location [location]" that displays the exact name of the location.
+
+12. Admin panel UX optimization
+12.1. (in non-desktop devices) make the tab selection sticky
+12.2. Add a loading prompt or an animation (related to cars if possible) when a successful login to admin panel is achieved.
+12.3. (In desktop devices) I want a fixed sticky design of tab selections.
+12.4. (In smaller devices), I want the "<- View live site" and the "Log out" buttons to be at the opposite side of the "CARTOGO.MNL" tag, both stored in a caret-down arrow that expands, and has a change in appearance once clicked.

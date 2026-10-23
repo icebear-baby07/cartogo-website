@@ -11,9 +11,19 @@
 
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-<link rel="stylesheet" href="css/admin.css?v=step10.10-inquiry-enhancements">
+<link rel="stylesheet" href="css/admin.css?v=step12.4-mobile-actions-menu-v2">
 </head>
 <body class="admin-body">
+
+<div class="admin-login-loading" id="adminLoginLoading" hidden role="status" aria-live="polite" aria-label="Loading admin panel">
+  <div class="admin-login-loading-card">
+    <div class="admin-loading-road" aria-hidden="true">
+      <i class="fa-solid fa-car-side"></i>
+    </div>
+    <strong>Getting your dashboard ready</strong>
+    <span>Loading your carTOGO admin tools...</span>
+  </div>
+</div>
 
 <!-- ============ LOGIN ============ -->
 <div class="login-screen" id="loginScreen">
@@ -30,6 +40,9 @@
 <div class="admin-shell" id="adminShell">
   <aside class="admin-sidebar">
     <a href="index.html" class="logo">carTOGO.mnl</a>
+    <button class="admin-mobile-menu-toggle" id="adminMobileMenuToggle" type="button" aria-label="Open admin menu" aria-expanded="false" aria-controls="adminSidebarActions">
+      <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+    </button>
     <nav class="admin-tabs">
       <button class="admin-tab-btn active" data-tab="tab-fleet">Fleet &amp; Rates</button>
       <button class="admin-tab-btn" data-tab="tab-site-assets">Site Assets</button>
@@ -38,8 +51,10 @@
       <button class="admin-tab-btn" data-tab="tab-chat">Chat Monitor</button>
       <button class="admin-tab-btn" data-tab="tab-settings">Settings</button>
     </nav>
-    <a href="index.html" class="back-link"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> View live site</a>
-    <button class="back-link" id="logoutBtn" style="background:none; border:none; text-align:left; cursor:pointer; margin-top:0.5rem;">Log out</button>
+    <div class="admin-sidebar-actions" id="adminSidebarActions" hidden>
+      <a href="index.html" class="back-link"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> View live site</a>
+      <button class="back-link admin-logout-btn" id="logoutBtn" type="button">Log out</button>
+    </div>
   </aside>
 
   <main class="admin-main">
@@ -290,6 +305,6 @@
 <script src="../config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../back/js/data.js?v=step11-owner-approval"></script>
-<script src="../back/js/admin.js?v=step11-owner-approval"></script>
+<script src="../back/js/admin.js?v=step12.4-mobile-actions-menu-v2"></script>
 </body>
 </html>

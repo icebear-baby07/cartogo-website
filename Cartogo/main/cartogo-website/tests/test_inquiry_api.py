@@ -10,6 +10,7 @@ from server import (
 	GUEST_EMAIL_VERIFICATIONS,
 	UNIT_APPROVALS,
 	WebsiteHandler,
+	assess_target_location,
 	build_branded_email,
 	send_branded_email,
 	send_inquiry_confirmation,
@@ -85,6 +86,7 @@ class InquiryNormalizationTests(unittest.TestCase):
 
 		with self.assertRaisesRegex(ValueError, "accepted range"):
 			WebsiteHandler.normalize_public_inquiry(self.payload, self.user)
+
 
 	def test_rejects_return_date_before_pickup_date(self):
 		self.payload["returnDate"] = "2026-10-20"
@@ -209,6 +211,71 @@ class InquiryNormalizationTests(unittest.TestCase):
 
 	def test_accepts_numeric_string_inquiry_ids(self):
 		self.assertEqual(WebsiteHandler.normalize_inquiry_id("12"), 12)
+
+
+class TargetLocationValidationTests(unittest.TestCase):
+	def test_accepts_a_mapped_road_in_a_populated_area(self):
+		result = assess_target_location({
+			"display_name": "Road, Neighborhood, Quezon City",
+			"category": "highway",
+			"type": "residential",
+			"address": {"road": "Example Road", "neighbourhood": "Example Neighborhood", "city": "Quezon City"},
+		})
+
+		self.assertTrue(result["valid"])
+		self.assertEqual(result["label"], "Road, Neighborhood, Quezon City")
+
+	def test_rejects_unmapped_ocean_and_mountain_locations(self):
+		cases = (
+			{"error": "Unable to geocode"},
+			{"category": "natural", "type": "ocean", "address": {"sea": "Pacific Ocean"}},
+			{"category": "natural", "type": "peak", "address": {"mountain": "Remote Peak"}},
+			{"category": "highway", "type": "track", "address": {"road": "Remote Track"}},
+			{"category": "highway", "type": "primary", "address": {"road": "Main Road", "city": "Quezon City"}},
+		)
+
+		for location in cases:
+			with self.subTest(location=location):
+				result = assess_target_location(location)
+				self.assertFalse(result["valid"])
+				self.assertIn("reason", result)
+
+	def test_unverified_reverse_lookup_keeps_place_name_for_the_hover_preview(self):
+		result = assess_target_location({
+			"display_name": "Unmapped ridge, Example District",
+			"address": {"county": "Example District"},
+		})
+
+		self.assertFalse(result["valid"])
+		self.assertEqual(result["label"], "Unmapped ridge, Example District")
+
+	def test_rejects_non_residential_sites(self):
+		result = assess_target_location({
+			"category": "amenity",
+			"type": "school",
+			"address": {"road": "School Road", "suburb": "Example Suburb", "city": "Quezon City"},
+		})
+
+		self.assertFalse(result["valid"])
+
+
+class InquiryLocationEnforcementTests(unittest.TestCase):
+	def test_unverified_destination_is_rejected_before_saving(self):
+		handler = object.__new__(WebsiteHandler)
+		handler.headers = {}
+		handler.read_json = Mock(return_value={})
+		handler.send_json = Mock()
+		inquiry = {"target_latitude": 14.75, "target_longitude": 121.05}
+		store = Mock()
+		with patch.object(WebsiteHandler, "normalize_public_inquiry", return_value=inquiry), \
+			patch("server.lookup_target_location", return_value={
+				"valid": False,
+				"reason": "Choose a verified residential location.",
+			}), patch("server.get_mongo_store", return_value=store):
+			handler.create_inquiry()
+
+		handler.send_json.assert_called_once_with(400, {"error": "Choose a verified residential location."})
+		store.add_inquiry.assert_not_called()
 
 
 class GuestEmailVerificationTests(unittest.TestCase):
@@ -432,6 +499,7 @@ class BrandedEmailTests(unittest.TestCase):
 		store = Mock()
 		store.add_inquiry.return_value = {"id": 42}
 		with patch("server.get_mongo_store", return_value=store), \
+			patch("server.lookup_target_location", return_value={"valid": True}), \
 			patch("server.send_inquiry_confirmation", side_effect=RuntimeError("SMTP unavailable")):
 			handler.create_inquiry()
 
