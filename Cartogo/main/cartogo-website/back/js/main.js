@@ -20,18 +20,28 @@ let BOOKING_MAP = null;
 let BOOKING_PICKUP_MARKERS = [];
 let BOOKING_TARGET = null;
 let BOOKING_TARGET_MARKER = null;
+let BOOKING_ORIGIN_MARKER = null;
+let BOOKING_VALIDATION_PROMPT_TIMER = null;
+let BOOKING_VALIDATION_PROMPT_SWAP_TIMER = null;
 let BOOKING_PREVIEW_MARKER = null;
 let BOOKING_TARGET_REGION_LOOKUP = null;
 let BOOKING_RATE_QUOTE = null;
 let BOOKING_RENTAL_MODE = null;
 let BOOKING_MAP_FULLSCREEN = false;
+let BOOKING_ROUTE_TIMER = null;
+let BOOKING_ROUTE_CONTROLLER = null;
+let BOOKING_ROUTE_SEQUENCE = 0;
+let BOOKING_NEAREST_ROUTE = null;
+let BOOKING_LOCATION_SEARCH_CONTROLLER = null;
 let BOOKING_DURATION_SELECTED = false;
 let BOOKING_GEOCODE_CONTROLLER = null;
 let BOOKING_LAST_GEOCODE_AT = 0;
 const BOOKING_GEOCODE_CACHE = new Map();
 let BOOKING_PREVIEW_LOOKUP_TIMER = null;
-let BOOKING_PREVIEW_LOOKUP_CONTROLLER = null;
 let BOOKING_PREVIEW_LOOKUP_SEQUENCE = 0;
+let BOOKING_HOVER_VALIDATION_CONTROLLER = null;
+let BOOKING_HOVER_VALIDATION_PROMISE = null;
+let BOOKING_HOVER_VALIDATION_KEY = null;
 const BOOKING_PREVIEW_NAME_CACHE = new Map();
 let HOW_SLIDESHOW_INDEX = 0;
 let HOW_SLIDESHOW_TIMER = null;
@@ -78,7 +88,7 @@ async function init() {
   document.title = SETTINGS.companyName + " — Car Rentals";
   renderBrand();
   renderHero();
-  renderTrustStrip();
+  renderHeroShortcuts();
   renderFilters();
   renderFleet();
   renderHowItWorks();
@@ -94,7 +104,6 @@ async function init() {
   bindNav();
   bindBookingForm();
   bindBookingEstimate();
-  bindQuickSearch();
   bindFaqToggles();
 }
 
@@ -121,19 +130,28 @@ function renderHero() {
 }
 
 /* ---------- Trust strip ---------- */
-function renderTrustStrip() {
-  const wrap = document.getElementById("trustGrid");
-  wrap.innerHTML = LABELS.trustStrip.map(item => {
-    const isFleetCount = /^(cars? in our fleet|vehicle options)$/i.test(String(item.label).trim());
-    const value = isFleetCount ? CARS.length : item.value;
-    return `
-    <div class="trust-item">
-      <b>${escapeHtml(value)}</b>
-      <span>${escapeHtml(item.label)}</span>
-    </div>
-  `;
-  }).join("");
+function renderHeroShortcuts() {
+  const wrap = document.getElementById("heroShortcuts");
+  const shortcuts = [
+    { value: CARS.length, label: "Cars in our fleet", icon: "fa-car-side", href: "#fleet", action: "fleet" },
+    { value: CARS.length, label: "Vehicle options", icon: "fa-list-check", href: "#fleet", action: "fleet" },
+    { value: CARS.filter(car => car.available).length, label: "Pickup areas", icon: "fa-location-dot", href: "#booking", action: "pickup" },
+    { value: "Easy", label: "Online inquiry", icon: "fa-arrow-right", href: "#booking", action: "inquiry" }
+  ];
+  wrap.innerHTML = shortcuts.map(item => `
+    <a class="hero-shortcut" href="${item.href}" data-shortcut-action="${item.action}">
+      <b>${escapeHtml(String(item.value))}</b>
+      <span><i class="fa-solid ${item.icon}" aria-hidden="true"></i> ${escapeHtml(item.label)}</span>
+    </a>
+  `).join("");
+  wrap.querySelectorAll('[data-shortcut-action="pickup"]').forEach(link => {
+    link.addEventListener("click", event => {
+      event.preventDefault();
+      document.getElementById("bookingMap").scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  });
   finishLoading(wrap);
+  wrap.setAttribute("aria-label", "Fleet and booking shortcuts");
 }
 
 /* ---------- Fleet filters ---------- */
@@ -495,6 +513,89 @@ function renderSocialLinks() {
   });
 }
 
+function createPickupMapMarkerElement(color, highlighted = false) {
+  const element = document.createElement("span");
+  element.className = `pickup-map-marker${highlighted ? " is-highlighted" : ""}`;
+  element.style.setProperty("--marker-color", color);
+  element.innerHTML = '<i class="fa-solid fa-location-dot" aria-hidden="true"></i>';
+  return element;
+}
+
+function createBookingMapMarkerElement(color, isPreview = false) {
+  const element = createPickupMapMarkerElement(color);
+  element.classList.add("booking-location-marker");
+  if (isPreview) element.classList.add("booking-location-marker-preview");
+  return element;
+}
+
+function clearBookingSnapConnection() {
+  BOOKING_ORIGIN_MARKER?.remove();
+  BOOKING_ORIGIN_MARKER = null;
+  BOOKING_MAP?.getSource("booking-snap-connection")?.setData({
+    type: "FeatureCollection",
+    features: []
+  });
+  const indicator = document.getElementById("bookingMapSnapStatus");
+  if (indicator) {
+    indicator.hidden = true;
+    document.getElementById("bookingMapSnapStatusText").textContent = "";
+  }
+}
+
+function showBookingSnapConnection(target) {
+  clearBookingSnapConnection();
+  if (!target.snappedDistanceMeters || target.snappedDistanceMeters <= 0) return;
+  const source = BOOKING_MAP?.getSource("booking-snap-connection");
+  if (!source) return;
+  source.setData({
+    type: "Feature",
+    geometry: {
+      type: "LineString",
+      coordinates: [
+        [target.originalLng, target.originalLat],
+        [target.lng, target.lat]
+      ]
+    },
+    properties: {}
+  });
+  const originElement = createPickupMapMarkerElement("#404040");
+  originElement.classList.add("booking-location-marker-origin");
+  originElement.title = "Your original point";
+  originElement.setAttribute("aria-label", "Your original point before moving to a verified location");
+  BOOKING_ORIGIN_MARKER = new window.maplibregl.Marker({
+    element: originElement,
+    anchor: "bottom"
+  }).setLngLat([target.originalLng, target.originalLat]).addTo(BOOKING_MAP);
+  document.getElementById("bookingMapSnapStatusText").textContent =
+    `Moved ${Math.round(target.snappedDistanceMeters)} m to the nearest verified residential location. The dotted line links your original point to the selected pin.`;
+  document.getElementById("bookingMapSnapStatus").hidden = false;
+}
+
+function createEsriStreetMapStyle() {
+  return {
+    version: 8,
+    sources: {
+      esri: {
+        type: "raster",
+        tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"],
+        tileSize: 256,
+        attribution: "Sources: Esri, HERE, Garmin, USGS, Intermap, INCREMENT P, NRCan, Esri Japan, METI, Esri China (Hong Kong), Esri Korea, Esri (Thailand), NGCC, &copy; OpenStreetMap contributors, and the GIS User Community"
+      }
+    },
+    layers: [{ id: "esri-world-street-map", type: "raster", source: "esri" }]
+  };
+}
+
+function addCollapsedMapAttribution(map) {
+  map.addControl(new window.maplibregl.AttributionControl({ compact: true }), "bottom-right");
+  map.getContainer().querySelector(".maplibregl-ctrl-attrib-button")?.click();
+}
+
+function showMapConfigurationMessage(element, message) {
+  element.textContent = message;
+  element.hidden = false;
+}
+
 function contactLocationColor(location) {
   const index = SITE_ASSETS.filter(asset => asset.asset_type === "location").findIndex(asset => asset.id === location.id);
   return location.status === "closed" ? "#71717a" : PICKUP_MARKER_COLORS[Math.max(index, 0) % PICKUP_MARKER_COLORS.length];
@@ -510,50 +611,39 @@ function renderContactMapMarkers() {
     const longitude = Number(location.coordinates?.lng);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
     const color = contactLocationColor(location);
-    const marker = window.L.marker([latitude, longitude], {
-      icon: window.L.divIcon({
-        className: "contact-location-marker",
-        html: `<i class="fa-solid fa-location-dot" style="--marker-color:${color}" aria-hidden="true"></i>`,
-        iconSize: [30, 34],
-        iconAnchor: [15, 34]
-      })
-    }).addTo(CONTACT_MAP);
+    const marker = new window.maplibregl.Marker({
+      element: createPickupMapMarkerElement(color),
+      anchor: "bottom"
+    }).setLngLat([longitude, latitude]).addTo(CONTACT_MAP);
     const hours = location.opening_hours && location.closing_hours
       ? `${String(location.opening_hours).slice(0, 5)} - ${String(location.closing_hours).slice(0, 5)}`
       : "Hours not listed";
-    marker.bindPopup(`<strong>${escapeHtml(location.display_name)}</strong><br>${escapeHtml(location.description || "")}<br>${escapeHtml(hours)} · ${location.status === "closed" ? "Closed" : "Open"}`);
+    const content = `<strong>${escapeHtml(location.display_name)}</strong><br>${escapeHtml(location.description || "")}<br>${escapeHtml(hours)} · ${location.status === "closed" ? "Closed" : "Open"}`;
+    const popup = new window.maplibregl.Popup({ offset: 28, closeButton: true }).setHTML(content);
+    marker.setPopup(popup);
     CONTACT_MAP_MARKERS.push({ location, marker });
   });
   if (CONTACT_MAP_MARKERS.length) {
-    CONTACT_MAP.fitBounds(window.L.featureGroup(CONTACT_MAP_MARKERS.map(({ marker }) => marker)).getBounds().pad(0.18), { maxZoom: 13 });
+    const bounds = new window.maplibregl.LngLatBounds();
+    CONTACT_MAP_MARKERS.forEach(({ marker }) => bounds.extend(marker.getLngLat()));
+    CONTACT_MAP.fitBounds(bounds, { padding: 40, maxZoom: 13 });
   }
 }
 
 function bindContactMap() {
   const mapElement = document.getElementById("contactMap");
-  if (!window.L) {
-    document.getElementById("contactMapEmpty").textContent = "The pickup map could not load.";
-    document.getElementById("contactMapEmpty").hidden = false;
-    return;
-  }
-  CONTACT_MAP = window.L.map(mapElement, { scrollWheelZoom: false }).setView([14.65, 121.0], 10);
-  window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-  }).addTo(CONTACT_MAP);
-  renderContactMapMarkers();
-
   const locationList = document.getElementById("contactLocations");
   const highlightLocation = locationId => {
+    const selected = CONTACT_MAP_MARKERS.find(({ location }) => String(location.id) === locationId);
     CONTACT_MAP_MARKERS.forEach(({ location, marker }) => {
       const isActive = String(location.id) === locationId;
-      marker.setZIndexOffset(isActive ? 1200 : 0);
-      marker.getElement()?.classList.toggle("is-highlighted", isActive);
+      marker.getElement().classList.toggle("is-highlighted", isActive);
       const option = locationList.querySelector(`[data-location-id="${CSS.escape(String(location.id))}"]`);
       option?.classList.toggle("is-active", isActive);
-      if (isActive) marker.openPopup();
-      else marker.closePopup();
     });
+    CONTACT_MAP_MARKERS.forEach(({ marker }) => marker.getPopup()?.remove());
+    const popup = selected?.marker.getPopup();
+    if (popup && !popup.isOpen()) popup.addTo(CONTACT_MAP);
   };
   locationList.addEventListener("pointerover", event => {
     const option = event.target.closest("[data-location-id]");
@@ -579,7 +669,10 @@ function bindContactMap() {
     const entry = CONTACT_MAP_MARKERS.find(({ location }) => String(location.id) === option.dataset.locationId);
     if (!entry) return;
     highlightLocation(option.dataset.locationId);
-    CONTACT_MAP.setView(entry.marker.getLatLng(), Math.max(CONTACT_MAP.getZoom(), 14), { animate: true });
+    CONTACT_MAP.flyTo({
+      center: entry.marker.getLngLat(),
+      zoom: Math.max(CONTACT_MAP.getZoom(), 14)
+    });
   });
 
   const panel = document.getElementById("contactMapPanel");
@@ -588,7 +681,10 @@ function bindContactMap() {
   const updateTop = () => {
     if (!CONTACT_MAP_FULLSCREEN) return;
     panel.style.setProperty("--contact-map-top", `${header.getBoundingClientRect().bottom}px`);
-    window.requestAnimationFrame(() => CONTACT_MAP.invalidateSize());
+    window.requestAnimationFrame(() => {
+      if (!CONTACT_MAP) return;
+      CONTACT_MAP.resize();
+    });
   };
   const setFullscreen = enabled => {
     CONTACT_MAP_FULLSCREEN = enabled;
@@ -600,13 +696,44 @@ function bindContactMap() {
     button.setAttribute("aria-label", enabled ? "Exit pickup map fullscreen" : "Expand pickup locations map");
     button.title = enabled ? "Exit fullscreen" : "Expand map";
     button.innerHTML = `<i class="fa-solid ${enabled ? "fa-compress" : "fa-expand"}" aria-hidden="true"></i>`;
-    window.requestAnimationFrame(() => CONTACT_MAP.invalidateSize());
+    window.requestAnimationFrame(() => {
+      if (!CONTACT_MAP) return;
+      CONTACT_MAP.resize();
+    });
   };
   button.addEventListener("click", () => setFullscreen(!CONTACT_MAP_FULLSCREEN));
   window.addEventListener("resize", updateTop);
   document.addEventListener("keydown", event => {
     if (event.key === "Escape" && CONTACT_MAP_FULLSCREEN) setFullscreen(false);
   });
+
+  if (!window.maplibregl?.Map) {
+    showMapConfigurationMessage(document.getElementById("contactMapEmpty"), "The pickup map could not load. Check the MapLibre connection and refresh.");
+    return;
+  }
+  try {
+    CONTACT_MAP = new window.maplibregl.Map({
+      container: mapElement,
+      style: createEsriStreetMapStyle(),
+      center: [121.0, 14.65],
+      zoom: 10,
+      cooperativeGestures: true,
+      attributionControl: false
+    });
+    CONTACT_MAP.addControl(new window.maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    CONTACT_MAP.once("load", () => {
+      addCollapsedMapAttribution(CONTACT_MAP);
+      document.getElementById("contactMapEmpty").hidden = SITE_ASSETS.some(asset => asset.asset_type === "location");
+      renderContactMapMarkers();
+    });
+    CONTACT_MAP.on("error", event => {
+      console.error("The pickup map encountered a tile or style error.", event.error);
+      showMapConfigurationMessage(document.getElementById("contactMapEmpty"), "Some pickup map content could not be loaded.");
+    });
+  } catch (error) {
+    showMapConfigurationMessage(document.getElementById("contactMapEmpty"), error.message || "The pickup map could not be initialized.");
+    console.error("The pickup map could not be initialized.", error);
+  }
 }
 
 /* ---------- Booking form select ---------- */
@@ -650,41 +777,184 @@ function findNearestPickup(location) {
   })).sort((first, second) => first.distanceKm - second.distanceKm)[0];
 }
 
-function createBookingLocationIcon(color, isPreview = false) {
-  const iconSize = isPreview ? 24 : 34;
-  return window.L.divIcon({
-    className: `booking-location-marker${isPreview ? " booking-location-marker-preview" : ""}`,
-    html: `<i class="fa-solid fa-location-dot" style="--marker-color:${color}" aria-hidden="true"></i>`,
-    iconSize: [iconSize, iconSize],
-    iconAnchor: [iconSize / 2, iconSize]
+async function findNearestPickupByRoad(location, signal) {
+  const openPickups = PICKUP_POINTS.filter(point => point.status !== "closed");
+  const candidates = openPickups.length ? openPickups : PICKUP_POINTS;
+  if (!candidates.length) throw new Error("No pickup locations are available for routing.");
+  const coordinates = [location, ...candidates]
+    .map(point => `${point.lng},${point.lat}`)
+    .join(";");
+  const response = await fetch(
+    `https://router.project-osrm.org/table/v1/driving/${coordinates}?sources=0&annotations=distance`,
+    { signal, cache: "no-store" }
+  );
+  if (!response.ok) throw new Error(`OSRM returned HTTP ${response.status}.`);
+  const result = await response.json();
+  if (result.code !== "Ok" || !Array.isArray(result.distances?.[0])) {
+    throw new Error("OSRM could not calculate road distances for this location.");
+  }
+  const reachable = candidates.map((point, index) => {
+    const meters = result.distances[0][index + 1];
+    return Number.isFinite(meters) && meters >= 0
+      ? { ...point, distanceKm: meters / 1000, distanceType: "driving" }
+      : null;
+  }).filter(Boolean);
+  if (!reachable.length) throw new Error("OSRM found no reachable pickup locations.");
+  return reachable.sort((first, second) => first.distanceKm - second.distanceKm)[0];
+}
+
+async function findDrivingRoute(location, pickup, signal) {
+  const coordinates = `${location.lng},${location.lat};${pickup.lng},${pickup.lat}`;
+  const response = await fetch(
+    `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=false`,
+    { signal, cache: "no-store" }
+  );
+  if (!response.ok) throw new Error(`OSRM returned HTTP ${response.status} for the driving route.`);
+  const result = await response.json();
+  const route = result.code === "Ok" && Array.isArray(result.routes) ? result.routes[0] : null;
+  const coordinatesList = route?.geometry?.coordinates;
+  if (
+    !Array.isArray(coordinatesList)
+    || coordinatesList.length < 2
+    || coordinatesList.some(coordinate => !Array.isArray(coordinate)
+      || coordinate.length < 2
+      || !Number.isFinite(coordinate[0])
+      || !Number.isFinite(coordinate[1]))
+  ) {
+    throw new Error("OSRM returned no valid driving route to the nearest pickup area.");
+  }
+  return {
+    mode: "driving",
+    pickupName: pickup.name,
+    distanceMeters: route.distance,
+    durationSeconds: route.duration,
+    geometry: { type: "LineString", coordinates: coordinatesList }
+  };
+}
+
+function clearBookingNearestRoute() {
+  BOOKING_NEAREST_ROUTE = null;
+  const routeSource = BOOKING_MAP?.getSource("booking-nearest-route");
+  routeSource?.setData({ type: "FeatureCollection", features: [] });
+}
+
+function displayBookingNearestRoute(route, pickup) {
+  BOOKING_NEAREST_ROUTE = route;
+  const routeSource = BOOKING_MAP?.getSource("booking-nearest-route");
+  if (!routeSource) return;
+  routeSource.setData({
+    type: "Feature",
+    geometry: route.geometry,
+    properties: {
+      color: pickup.color,
+      pickupName: pickup.name,
+      mode: route.mode
+    }
   });
 }
 
-function updateMapDistance(location, prefix = "") {
-  const nearest = findNearestPickup(location);
+function updateMapDistance(location, prefix = "", routedNearest = null, distanceType = "straight-line") {
+  const nearest = routedNearest || findNearestPickup(location);
+  if (!nearest) {
+    document.getElementById("bookingMapDistancePrompt").textContent = "Pickup areas are unavailable, so distance cannot be calculated.";
+    document.getElementById("bookingMapDistancePrompt").hidden = false;
+    document.getElementById("bookingMapDistanceResult").hidden = true;
+    return null;
+  }
   document.getElementById("bookingMapDistancePrompt").hidden = true;
   document.getElementById("bookingMapDistanceResult").hidden = false;
   document.getElementById("bookingMapDistancePrefix").textContent = prefix;
   document.getElementById("bookingMapDistanceValue").textContent = nearest.distanceKm.toFixed(2);
+  document.getElementById("bookingMapDistanceKind").textContent = distanceType === "driving"
+    ? "driving distance"
+    : distanceType === "fallback"
+      ? "approximate straight-line distance (route unavailable)"
+      : distanceType === "pending"
+        ? "approximate straight-line distance (calculating route)"
+        : "straight-line distance";
   document.getElementById("bookingMapDistanceValue").style.color = nearest.color;
   document.getElementById("bookingMapNearestPickup").textContent = nearest.name;
   BOOKING_PICKUP_MARKERS.forEach(({ point, marker }) => {
     const isNearest = point.name === nearest.name;
-    marker.setStyle({
-      radius: isNearest ? 9 : 7,
-      color: point.color,
-      fillColor: point.color,
-      fillOpacity: isNearest ? 1 : 0.78,
-      weight: isNearest ? 3 : 2
-    });
+    marker.getElement().classList.toggle("is-nearest", isNearest);
   });
   if (BOOKING_TARGET_MARKER) {
-    BOOKING_TARGET_MARKER.setIcon(createBookingLocationIcon(nearest.color));
+    BOOKING_TARGET_MARKER.getElement().style.setProperty("--marker-color", nearest.color);
   }
   if (BOOKING_PREVIEW_MARKER) {
-    BOOKING_PREVIEW_MARKER.setIcon(createBookingLocationIcon(nearest.color, true));
+    BOOKING_PREVIEW_MARKER.getElement().style.setProperty("--marker-color", nearest.color);
   }
   return nearest;
+}
+
+function cancelBookingRouteLookup() {
+  window.clearTimeout(BOOKING_ROUTE_TIMER);
+  BOOKING_ROUTE_TIMER = null;
+  BOOKING_ROUTE_SEQUENCE += 1;
+  BOOKING_ROUTE_CONTROLLER?.abort();
+  BOOKING_ROUTE_CONTROLLER = null;
+}
+
+function scheduleBookingRoutePreview(location) {
+  cancelBookingRouteLookup();
+  clearBookingNearestRoute();
+  if (!PICKUP_POINTS.length) return;
+  const sequence = BOOKING_ROUTE_SEQUENCE;
+  BOOKING_ROUTE_TIMER = window.setTimeout(async () => {
+    BOOKING_ROUTE_TIMER = null;
+    BOOKING_ROUTE_CONTROLLER = new AbortController();
+    try {
+      const validation = await getBookingHoverValidation(location);
+      if (sequence !== BOOKING_ROUTE_SEQUENCE || BOOKING_TARGET || !validation.valid) return;
+      const nearest = await findNearestPickupByRoad(location, BOOKING_ROUTE_CONTROLLER.signal);
+      if (sequence !== BOOKING_ROUTE_SEQUENCE || BOOKING_TARGET) return;
+      updateMapDistance(location, "", nearest, "driving");
+      try {
+        const route = await findDrivingRoute(location, nearest, BOOKING_ROUTE_CONTROLLER.signal);
+        if (sequence !== BOOKING_ROUTE_SEQUENCE || BOOKING_TARGET) return;
+        displayBookingNearestRoute(route, nearest);
+      } catch (error) {
+        if (error.name === "AbortError" || sequence !== BOOKING_ROUTE_SEQUENCE) return;
+        console.warn("OSRM could not provide the hovered driving route.", error);
+      }
+    } catch (error) {
+      if (error.name === "AbortError" || sequence !== BOOKING_ROUTE_SEQUENCE) return;
+      console.warn("OSRM road distance is unavailable for the map preview; using straight-line distance.", error);
+      updateMapDistance(location, "", null, "fallback");
+    } finally {
+      if (sequence === BOOKING_ROUTE_SEQUENCE) BOOKING_ROUTE_CONTROLLER = null;
+    }
+  }, 650);
+}
+
+async function updateSelectedTargetRoadDistance(target) {
+  cancelBookingRouteLookup();
+  clearBookingNearestRoute();
+  const sequence = BOOKING_ROUTE_SEQUENCE;
+  BOOKING_ROUTE_CONTROLLER = new AbortController();
+  try {
+    const nearest = await findNearestPickupByRoad(target, BOOKING_ROUTE_CONTROLLER.signal);
+    if (BOOKING_TARGET !== target || sequence !== BOOKING_ROUTE_SEQUENCE) return;
+    target.nearestPickupName = nearest.name;
+    target.nearestPickupDistanceKm = nearest.distanceKm;
+    document.getElementById("bookingNearestPickupName").value = nearest.name;
+    document.getElementById("bookingNearestPickupDistance").value = nearest.distanceKm.toFixed(3);
+    updateMapDistance(target, "Selected: ", nearest, "driving");
+    try {
+      const route = await findDrivingRoute(target, nearest, BOOKING_ROUTE_CONTROLLER.signal);
+      if (BOOKING_TARGET !== target || sequence !== BOOKING_ROUTE_SEQUENCE) return;
+      displayBookingNearestRoute(route, nearest);
+    } catch (error) {
+      if (error.name === "AbortError" || BOOKING_TARGET !== target || sequence !== BOOKING_ROUTE_SEQUENCE) return;
+      console.warn("OSRM could not provide the selected destination's driving route.", error);
+    }
+  } catch (error) {
+    if (error.name === "AbortError" || BOOKING_TARGET !== target || sequence !== BOOKING_ROUTE_SEQUENCE) return;
+    console.warn("OSRM road distance is unavailable for the selected target; using straight-line distance.", error);
+    updateMapDistance(target, "Selected: ", null, "fallback");
+  } finally {
+    if (sequence === BOOKING_ROUTE_SEQUENCE) BOOKING_ROUTE_CONTROLLER = null;
+  }
 }
 
 function classifyTargetRegion(address) {
@@ -722,56 +992,135 @@ function setBookingLocationPreview(label, prefix = "Hovered location: ") {
   document.getElementById("bookingMapPreview").hidden = !label;
 }
 
+const BOOKING_VALIDATION_PROMPTS = [
+  "Processing... Please wait.",
+  "Checking nearby roads and residential areas...",
+  "Verifying your selected location...",
+  "Finding the closest valid point...",
+  "Confirming this area is suitable for your booking...",
+  "Almost there — finalizing your location..."
+];
+
+function stopBookingValidationPrompts() {
+  window.clearInterval(BOOKING_VALIDATION_PROMPT_TIMER);
+  window.clearTimeout(BOOKING_VALIDATION_PROMPT_SWAP_TIMER);
+  BOOKING_VALIDATION_PROMPT_TIMER = null;
+  BOOKING_VALIDATION_PROMPT_SWAP_TIMER = null;
+}
+
+function setBookingTargetStatus(message) {
+  stopBookingValidationPrompts();
+  document.getElementById("bookingTargetStatus").textContent = message;
+}
+
+function startBookingValidationPrompts() {
+  stopBookingValidationPrompts();
+  const status = document.getElementById("bookingTargetStatus");
+  const prompt = document.createElement("span");
+  prompt.className = "booking-target-waiting-prompt";
+  const messages = [...BOOKING_VALIDATION_PROMPTS];
+  for (let index = messages.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [messages[index], messages[swapIndex]] = [messages[swapIndex], messages[index]];
+  }
+  let messageIndex = 0;
+  prompt.textContent = messages[messageIndex];
+  status.replaceChildren(prompt);
+  BOOKING_VALIDATION_PROMPT_TIMER = window.setInterval(() => {
+    prompt.classList.add("is-transitioning");
+    BOOKING_VALIDATION_PROMPT_SWAP_TIMER = window.setTimeout(() => {
+      if (!prompt.isConnected) {
+        stopBookingValidationPrompts();
+        return;
+      }
+      messageIndex = (messageIndex + 1) % messages.length;
+      prompt.textContent = messages[messageIndex];
+      prompt.classList.remove("is-transitioning");
+    }, 220);
+  }, 2800);
+}
+
 function cancelBookingLocationPreview() {
   window.clearTimeout(BOOKING_PREVIEW_LOOKUP_TIMER);
   BOOKING_PREVIEW_LOOKUP_TIMER = null;
   BOOKING_PREVIEW_LOOKUP_SEQUENCE += 1;
-  BOOKING_PREVIEW_LOOKUP_CONTROLLER?.abort();
-  BOOKING_PREVIEW_LOOKUP_CONTROLLER = null;
+  BOOKING_HOVER_VALIDATION_CONTROLLER?.abort();
+  BOOKING_HOVER_VALIDATION_CONTROLLER = null;
+  BOOKING_HOVER_VALIDATION_PROMISE = null;
+  BOOKING_HOVER_VALIDATION_KEY = null;
+}
+
+function getBookingHoverValidation(location) {
+  const cacheKey = `${location.lat.toFixed(6)},${location.lng.toFixed(6)}`;
+  const cached = BOOKING_PREVIEW_NAME_CACHE.get(cacheKey);
+  if (cached) return Promise.resolve(cached);
+  if (BOOKING_HOVER_VALIDATION_PROMISE && BOOKING_HOVER_VALIDATION_KEY === cacheKey) {
+    return BOOKING_HOVER_VALIDATION_PROMISE;
+  }
+  BOOKING_HOVER_VALIDATION_CONTROLLER?.abort();
+  BOOKING_HOVER_VALIDATION_CONTROLLER = new AbortController();
+  BOOKING_HOVER_VALIDATION_KEY = cacheKey;
+  const controller = BOOKING_HOVER_VALIDATION_CONTROLLER;
+  const request = fetch("/api/target-location/validate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ latitude: location.lat, longitude: location.lng }),
+    signal: controller.signal
+  }).then(async response => {
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Location lookup is temporarily unavailable.");
+    BOOKING_PREVIEW_NAME_CACHE.set(cacheKey, data);
+    if (BOOKING_PREVIEW_NAME_CACHE.size > 200) {
+      BOOKING_PREVIEW_NAME_CACHE.delete(BOOKING_PREVIEW_NAME_CACHE.keys().next().value);
+    }
+    return data;
+  }).finally(() => {
+    if (BOOKING_HOVER_VALIDATION_PROMISE === request) {
+      BOOKING_HOVER_VALIDATION_PROMISE = null;
+      BOOKING_HOVER_VALIDATION_KEY = null;
+      BOOKING_HOVER_VALIDATION_CONTROLLER = null;
+    }
+  });
+  BOOKING_HOVER_VALIDATION_PROMISE = request;
+  return request;
 }
 
 function scheduleBookingLocationPreview(location) {
   window.clearTimeout(BOOKING_PREVIEW_LOOKUP_TIMER);
-  BOOKING_PREVIEW_LOOKUP_CONTROLLER?.abort();
-  BOOKING_PREVIEW_LOOKUP_CONTROLLER = null;
   const sequence = ++BOOKING_PREVIEW_LOOKUP_SEQUENCE;
   BOOKING_PREVIEW_LOOKUP_TIMER = window.setTimeout(async () => {
-    const cacheKey = `${location.lat.toFixed(4)},${location.lng.toFixed(4)}`;
-    let result = BOOKING_PREVIEW_NAME_CACHE.get(cacheKey);
-    if (!result) {
-      setBookingLocationPreview("Looking up the mapped location...");
-      BOOKING_PREVIEW_LOOKUP_CONTROLLER = new AbortController();
-      try {
-        const response = await fetch("/api/target-location/validate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ latitude: location.lat, longitude: location.lng }),
-          signal: BOOKING_PREVIEW_LOOKUP_CONTROLLER.signal
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Location lookup is temporarily unavailable.");
-        result = data;
-        BOOKING_PREVIEW_NAME_CACHE.set(cacheKey, result);
-        if (BOOKING_PREVIEW_NAME_CACHE.size > 200) {
-          BOOKING_PREVIEW_NAME_CACHE.delete(BOOKING_PREVIEW_NAME_CACHE.keys().next().value);
-        }
-      } catch (error) {
-        if (error.name === "AbortError" || sequence !== BOOKING_PREVIEW_LOOKUP_SEQUENCE) return;
-        setBookingLocationPreview(error.message || "Could not look up this location.");
-        return;
-      }
+    let result;
+    try {
+      result = await getBookingHoverValidation(location);
+    } catch (error) {
+      if (error.name === "AbortError" || sequence !== BOOKING_PREVIEW_LOOKUP_SEQUENCE) return;
+      setBookingLocationPreview(error.message || "Could not look up this location.");
+      return;
     }
     if (sequence !== BOOKING_PREVIEW_LOOKUP_SEQUENCE || BOOKING_TARGET) return;
-    setBookingLocationPreview(result.label || "No exact mapped place name is available here.");
+    setBookingLocationPreview(result.valid
+      ? result.label || "No exact mapped place name is available here."
+      : result.reason || result.label || "This point is not a verified residential location.");
   }, 650);
 }
 
 function setBookingTarget(location) {
   cancelBookingLocationPreview();
+  cancelBookingRouteLookup();
+  clearBookingNearestRoute();
+  clearBookingSnapConnection();
   const nearest = findNearestPickup(location);
+  if (!nearest) {
+    setBookingTargetStatus("Pickup areas are unavailable, so a target cannot be selected.");
+    updateMapDistance(location);
+    return;
+  }
   BOOKING_TARGET = {
     lat: location.lat,
     lng: location.lng,
+    originalLat: location.lat,
+    originalLng: location.lng,
+    snappedDistanceMeters: 0,
     label: `${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}`,
     rateRegion: null,
     verified: false,
@@ -786,9 +1135,9 @@ function setBookingTarget(location) {
   document.getElementById("bookingTargetRegion").value = "";
   document.getElementById("bookingNearestPickupName").value = nearest.name;
   document.getElementById("bookingNearestPickupDistance").value = nearest.distanceKm.toFixed(3);
-  document.getElementById("bookingTargetStatus").textContent = "Checking that this is a mapped residential location...";
+  startBookingValidationPrompts();
   setBookingLocationPreview("");
-  updateMapDistance(location, "Checking: ");
+  updateMapDistance(location, "Checking: ", null, "pending");
   BOOKING_PREVIEW_MARKER?.remove();
   BOOKING_PREVIEW_MARKER = null;
   renderBookingEstimate();
@@ -809,7 +1158,7 @@ async function resolveBookingTargetRegion(target) {
       const response = await fetch("/api/target-location/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ latitude: target.lat, longitude: target.lng }),
+        body: JSON.stringify({ latitude: target.lat, longitude: target.lng, snapInvalid: true }),
         signal: BOOKING_GEOCODE_CONTROLLER.signal
       });
       const data = await response.json();
@@ -831,6 +1180,22 @@ async function resolveBookingTargetRegion(target) {
     clearBookingTarget(result.reason || "This location could not be verified as a residential destination. Choose another map location.");
     return;
   }
+  if (result.snapped) {
+    if (
+      !Number.isFinite(result.latitude)
+      || !Number.isFinite(result.longitude)
+      || !Number.isFinite(result.snapDistanceMeters)
+      || result.snapDistanceMeters > 75
+    ) {
+      clearBookingTarget("The nearby location could not be verified within 75 m. Choose another map point.");
+      return;
+    }
+    target.lat = result.latitude;
+    target.lng = result.longitude;
+    target.snappedDistanceMeters = result.snapDistanceMeters;
+    document.getElementById("bookingTargetLat").value = target.lat.toFixed(6);
+    document.getElementById("bookingTargetLng").value = target.lng.toFixed(6);
+  }
   target.label = result.label || `${target.lat.toFixed(6)}, ${target.lng.toFixed(6)}`;
   target.rateRegion = result.rateRegion;
   target.verified = true;
@@ -838,17 +1203,21 @@ async function resolveBookingTargetRegion(target) {
   document.getElementById("bookingTargetRegion").value = target.rateRegion || "";
   document.getElementById("bookingNearestPickupName").value = target.nearestPickupName;
   document.getElementById("bookingNearestPickupDistance").value = target.nearestPickupDistanceKm.toFixed(3);
-  BOOKING_TARGET_MARKER = window.L.marker([target.lat, target.lng], {
-    icon: createBookingLocationIcon(findNearestPickup(target).color)
-  }).addTo(BOOKING_MAP);
+  BOOKING_TARGET_MARKER = new window.maplibregl.Marker({
+    element: createBookingMapMarkerElement(findNearestPickup(target).color),
+    anchor: "bottom"
+  }).setLngLat([target.lng, target.lat]).addTo(BOOKING_MAP);
+  showBookingSnapConnection(target);
+  stopBookingValidationPrompts();
   if (target.rateRegion) {
-    document.getElementById("bookingTargetStatus").textContent = `${target.label} · ${regionDisplayName(target.rateRegion)} rates`;
+    setBookingTargetStatus(`Selected: ${target.label} · ${regionDisplayName(target.rateRegion)} rates`);
   } else {
-    document.getElementById("bookingTargetStatus").textContent = `${target.label} · This location isn't in the supported Luzon pricing area.`;
+    setBookingTargetStatus(`Selected: ${target.label} · This location isn't in the supported Luzon pricing area.`);
   }
   updateBookingPeriodOptions(target.rateRegion);
   document.getElementById("bookingPickup").dispatchEvent(new Event("change"));
   renderBookingEstimate();
+  updateSelectedTargetRoadDistance(target);
 }
 
 function clearBookingTarget(message) {
@@ -856,10 +1225,13 @@ function clearBookingTarget(message) {
   BOOKING_TARGET_REGION_LOOKUP = null;
   BOOKING_TARGET_MARKER?.remove();
   BOOKING_TARGET_MARKER = null;
+  cancelBookingRouteLookup();
+  clearBookingNearestRoute();
+  clearBookingSnapConnection();
   ["bookingTargetLat", "bookingTargetLng", "bookingTargetLabel", "bookingTargetRegion", "bookingNearestPickupName", "bookingNearestPickupDistance"].forEach(id => {
     document.getElementById(id).value = "";
   });
-  document.getElementById("bookingTargetStatus").textContent = message;
+  setBookingTargetStatus(message);
   setBookingLocationPreview("");
   document.getElementById("bookingMapDistancePrompt").hidden = false;
   document.getElementById("bookingMapDistanceResult").hidden = true;
@@ -899,6 +1271,7 @@ function updateBookingPeriodOptions(region) {
 }
 
 function restoreBookingTargetFromDraft() {
+  if (!BOOKING_MAP) return;
   const latitude = Number(document.getElementById("bookingTargetLat").value);
   const longitude = Number(document.getElementById("bookingTargetLng").value);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !document.getElementById("bookingTargetLabel").value) return;
@@ -912,78 +1285,88 @@ function restoreBookingTargetFromDraft() {
     nearestPickupName: document.getElementById("bookingNearestPickupName").value || nearest.name,
     nearestPickupDistanceKm: Number(document.getElementById("bookingNearestPickupDistance").value) || nearest.distanceKm
   };
-  BOOKING_MAP.setView([latitude, longitude], Math.max(BOOKING_MAP.getZoom(), 13));
-  document.getElementById("bookingTargetStatus").textContent = "Checking that this is a mapped residential location...";
+  BOOKING_MAP.flyTo({ center: [longitude, latitude], zoom: Math.max(BOOKING_MAP.getZoom(), 13) });
+  startBookingValidationPrompts();
   setBookingLocationPreview("");
   updateMapDistance(BOOKING_TARGET, "Checking: ");
   BOOKING_RENTAL_MODE = document.querySelector('input[name="bookingMode"]:checked')?.value || BOOKING_RENTAL_MODE;
   BOOKING_TARGET_REGION_LOOKUP = resolveBookingTargetRegion(BOOKING_TARGET);
+  updateMapDistance(BOOKING_TARGET, "Selected: ", null, "pending");
 }
 
 function bindBookingMap() {
   const mapElement = document.getElementById("bookingMap");
-  if (!window.L) {
-    document.getElementById("bookingTargetStatus").textContent = "The map could not load. Refresh the page to try again.";
-    return;
-  }
-
-  BOOKING_MAP = window.L.map(mapElement, { scrollWheelZoom: false });
-  window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-  }).addTo(BOOKING_MAP);
-
-  BOOKING_PICKUP_MARKERS = PICKUP_POINTS.map(point => {
-    const marker = window.L.circleMarker([point.lat, point.lng], {
-      radius: 7,
-      color: point.color,
-      weight: 2,
-      fillColor: point.color,
-      fillOpacity: 0.78
-    }).addTo(BOOKING_MAP).bindTooltip(point.name);
-    return { point, marker };
-  });
-  BOOKING_MAP.fitBounds(window.L.featureGroup(BOOKING_PICKUP_MARKERS.map(({ marker }) => marker)).getBounds().pad(0.18), { maxZoom: 11 });
-
-  BOOKING_MAP.on("mousemove", event => {
-    if (BOOKING_TARGET) return;
-    const position = { lat: event.latlng.lat, lng: event.latlng.lng };
-    const nearest = updateMapDistance(position);
-    scheduleBookingLocationPreview(position);
-    if (BOOKING_PREVIEW_MARKER) BOOKING_PREVIEW_MARKER.setLatLng(event.latlng);
-    else BOOKING_PREVIEW_MARKER = window.L.marker(event.latlng, {
-      icon: createBookingLocationIcon(nearest.color, true),
-      interactive: false,
-      keyboard: false
-    }).addTo(BOOKING_MAP);
-  });
-  BOOKING_MAP.on("mouseout", () => {
-    if (BOOKING_TARGET) updateMapDistance(BOOKING_TARGET, "Selected: ");
-    else {
-      cancelBookingLocationPreview();
-      setBookingLocationPreview("");
-      document.getElementById("bookingMapDistancePrompt").hidden = false;
-      document.getElementById("bookingMapDistanceResult").hidden = true;
-      BOOKING_PREVIEW_MARKER?.remove();
-      BOOKING_PREVIEW_MARKER = null;
-      BOOKING_PICKUP_MARKERS.forEach(({ point, marker }) => marker.setStyle({
-        radius: 7,
-        color: point.color,
-        fillColor: point.color,
-        fillOpacity: 0.78,
-        weight: 2
-      }));
-    }
-  });
-  BOOKING_MAP.on("click", event => setBookingTarget({ lat: event.latlng.lat, lng: event.latlng.lng }));
-
   const fullscreenButton = document.getElementById("bookingMapFullscreen");
   const bookingPanel = document.querySelector(".booking-panel");
   const siteHeader = document.getElementById("siteHeader");
+  const searchInput = document.getElementById("bookingMapSearchInput");
+  const searchSubmit = document.getElementById("bookingMapSearchSubmit");
+  const searchStatus = document.getElementById("bookingMapSearchStatus");
+  const resetMapView = () => {
+    if (!BOOKING_MAP) return;
+    if (!BOOKING_PICKUP_MARKERS.length) {
+      BOOKING_MAP.flyTo({ center: [121.0, 14.65], zoom: 10 });
+      return;
+    }
+    const bounds = new window.maplibregl.LngLatBounds();
+    BOOKING_PICKUP_MARKERS.forEach(({ marker }) => bounds.extend(marker.getLngLat()));
+    BOOKING_MAP.fitBounds(bounds, { padding: 40, maxZoom: 11 });
+  };
+
+  const searchLocation = async () => {
+    const query = searchInput.value.trim();
+    if (!query) {
+      searchInput.focus();
+      return;
+    }
+    if (!BOOKING_MAP) {
+      searchStatus.textContent = "The map is not ready yet. Please try again.";
+      return;
+    }
+    BOOKING_LOCATION_SEARCH_CONTROLLER?.abort();
+    BOOKING_LOCATION_SEARCH_CONTROLLER = new AbortController();
+    searchStatus.textContent = "Searching for this location...";
+    try {
+      const response = await fetch("/api/target-location/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+        signal: BOOKING_LOCATION_SEARCH_CONTROLLER.signal
+      });
+      const results = await response.json();
+      if (!response.ok) throw new Error(results.error || "Location search failed. Please try again.");
+      const result = results[0];
+      if (!result) throw new Error("No matching location was found. Try a more specific address.");
+      BOOKING_MAP.flyTo({ center: [result.longitude, result.latitude], zoom: 15 });
+      searchStatus.textContent = result.label || "Location found.";
+      setBookingTarget({ lat: result.latitude, lng: result.longitude });
+    } catch (error) {
+      if (error.name === "AbortError") return;
+      searchStatus.textContent = error.message || "Location search failed. Please try a different query.";
+    } finally {
+      BOOKING_LOCATION_SEARCH_CONTROLLER = null;
+    }
+  };
+  searchSubmit.addEventListener("click", searchLocation);
+  searchInput.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      searchLocation();
+    }
+  });
+  document.getElementById("bookingMapSearchClear").addEventListener("click", () => {
+    searchInput.value = "";
+    searchStatus.textContent = "";
+    searchInput.focus();
+  });
+
   const updateFullscreenTop = () => {
     if (!BOOKING_MAP_FULLSCREEN) return;
     bookingPanel.style.setProperty("--booking-map-top", `${siteHeader.getBoundingClientRect().bottom}px`);
-    window.requestAnimationFrame(() => BOOKING_MAP.invalidateSize());
+    window.requestAnimationFrame(() => {
+      if (!BOOKING_MAP) return;
+      BOOKING_MAP.resize();
+    });
   };
   let fullscreenAnimationTimer = null;
   const setFullscreen = enabled => {
@@ -1005,7 +1388,10 @@ function bindBookingMap() {
     fullscreenButton.title = enabled ? "Exit fullscreen" : "Expand map";
     fullscreenButton.classList.toggle("is-expanded", enabled);
     fullscreenButton.innerHTML = `<i class="fa-solid ${enabled ? "fa-compress" : "fa-expand"}" aria-hidden="true"></i>`;
-    window.requestAnimationFrame(() => BOOKING_MAP.invalidateSize());
+    window.requestAnimationFrame(() => {
+      if (!BOOKING_MAP) return;
+      BOOKING_MAP.resize();
+    });
   };
   window.addEventListener("resize", updateFullscreenTop);
   fullscreenButton.addEventListener("click", () => setFullscreen(!BOOKING_MAP_FULLSCREEN));
@@ -1019,23 +1405,153 @@ function bindBookingMap() {
       BOOKING_RATE_QUOTE = null;
       BOOKING_TARGET_REGION_LOOKUP = null;
       BOOKING_GEOCODE_CONTROLLER?.abort();
+      BOOKING_LOCATION_SEARCH_CONTROLLER?.abort();
       cancelBookingLocationPreview();
+      cancelBookingRouteLookup();
+      clearBookingNearestRoute();
       setBookingLocationPreview("");
       BOOKING_TARGET_MARKER?.remove();
       BOOKING_TARGET_MARKER = null;
+      clearBookingSnapConnection();
+      BOOKING_PREVIEW_MARKER?.remove();
+      BOOKING_PREVIEW_MARKER = null;
       ["bookingTargetLat", "bookingTargetLng", "bookingTargetLabel", "bookingTargetRegion", "bookingNearestPickupName", "bookingNearestPickupDistance"].forEach(id => {
         document.getElementById(id).value = "";
       });
-      document.getElementById("bookingTargetStatus").textContent = "Click the map to choose your target location.";
+      setBookingTargetStatus("Click the map to choose your target location.");
+      searchInput.value = "";
+      searchStatus.textContent = "";
       document.getElementById("bookingMapDistancePrompt").hidden = false;
       document.getElementById("bookingMapDistanceResult").hidden = true;
       updateBookingPeriodOptions(null);
       document.getElementById("bookingRentalDaysValue").textContent = `${document.getElementById("bookingRentalDays").value} days`;
       document.getElementById("bookingPromoMessage").textContent = `Enjoy ${Number(document.getElementById("bookingRentalDays").value) >= 8 ? 10 : 5}% off by selecting ${document.getElementById("bookingRentalDays").value} days.`;
-      BOOKING_MAP.fitBounds(window.L.featureGroup(BOOKING_PICKUP_MARKERS.map(({ marker }) => marker)).getBounds().pad(0.18), { maxZoom: 11 });
+      resetMapView();
       renderBookingEstimate();
     }, 0);
   });
+
+  if (!window.maplibregl?.Map) {
+    searchStatus.textContent = "The map could not load. Check the MapLibre connection and refresh.";
+    setBookingTargetStatus(searchStatus.textContent);
+    return;
+  }
+  try {
+    BOOKING_MAP = new window.maplibregl.Map({
+      container: mapElement,
+      style: createEsriStreetMapStyle(),
+      center: [121.0, 14.65],
+      zoom: 10,
+      cooperativeGestures: true,
+      attributionControl: false
+    });
+    BOOKING_MAP.addControl(new window.maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    BOOKING_MAP.on("load", () => {
+      addCollapsedMapAttribution(BOOKING_MAP);
+      BOOKING_MAP.addSource("booking-snap-connection", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] }
+      });
+      BOOKING_MAP.addLayer({
+        id: "booking-snap-connection-line",
+        type: "line",
+        source: "booking-snap-connection",
+        paint: {
+          "line-color": "#404040",
+          "line-width": 2.5,
+          "line-dasharray": [1, 2]
+        }
+      });
+      BOOKING_MAP.addSource("booking-nearest-route", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] }
+      });
+      BOOKING_MAP.addLayer({
+        id: "booking-nearest-route-casing",
+        type: "line",
+        source: "booking-nearest-route",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": "#ffffff",
+          "line-width": 7,
+          "line-opacity": 0.88
+        }
+      });
+      BOOKING_MAP.addLayer({
+        id: "booking-nearest-route-line",
+        type: "line",
+        source: "booking-nearest-route",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": ["get", "color"],
+          "line-width": 4,
+          "line-opacity": 0.95
+        }
+      });
+      if (BOOKING_TARGET?.snappedDistanceMeters) {
+        showBookingSnapConnection(BOOKING_TARGET);
+      }
+      BOOKING_PICKUP_MARKERS = PICKUP_POINTS.map(point => ({
+        point,
+        marker: new window.maplibregl.Marker({
+          element: createPickupMapMarkerElement(point.color),
+          anchor: "bottom"
+        }).setLngLat([point.lng, point.lat]).addTo(BOOKING_MAP)
+      }));
+      resetMapView();
+      searchSubmit.disabled = false;
+      searchStatus.textContent = "";
+      document.getElementById("bookingMapDistancePrompt").textContent = "Move the cursor over the map to preview road distance from the nearest pickup point.";
+      setBookingTargetStatus("Click the map or search for a location to choose your target.");
+      restoreBookingTargetFromDraft();
+    });
+    BOOKING_MAP.on("mousemove", event => {
+      if (BOOKING_TARGET) return;
+      const position = { lat: event.lngLat.lat, lng: event.lngLat.lng };
+      const nearest = updateMapDistance(position);
+      scheduleBookingRoutePreview(position);
+      scheduleBookingLocationPreview(position);
+      const markerOptions = {
+        element: createBookingMapMarkerElement(nearest.color, true),
+        anchor: "bottom"
+      };
+      if (BOOKING_PREVIEW_MARKER) {
+        BOOKING_PREVIEW_MARKER.setLngLat([position.lng, position.lat]);
+        BOOKING_PREVIEW_MARKER.getElement().style.setProperty("--marker-color", nearest.color);
+      } else {
+        BOOKING_PREVIEW_MARKER = new window.maplibregl.Marker(markerOptions)
+          .setLngLat([position.lng, position.lat])
+          .addTo(BOOKING_MAP);
+      }
+    });
+    BOOKING_MAP.on("mouseout", () => {
+      if (BOOKING_TARGET) {
+        updateMapDistance(BOOKING_TARGET, "Selected: ");
+        return;
+      }
+      cancelBookingLocationPreview();
+      cancelBookingRouteLookup();
+      clearBookingNearestRoute();
+      setBookingLocationPreview("");
+      document.getElementById("bookingMapDistancePrompt").hidden = false;
+      document.getElementById("bookingMapDistanceResult").hidden = true;
+      BOOKING_PREVIEW_MARKER?.remove();
+      BOOKING_PREVIEW_MARKER = null;
+      BOOKING_PICKUP_MARKERS.forEach(({ marker }) => marker.getElement().classList.remove("is-nearest"));
+    });
+    BOOKING_MAP.on("click", event => {
+      setBookingTarget({ lat: event.lngLat.lat, lng: event.lngLat.lng });
+    });
+    BOOKING_MAP.on("error", event => {
+      console.error("The booking map encountered a tile or style error.", event.error);
+      searchStatus.textContent = "Some map content could not be loaded.";
+    });
+  } catch (error) {
+    searchSubmit.disabled = true;
+    searchStatus.textContent = error.message || "The booking map could not be initialized.";
+    setBookingTargetStatus(searchStatus.textContent);
+    console.error("The booking map could not be initialized.", error);
+  }
 }
 
 function renderBookingEstimate() {
@@ -1203,6 +1719,44 @@ function bindBookingEstimate() {
     if (!durationPinnedOpen) setDurationOpen(false);
   });
 
+  const bookingPeriodField = document.getElementById("bookingPeriodField");
+  modeOptions.forEach(input => {
+    const modeClass = input.value === "hourly" ? "hourly-hover-preview" : "custom-hover-preview";
+    const otherModeClass = input.value === "hourly" ? "custom-hover-preview" : "hourly-hover-preview";
+    const previewMode = enabled => {
+      bookingPeriodField.classList.toggle(modeClass, enabled && BOOKING_RENTAL_MODE !== input.value);
+    };
+    input.closest("label").addEventListener("pointerenter", event => {
+      if (hoverCanExpand.matches && event.pointerType !== "touch") {
+        bookingPeriodField.classList.remove(otherModeClass);
+        previewMode(true);
+        if (input.value === "custom_days") {
+          durationHovering = true;
+          setDurationOpen(true);
+        }
+      }
+    });
+    input.addEventListener("focus", () => {
+      bookingPeriodField.classList.remove(otherModeClass);
+      previewMode(true);
+      if (input.value === "custom_days") setDurationOpen(true);
+    });
+    input.addEventListener("blur", () => {
+      previewMode(false);
+      if (input.value === "custom_days" && !durationPinnedOpen && BOOKING_RENTAL_MODE !== "custom_days") {
+        durationHovering = false;
+        setDurationOpen(false);
+      }
+    });
+  });
+  bookingPeriodField.addEventListener("pointerleave", () => {
+    bookingPeriodField.classList.remove("hourly-hover-preview", "custom-hover-preview");
+    if (!durationPinnedOpen && BOOKING_RENTAL_MODE !== "custom_days") {
+      durationHovering = false;
+      setDurationOpen(false);
+    }
+  });
+
   capacityInput.addEventListener("input", () => {
     const selectedId = carSelect.value;
     populateCarSelect();
@@ -1247,6 +1801,12 @@ function bindBookingEstimate() {
     const periodField = document.getElementById("bookingPeriodField");
     periodField.classList.toggle("hourly-selected", mode === "hourly");
     periodField.classList.toggle("custom-selected", mode === "custom_days");
+    if (mode === "custom_days") {
+      durationPinnedOpen = true;
+      setDurationOpen(true);
+    } else {
+      closeDuration();
+    }
     syncReturnDate();
   };
   pickupInput.addEventListener("change", syncReturnDate);
@@ -1319,31 +1879,6 @@ function bindNav() {
   toggle.addEventListener("click", () => header.classList.toggle("open"));
   document.querySelectorAll(".nav-links a").forEach(link => {
     link.addEventListener("click", () => header.classList.remove("open"));
-  });
-}
-
-/* ---------- Quick search (hero) → scrolls to fleet, copies dates to booking form ---------- */
-function bindQuickSearch() {
-  const form = document.getElementById("quickSearchForm");
-  form.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const pickup = document.getElementById("qsPickup").value;
-    const ret = document.getElementById("qsReturn").value;
-    if (pickup) document.getElementById("bookingPickup").value = pickup;
-    const daysInput = document.getElementById("bookingRentalDays");
-    if (pickup && ret) {
-      const [startYear, startMonth, startDay] = pickup.split("-").map(Number);
-      const [endYear, endMonth, endDay] = ret.split("-").map(Number);
-      const days = (Date.UTC(endYear, endMonth - 1, endDay) - Date.UTC(startYear, startMonth - 1, startDay)) / 86400000;
-      if (Number.isInteger(days) && days >= 4 && days <= 15) {
-        daysInput.value = String(days);
-        document.getElementById("bookingModeCustom").checked = true;
-        document.getElementById("bookingModeCustom").dispatchEvent(new Event("change", { bubbles: true }));
-      }
-    }
-    daysInput.dispatchEvent(new Event("input", { bubbles: true }));
-    renderBookingEstimate();
-    document.getElementById("fleet").scrollIntoView({ behavior: "smooth", block: "start" });
   });
 }
 

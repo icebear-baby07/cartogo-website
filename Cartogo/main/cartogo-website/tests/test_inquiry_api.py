@@ -1,4 +1,5 @@
 import hashlib
+import json
 import time
 import unittest
 
@@ -12,6 +13,8 @@ from server import (
 	WebsiteHandler,
 	assess_target_location,
 	build_branded_email,
+	lookup_target_location,
+	search_target_locations,
 	send_branded_email,
 	send_inquiry_confirmation,
 	send_inquiry_rejection,
@@ -214,6 +217,116 @@ class InquiryNormalizationTests(unittest.TestCase):
 
 
 class TargetLocationValidationTests(unittest.TestCase):
+	def test_validation_endpoint_passes_through_the_snap_preference(self):
+		handler = object.__new__(WebsiteHandler)
+		handler.read_json = Mock(return_value={
+			"latitude": 14.7,
+			"longitude": 121.0,
+			"snapInvalid": True,
+		})
+		handler.send_json = Mock()
+		result = {"valid": True, "snapped": True}
+
+		with patch("server.lookup_target_location", return_value=result) as lookup:
+			handler.validate_target_location()
+
+		lookup.assert_called_once_with(14.7, 121.0, True)
+		handler.send_json.assert_called_once_with(200, result)
+
+	def test_invalid_target_snaps_to_verified_residential_road_within_75_metres(self):
+		def response(payload):
+			mock_response = MagicMock()
+			mock_response.__enter__.return_value = mock_response
+			mock_response.read.return_value = json.dumps(payload).encode()
+			return mock_response
+
+		with patch("server.urlopen", side_effect=[
+			response({
+				"display_name": "Unmapped park",
+				"category": "leisure",
+				"type": "park",
+				"address": {"city": "Quezon City"},
+			}),
+			response({
+				"code": "Ok",
+				"waypoints": [{"location": [121.0001, 14.7001], "distance": 15.2}],
+			}),
+			response({
+				"display_name": "Residential Road, Quezon City",
+				"category": "highway",
+				"type": "residential",
+				"address": {"road": "Residential Road", "neighbourhood": "Example Neighborhood", "city": "Quezon City"},
+			}),
+		]) as open_url, patch("server.TARGET_LOCATION_CACHE", {}), \
+			patch("server.TARGET_LOCATION_LAST_REQUEST_AT", 0), \
+			patch("server.time.time", return_value=100), patch("server.time.sleep"):
+			result = lookup_target_location(14.7, 121.0, snap_invalid=True)
+
+		self.assertTrue(result["valid"])
+		self.assertTrue(result["snapped"])
+		self.assertEqual(result["latitude"], 14.7001)
+		self.assertEqual(result["longitude"], 121.0001)
+		self.assertEqual(result["snapDistanceMeters"], 15.2)
+		self.assertIn("nearest/v1/driving/121.000000,14.700000", open_url.call_args_list[1].args[0].full_url)
+		self.assertIn("radiuses=75", open_url.call_args_list[1].args[0].full_url)
+
+	def test_invalid_target_is_not_snapped_beyond_75_metres(self):
+		def response(payload):
+			mock_response = MagicMock()
+			mock_response.__enter__.return_value = mock_response
+			mock_response.read.return_value = json.dumps(payload).encode()
+			return mock_response
+
+		with patch("server.urlopen", side_effect=[
+			response({
+				"display_name": "Unmapped park",
+				"category": "leisure",
+				"type": "park",
+				"address": {"city": "Quezon City"},
+			}),
+			response({
+				"code": "Ok",
+				"waypoints": [{"location": [121.001, 14.701], "distance": 75.1}],
+			}),
+		]), patch("server.TARGET_LOCATION_CACHE", {}), \
+			patch("server.TARGET_LOCATION_LAST_REQUEST_AT", 0), \
+			patch("server.time.time", return_value=100), patch("server.time.sleep"):
+			result = lookup_target_location(14.7, 121.0, snap_invalid=True)
+
+		self.assertFalse(result["valid"])
+		self.assertIn("within 75 m", result["reason"])
+
+	def test_search_returns_valid_philippines_results_and_caches_queries(self):
+		handler_response = MagicMock()
+		handler_response.__enter__.return_value = handler_response
+		handler_response.read.return_value = (
+			b'[{"display_name":"Quezon City, Philippines","lat":"14.6760","lon":"121.0437"},'
+			b'{"display_name":"Invalid coordinates","lat":"91","lon":"181"}]'
+		)
+		with patch("server.urlopen", return_value=handler_response) as open_url, \
+			patch("server.TARGET_LOCATION_SEARCH_CACHE", {}), \
+			patch("server.TARGET_LOCATION_LAST_REQUEST_AT", 0), \
+			patch("server.time.time", return_value=100), \
+			patch("server.time.sleep"):
+			results = search_target_locations("  Quezon   City ")
+			cached_results = search_target_locations("quezon city")
+
+		self.assertEqual(results, [{
+			"label": "Quezon City, Philippines",
+			"latitude": 14.676,
+			"longitude": 121.0437,
+		}])
+		self.assertEqual(cached_results, results)
+		open_url.assert_called_once()
+		request = open_url.call_args.args[0]
+		self.assertIn("countrycodes=ph", request.full_url)
+		self.assertIn("limit=5", request.full_url)
+		self.assertTrue(request.get_header("User-agent"))
+
+	def test_search_rejects_too_short_queries(self):
+		with self.assertRaisesRegex(ValueError, "between 3 and 200"):
+			search_target_locations("ab")
+
 	def test_accepts_a_mapped_road_in_a_populated_area(self):
 		result = assess_target_location({
 			"display_name": "Road, Neighborhood, Quezon City",

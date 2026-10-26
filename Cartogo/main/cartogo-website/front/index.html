@@ -12,8 +12,8 @@
 
 <!-- Styles -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="css/style.css?v=step11.2-map-hover-location-preview">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css">
+<link rel="stylesheet" href="css/style.css?v=driving-route-preview">
 </head>
 <body>
 
@@ -68,40 +68,15 @@
     <div class="road" aria-hidden="true"></div>
   </section>
 
-  <!-- ============ QUICK SEARCH (overlaps hero/road) ============ -->
-  <div class="wrap">
-    <form class="quick-search" id="quickSearchForm">
-      <div class="field">
-        <label for="qsPickup">Pickup date</label>
-        <input type="date" id="qsPickup">
-      </div>
-      <div class="field">
-        <label for="qsReturn">Return date</label>
-        <input type="date" id="qsReturn">
-      </div>
-      <div class="field">
-        <label for="qsCategory">Car type</label>
-        <select id="qsCategory">
-          <option>Any category</option>
-          <option>Sedan</option>
-          <option>SUV</option>
-        </select>
-      </div>
-      <button type="submit" class="btn btn-primary">Search Fleet</button>
-    </form>
+  <!-- ============ HERO SHORTCUTS ============ -->
+  <div class="wrap hero-shortcuts-wrap">
+    <nav class="hero-shortcuts" id="heroShortcuts" aria-busy="true" aria-label="Fleet and booking shortcuts">
+      <a class="hero-shortcut" href="#fleet"><b class="skeleton skeleton-trust-value" aria-hidden="true"></b><span>Cars in our fleet</span></a>
+      <a class="hero-shortcut" href="#fleet"><b class="skeleton skeleton-trust-value" aria-hidden="true"></b><span>Vehicle options</span></a>
+      <a class="hero-shortcut" href="#booking"><b class="skeleton skeleton-trust-value" aria-hidden="true"></b><span>Pickup areas</span></a>
+      <a class="hero-shortcut" href="#booking"><b class="skeleton skeleton-trust-value" aria-hidden="true"></b><span>Online inquiry</span></a>
+    </nav>
   </div>
-
-  <!-- ============ TRUST STRIP ============ -->
-  <section class="trust-strip">
-    <div class="wrap">
-      <div class="trust-grid" id="trustGrid" aria-busy="true" aria-label="Loading service details">
-        <div class="trust-item" aria-hidden="true"><span class="skeleton skeleton-trust-value"></span><span class="skeleton skeleton-line line-medium"></span></div>
-        <div class="trust-item" aria-hidden="true"><span class="skeleton skeleton-trust-value"></span><span class="skeleton skeleton-line line-medium"></span></div>
-        <div class="trust-item" aria-hidden="true"><span class="skeleton skeleton-trust-value"></span><span class="skeleton skeleton-line line-medium"></span></div>
-        <div class="trust-item" aria-hidden="true"><span class="skeleton skeleton-trust-value"></span><span class="skeleton skeleton-line line-medium"></span></div>
-      </div>
-    </div>
-  </section>
 
   <!-- ============ FLEET ============ -->
   <section class="section" id="fleet">
@@ -309,15 +284,26 @@
                     <span class="booking-map-label">Target location</span>
                     <button class="icon-btn booking-map-fullscreen" id="bookingMapFullscreen" type="button" aria-label="Expand target map to fullscreen" aria-pressed="false" title="Expand map"><i class="fa-solid fa-expand" aria-hidden="true"></i></button>
                   </div>
+                  <div class="booking-map-search" role="search">
+                    <label class="visually-hidden" for="bookingMapSearchInput">Search for a target location</label>
+                    <input type="text" id="bookingMapSearchInput" placeholder="Search for a location" autocomplete="off" aria-describedby="bookingMapSearchStatus">
+                    <button class="booking-map-search-clear" id="bookingMapSearchClear" type="button" aria-label="Clear location search" title="Clear search"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                    <button class="booking-map-search-submit" id="bookingMapSearchSubmit" type="button" aria-label="Search location" title="Search location" disabled><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i></button>
+                  </div>
+                  <p class="booking-map-search-status" id="bookingMapSearchStatus" role="status" aria-live="polite"></p>
                   <div id="bookingMap" class="booking-map" role="application" aria-label="Map. Move the cursor to preview distance, click to select your target location."></div>
                   <p class="booking-map-preview" id="bookingMapPreview" role="status" aria-live="polite" hidden>
                     <span id="bookingMapPreviewPrefix">Hovered location: </span><strong id="bookingMapPreviewName"></strong>
                   </p>
                   <p class="booking-map-distance" id="bookingMapDistance" role="status" aria-live="polite">
                     <span id="bookingMapDistancePrompt">Move the cursor over the map to preview distance from the nearest pickup point.</span>
-                    <span id="bookingMapDistanceResult" hidden><span id="bookingMapDistancePrefix"></span><strong id="bookingMapDistanceValue"></strong> km distance from the nearest pickup location (<span id="bookingMapNearestPickup"></span>)</span>
+                    <span id="bookingMapDistanceResult" hidden><span id="bookingMapDistancePrefix"></span><strong id="bookingMapDistanceValue"></strong> km <span id="bookingMapDistanceKind">driving distance</span> from the nearest pickup location (<span id="bookingMapNearestPickup"></span>)</span>
                   </p>
                   <p class="booking-map-target" id="bookingTargetStatus" role="status" aria-live="polite">Click the map to choose your target location.</p>
+                  <p class="booking-map-snap-status" id="bookingMapSnapStatus" role="status" aria-live="polite" hidden>
+                    <span class="booking-map-snap-indicator" aria-hidden="true"></span>
+                    <span id="bookingMapSnapStatusText"></span>
+                  </p>
                   <input type="hidden" id="bookingTargetLat">
                   <input type="hidden" id="bookingTargetLng">
                   <input type="hidden" id="bookingTargetLabel">
@@ -459,7 +445,7 @@
             <span><i class="fa-solid fa-map-location-dot" aria-hidden="true"></i> Pickup locations</span>
             <button class="icon-btn contact-map-fullscreen" id="contactMapFullscreen" type="button" aria-label="Expand pickup locations map" aria-pressed="false" title="Expand map"><i class="fa-solid fa-expand" aria-hidden="true"></i></button>
           </div>
-          <div class="contact-map" id="contactMap" role="application" aria-label="Pickup location map. Select a pin or location name to see details."></div>
+          <div class="contact-map" id="contactMap" role="application" aria-label="Map of pickup locations. Select a pin or location name to see details."></div>
           <p class="contact-map-empty" id="contactMapEmpty" hidden>No pickup locations are configured yet.</p>
         </div>
       </div>
@@ -534,9 +520,9 @@
 <div class="auth-toast" id="authToast" role="status" aria-live="polite"></div>
 <script src="../config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
 <script src="../back/js/data.js?v=step9.5-email-design"></script>
-<script src="../back/js/main.js?v=step11.2-map-hover-location-preview"></script>
+<script src="../back/js/main.js?v=driving-route-preview"></script>
 <script src="../back/js/chatbot.js?v=step6-6"></script>
 </body>
 </html>

@@ -1,3 +1,7 @@
+=======================
+CARTOGO (V1)
+=======================
+
 1. I want you to make another sql file named "unit_data" with this query
 
 CREATE TABLE IF NOT EXISTS unit_data (
@@ -125,10 +129,6 @@ The plan: to prepare a UI that displays every fetched data from mongodb (excludi
 
 Additional: Include animations for clicks, hovers, and other interactions to this changes
 
-=======================
-CARTOGO (V.1.1)
-=======================
-
 11. Geographical Map improvements
 11.1. The map should be logically correct
 11.1.1. The marker shouldn't accept invalid locations (e.g. remotely-mountainous terrain, oceans and other bodies of water, unverified locations, etc.)
@@ -140,3 +140,26 @@ CARTOGO (V.1.1)
 12.2. Add a loading prompt or an animation (related to cars if possible) when a successful login to admin panel is achieved.
 12.3. (In desktop devices) I want a fixed sticky design of tab selections.
 12.4. (In smaller devices), I want the "<- View live site" and the "Log out" buttons to be at the opposite side of the "CARTOGO.MNL" tag, both stored in a caret-down arrow that expands, and has a change in appearance once clicked.
+
+=======================
+CARTOGO (V1.2)
+=======================
+
+1. Replace leaflet with google maps API, but preserve all the logic
+- (If map is on default size) Add a search bar on top of the map display (at the bottom of "Target Location"), adjust it to different sizes when toggled into fullscreen
+- Remove the "TELL US ABOUT YOUR TRIP" text when in fullscreen mode.
+- The newly applied searchbar should have a clear button icon on right side after it (include color and a smooth animation).
+- (If possible) allow for zoom in/out using other convenient methods other than the "+" and "-" sign.
+1.1. If the marker is placed to an invalid point of the map, have it to the nearest valid location (nearest inside its radius). 
+1.2. Change the logic to this:
+- Include a nearest route (private vehicle mode), store it into a variable.
+- Using that variable, display the route to the hovered nearest route. It should be dynamically display the routes but not all at the same time.
+
+
+2. Update the 12/24-Hour Rental and the custom day arrangement into hovered selection that displays options when hovered by a cursor or clicked by the cursor as well as touchscreen devices.
+
+3. Remove the "search fleet" part, along with the pickup date, return date, and car category.
+3.1. Bring the "Cars in our fleet", "Vehicle options", "Pickup area", and "Online Inquiry" to replace the removed section.
+- When the "Cars in our fleet" and the "Vehicle options" sections got hovered, have the number and the text colored. When clicked, bring them to the car units list part.
+- Replace the "Metro Manila" in the "Pickup Area" section with the number of present car units available. When clicked, bring the display to the map part, center the display in that section.
+- When the "Easy online Inquiry" got hovered, have it some color too. When clicked, bring the display to the "TELL US YOUR TRIP" section (prompting the user to start booking).

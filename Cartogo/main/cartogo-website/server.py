@@ -47,10 +47,12 @@ MAX_API_BODY_BYTES = 16 * 1024
 MONGO_STORE = None
 MONGO_STORE_LOCK = Lock()
 TARGET_LOCATION_CACHE = {}
+TARGET_LOCATION_SEARCH_CACHE = {}
 TARGET_LOCATION_CACHE_LOCK = Lock()
 TARGET_LOCATION_REQUEST_LOCK = Lock()
 TARGET_LOCATION_LAST_REQUEST_AT = 0
 TARGET_LOCATION_CACHE_TTL = 86400
+TARGET_LOCATION_SNAP_MAX_METERS = 75
 
 
 class TargetLocationServiceError(RuntimeError):
@@ -270,14 +272,17 @@ def assess_target_location(result):
 	}
 
 
-def lookup_target_location(latitude, longitude):
+def lookup_target_location(latitude, longitude, snap_invalid=False):
 	global TARGET_LOCATION_LAST_REQUEST_AT
 	cache_key = (round(latitude, 6), round(longitude, 6))
 	now = time.time()
 	with TARGET_LOCATION_CACHE_LOCK:
 		cached = TARGET_LOCATION_CACHE.get(cache_key)
-		if cached and now - cached[0] < TARGET_LOCATION_CACHE_TTL:
-			return cached[1]
+	assessment = cached[1] if cached and now - cached[0] < TARGET_LOCATION_CACHE_TTL else None
+	if assessment:
+		if assessment.get("valid") or not snap_invalid:
+			return assessment
+		return snap_target_location(latitude, longitude, assessment)
 
 	query = urlencode({
 		"format": "jsonv2",
@@ -310,7 +315,132 @@ def lookup_target_location(latitude, longitude):
 	assessment = assess_target_location(result)
 	with TARGET_LOCATION_CACHE_LOCK:
 		TARGET_LOCATION_CACHE[cache_key] = (time.time(), assessment)
+	if snap_invalid and not assessment["valid"]:
+		return snap_target_location(latitude, longitude, assessment)
 	return assessment
+
+
+def snap_target_location(latitude, longitude, original_assessment):
+	request = Request(
+		f"https://router.project-osrm.org/nearest/v1/driving/{longitude:.6f},{latitude:.6f}"
+		f"?number=1&radiuses={TARGET_LOCATION_SNAP_MAX_METERS}",
+		headers={"Accept": "application/json", "User-Agent": "carTOGO.mnl website location selection"},
+	)
+	try:
+		with urlopen(request, timeout=8) as response:
+			result = json.loads(response.read())
+	except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as error:
+		raise TargetLocationServiceError(
+			"Nearby location snapping is temporarily unavailable. Please choose another point."
+		) from error
+
+	waypoints = result.get("waypoints") if isinstance(result, dict) else None
+	waypoint = waypoints[0] if (
+		isinstance(result, dict)
+		and result.get("code") == "Ok"
+		and isinstance(waypoints, list)
+		and waypoints
+	) else None
+	location = waypoint.get("location") if isinstance(waypoint, dict) else None
+	distance = waypoint.get("distance") if isinstance(waypoint, dict) else None
+	if (
+		not isinstance(location, list)
+		or len(location) != 2
+		or isinstance(distance, bool)
+		or not isinstance(distance, (int, float))
+		or not 0 <= distance <= TARGET_LOCATION_SNAP_MAX_METERS
+	):
+		return {
+			**original_assessment,
+			"reason": f"No verified residential location was found within {TARGET_LOCATION_SNAP_MAX_METERS} m. Choose a point closer to a road or neighborhood.",
+		}
+
+	snapped_longitude, snapped_latitude = location
+	if (
+		isinstance(snapped_latitude, bool)
+		or not isinstance(snapped_latitude, (int, float))
+		or not -90 <= snapped_latitude <= 90
+		or isinstance(snapped_longitude, bool)
+		or not isinstance(snapped_longitude, (int, float))
+		or not -180 <= snapped_longitude <= 180
+	):
+		raise TargetLocationServiceError("Nearby location snapping returned invalid coordinates.")
+
+	snapped_assessment = lookup_target_location(snapped_latitude, snapped_longitude)
+	if not snapped_assessment.get("valid"):
+		return {
+			**snapped_assessment,
+			"reason": f"The nearest road within {TARGET_LOCATION_SNAP_MAX_METERS} m is not a verified residential location. Choose another point.",
+		}
+	return {
+		**snapped_assessment,
+		"snapped": True,
+		"latitude": snapped_latitude,
+		"longitude": snapped_longitude,
+		"snapDistanceMeters": round(float(distance), 1),
+	}
+
+
+def search_target_locations(query):
+	global TARGET_LOCATION_LAST_REQUEST_AT
+	normalized_query = " ".join(query.split()).casefold()
+	if len(normalized_query) < 3 or len(normalized_query) > 200:
+		raise ValueError("Enter a location search between 3 and 200 characters.")
+	now = time.time()
+	with TARGET_LOCATION_CACHE_LOCK:
+		cached = TARGET_LOCATION_SEARCH_CACHE.get(normalized_query)
+		if cached and now - cached[0] < TARGET_LOCATION_CACHE_TTL:
+			return cached[1]
+
+	search_query = urlencode({
+		"format": "jsonv2",
+		"q": query.strip(),
+		"countrycodes": "ph",
+		"limit": "5",
+		"addressdetails": "1",
+	})
+	contact_email = os.environ.get("GEOCODING_CONTACT_EMAIL", "").strip()
+	user_agent = "carTOGO.mnl website location search"
+	if contact_email:
+		user_agent += f" ({contact_email})"
+	request = Request(
+		f"https://nominatim.openstreetmap.org/search?{search_query}",
+		headers={"Accept": "application/json", "User-Agent": user_agent},
+	)
+	with TARGET_LOCATION_REQUEST_LOCK:
+		wait_seconds = max(0, 1.1 - (time.time() - TARGET_LOCATION_LAST_REQUEST_AT))
+		if wait_seconds:
+			time.sleep(wait_seconds)
+		TARGET_LOCATION_LAST_REQUEST_AT = time.time()
+		try:
+			with urlopen(request, timeout=8) as response:
+				results = json.loads(response.read())
+		except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as error:
+			raise TargetLocationServiceError(
+				"Location search is temporarily unavailable. Please try again."
+			) from error
+
+	if not isinstance(results, list):
+		raise TargetLocationServiceError("Location search returned an invalid response.")
+	matches = []
+	for result in results:
+		if not isinstance(result, dict):
+			continue
+		try:
+			latitude = float(result["lat"])
+			longitude = float(result["lon"])
+		except (KeyError, TypeError, ValueError):
+			continue
+		if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+			continue
+		matches.append({
+			"label": str(result.get("display_name") or ""),
+			"latitude": latitude,
+			"longitude": longitude,
+		})
+	with TARGET_LOCATION_CACHE_LOCK:
+		TARGET_LOCATION_SEARCH_CACHE[normalized_query] = (time.time(), matches)
+	return matches
 
 
 class WebsiteHandler(SimpleHTTPRequestHandler):
@@ -371,6 +501,8 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			self.create_inquiry()
 		elif request_path == "/api/target-location/validate":
 			self.validate_target_location()
+		elif request_path == "/api/target-location/search":
+			self.search_target_locations()
 		elif request_path == "/api/email-verification/request":
 			self.request_guest_email_verification()
 		elif request_path == "/api/email-verification/verify":
@@ -464,14 +596,29 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			payload = self.read_json()
 			latitude = payload.get("latitude")
 			longitude = payload.get("longitude")
+			snap_invalid = payload.get("snapInvalid", False)
+			if not isinstance(snap_invalid, bool):
+				raise ValueError("Location snapping preference must be a boolean.")
 			if isinstance(latitude, bool) or not isinstance(latitude, (int, float)) or not -90 <= latitude <= 90:
 				raise ValueError("Latitude must be between -90 and 90.")
 			if isinstance(longitude, bool) or not isinstance(longitude, (int, float)) or not -180 <= longitude <= 180:
 				raise ValueError("Longitude must be between -180 and 180.")
-			self.send_json(200, lookup_target_location(float(latitude), float(longitude)))
+			self.send_json(200, lookup_target_location(float(latitude), float(longitude), snap_invalid))
 		except ValueError as error:
 			self.send_json(400, {"error": str(error)})
-		except RuntimeError as error:
+		except (RuntimeError, TargetLocationServiceError) as error:
+			self.send_json(503, {"error": str(error)})
+
+	def search_target_locations(self):
+		try:
+			payload = self.read_json()
+			query = payload.get("query")
+			if not isinstance(query, str):
+				raise ValueError("Enter a location to search.")
+			self.send_json(200, search_target_locations(query))
+		except ValueError as error:
+			self.send_json(400, {"error": str(error)})
+		except TargetLocationServiceError as error:
 			self.send_json(503, {"error": str(error)})
 
 	def request_guest_email_verification(self):
