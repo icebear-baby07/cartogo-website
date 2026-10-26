@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import sys
 from functools import partial
 from datetime import datetime, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -367,6 +368,15 @@ def is_contact_request_or_follow_up(messages):
 
 
 class ChatHandler(SimpleHTTPRequestHandler):
+	def log_message(self, format, *args):
+		message = format % args
+		message = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", message)
+		sys.stdout.write(
+			"%s - - [%s] %s\n"
+			% (self.address_string(), self.log_date_time_string(), message)
+		)
+		sys.stdout.flush()
+
 	def translate_path(self, path):
 		request_path = unquote(urlsplit(path).path)
 		if request_path in ("/", "/index.html", RECOMMEND_CONTACT_PATH):

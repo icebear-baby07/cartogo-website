@@ -12,6 +12,8 @@ From the workspace root, double-click **`start_cartogo.cmd`**. It opens separate
 
 The website launcher validates `main/cartogo-website/.env` and starts the website server. The chatbot launcher prepares its isolated Python environment and starts the chatbot server.
 
+The chatbot terminal highlights HTTP response status codes: successful responses in green, redirects in cyan, client errors in yellow, and server errors in red with contrasting text. Set `NO_COLOR` to disable status colors.
+
 ### Start Services Individually
 
 1. AWS sign-in: **`start_aws_login.cmd`**

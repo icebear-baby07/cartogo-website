@@ -143,24 +143,38 @@ if ($Listener) {
 }
 
 $env:PORT = [string]$Port
-$LanAddresses = @(
-	Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-	Where-Object {
-		$_.IPAddress -ne "127.0.0.1" -and
-		$_.IPAddress -notlike "169.254.*" -and
-		$_.AddressState -eq "Preferred"
-	} |
-	Select-Object -ExpandProperty IPAddress -Unique
-)
-
-if ($LanAddresses.Count -eq 0) {
-	Write-Warning "No LAN IPv4 address was detected. Other devices will not be able to connect until this computer joins an IPv4 network."
-}
 Write-Host "Starting the chatbot server. Its local access URL will appear below."
+
+function Write-ChatServerOutputLine {
+	param([object]$OutputLine)
+
+	$Text = [string]$OutputLine
+	$StatusMatch = [regex]::Match($Text, 'HTTP/\d(?:\.\d)?["'']?\s+(?<Status>\d{3})')
+	if (-not $StatusMatch.Success -or $env:NO_COLOR) {
+		Write-Host $Text
+		return
+	}
+
+	$StatusCode = [int]$StatusMatch.Groups["Status"].Value
+	$StatusColor = switch ($StatusCode) {
+		{ $_ -lt 300 } { @{ Foreground = "Black"; Background = "Green" }; break }
+		{ $_ -lt 400 } { @{ Foreground = "Black"; Background = "Cyan" }; break }
+		{ $_ -lt 500 } { @{ Foreground = "Black"; Background = "Yellow" }; break }
+		default { @{ Foreground = "White"; Background = "Red" } }
+	}
+	$StatusGroup = $StatusMatch.Groups["Status"]
+	$Prefix = $Text.Substring(0, $StatusGroup.Index)
+	$Suffix = $Text.Substring($StatusGroup.Index + $StatusGroup.Length)
+	Write-Host $Prefix -NoNewline
+	Write-Host $StatusGroup.Value -NoNewline -ForegroundColor $StatusColor.Foreground -BackgroundColor $StatusColor.Background
+	Write-Host $Suffix
+}
 
 Push-Location $ProjectRoot
 try {
-	& $EnvironmentPython (Join-Path $ProjectRoot "server.py")
+	& $EnvironmentPython -u (Join-Path $ProjectRoot "server.py") | ForEach-Object {
+		Write-ChatServerOutputLine $_
+	}
 	$ServerExitCode = $LASTEXITCODE
 }
 finally {
