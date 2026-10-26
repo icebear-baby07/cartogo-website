@@ -853,6 +853,16 @@ function displayBookingNearestRoute(route, pickup) {
   });
 }
 
+function setBookingRouteLoading(message) {
+  document.getElementById("bookingRouteLoadingText").textContent = message;
+  document.getElementById("bookingRouteLoading").hidden = false;
+}
+
+function clearBookingRouteLoading() {
+  document.getElementById("bookingRouteLoading").hidden = true;
+  document.getElementById("bookingRouteLoadingText").textContent = "";
+}
+
 function updateMapDistance(location, prefix = "", routedNearest = null, distanceType = "straight-line") {
   const nearest = routedNearest || findNearestPickup(location);
   if (!nearest) {
@@ -893,6 +903,7 @@ function cancelBookingRouteLookup() {
   BOOKING_ROUTE_SEQUENCE += 1;
   BOOKING_ROUTE_CONTROLLER?.abort();
   BOOKING_ROUTE_CONTROLLER = null;
+  clearBookingRouteLoading();
 }
 
 function scheduleBookingRoutePreview(location) {
@@ -904,12 +915,15 @@ function scheduleBookingRoutePreview(location) {
     BOOKING_ROUTE_TIMER = null;
     BOOKING_ROUTE_CONTROLLER = new AbortController();
     try {
+      setBookingRouteLoading("Verifying this location...");
       const validation = await getBookingHoverValidation(location);
       if (sequence !== BOOKING_ROUTE_SEQUENCE || BOOKING_TARGET || !validation.valid) return;
+      setBookingRouteLoading("Finding the nearest pickup area...");
       const nearest = await findNearestPickupByRoad(location, BOOKING_ROUTE_CONTROLLER.signal);
       if (sequence !== BOOKING_ROUTE_SEQUENCE || BOOKING_TARGET) return;
       updateMapDistance(location, "", nearest, "driving");
       try {
+        setBookingRouteLoading("Loading the private-vehicle route...");
         const route = await findDrivingRoute(location, nearest, BOOKING_ROUTE_CONTROLLER.signal);
         if (sequence !== BOOKING_ROUTE_SEQUENCE || BOOKING_TARGET) return;
         displayBookingNearestRoute(route, nearest);
@@ -922,7 +936,10 @@ function scheduleBookingRoutePreview(location) {
       console.warn("OSRM road distance is unavailable for the map preview; using straight-line distance.", error);
       updateMapDistance(location, "", null, "fallback");
     } finally {
-      if (sequence === BOOKING_ROUTE_SEQUENCE) BOOKING_ROUTE_CONTROLLER = null;
+      if (sequence === BOOKING_ROUTE_SEQUENCE) {
+        BOOKING_ROUTE_CONTROLLER = null;
+        clearBookingRouteLoading();
+      }
     }
   }, 650);
 }
@@ -933,6 +950,7 @@ async function updateSelectedTargetRoadDistance(target) {
   const sequence = BOOKING_ROUTE_SEQUENCE;
   BOOKING_ROUTE_CONTROLLER = new AbortController();
   try {
+    setBookingRouteLoading("Finding the nearest pickup area...");
     const nearest = await findNearestPickupByRoad(target, BOOKING_ROUTE_CONTROLLER.signal);
     if (BOOKING_TARGET !== target || sequence !== BOOKING_ROUTE_SEQUENCE) return;
     target.nearestPickupName = nearest.name;
@@ -941,6 +959,7 @@ async function updateSelectedTargetRoadDistance(target) {
     document.getElementById("bookingNearestPickupDistance").value = nearest.distanceKm.toFixed(3);
     updateMapDistance(target, "Selected: ", nearest, "driving");
     try {
+      setBookingRouteLoading("Loading the private-vehicle route...");
       const route = await findDrivingRoute(target, nearest, BOOKING_ROUTE_CONTROLLER.signal);
       if (BOOKING_TARGET !== target || sequence !== BOOKING_ROUTE_SEQUENCE) return;
       displayBookingNearestRoute(route, nearest);
@@ -953,7 +972,10 @@ async function updateSelectedTargetRoadDistance(target) {
     console.warn("OSRM road distance is unavailable for the selected target; using straight-line distance.", error);
     updateMapDistance(target, "Selected: ", null, "fallback");
   } finally {
-    if (sequence === BOOKING_ROUTE_SEQUENCE) BOOKING_ROUTE_CONTROLLER = null;
+    if (sequence === BOOKING_ROUTE_SEQUENCE) {
+      BOOKING_ROUTE_CONTROLLER = null;
+      clearBookingRouteLoading();
+    }
   }
 }
 
@@ -1162,7 +1184,10 @@ async function resolveBookingTargetRegion(target) {
         signal: BOOKING_GEOCODE_CONTROLLER.signal
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Location verification is temporarily unavailable.");
+      if (response.status === 503) {
+        throw new Error("Location verification is temporarily unavailable. Please retry. If you use Android Private DNS, a VPN, or a DNS/content filter, try switching it off or setting DNS to Automatic, then try again.");
+      }
+      if (!response.ok) throw new Error(data.error || "Location verification failed. Please choose another point.");
       result = {
         ...data,
         rateRegion: classifyTargetRegion(data.address)

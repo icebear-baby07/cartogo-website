@@ -13,7 +13,7 @@
 <!-- Styles -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css">
-<link rel="stylesheet" href="css/style.css?v=driving-route-preview">
+<link rel="stylesheet" href="css/style.css?v=route-loading-indicator">
 </head>
 <body>
 
@@ -292,6 +292,10 @@
                   </div>
                   <p class="booking-map-search-status" id="bookingMapSearchStatus" role="status" aria-live="polite"></p>
                   <div id="bookingMap" class="booking-map" role="application" aria-label="Map. Move the cursor to preview distance, click to select your target location."></div>
+                  <p class="booking-route-loading" id="bookingRouteLoading" role="status" aria-live="polite" hidden>
+                    <i class="fa-solid fa-spinner" aria-hidden="true"></i>
+                    <span id="bookingRouteLoadingText"></span>
+                  </p>
                   <p class="booking-map-preview" id="bookingMapPreview" role="status" aria-live="polite" hidden>
                     <span id="bookingMapPreviewPrefix">Hovered location: </span><strong id="bookingMapPreviewName"></strong>
                   </p>
@@ -522,7 +526,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
 <script src="../back/js/data.js?v=step9.5-email-design"></script>
-<script src="../back/js/main.js?v=driving-route-preview"></script>
+<script src="../back/js/main.js?v=route-loading-indicator"></script>
 <script src="../back/js/chatbot.js?v=step6-6"></script>
 </body>
 </html>

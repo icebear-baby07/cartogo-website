@@ -163,3 +163,4 @@ CARTOGO (V1.2)
 - When the "Cars in our fleet" and the "Vehicle options" sections got hovered, have the number and the text colored. When clicked, bring them to the car units list part.
 - Replace the "Metro Manila" in the "Pickup Area" section with the number of present car units available. When clicked, bring the display to the map part, center the display in that section.
 - When the "Easy online Inquiry" got hovered, have it some color too. When clicked, bring the display to the "TELL US YOUR TRIP" section (prompting the user to start booking).
+3.2. All loading parts in route processing should have a loading indicator, make it clean and professional.

@@ -711,6 +711,13 @@ table.rates .skeleton-line{ height:0.7rem; }
 .booking-map-search-status{ margin:0 0 0.45rem; color:var(--slate); font-size:0.72rem; }
 .booking-map-search-status:empty{ display:none; }
 .booking-map{ width:100%; height:280px; min-height:220px; overflow:hidden; border:1px solid var(--line); border-radius:var(--radius-sm); background:#e8eceb; }
+.booking-route-loading{ display:flex; align-items:center; gap:0.5rem; margin:0.4rem 0 0; color:var(--route-blue); font-size:0.78rem; font-weight:600; }
+.booking-route-loading[hidden]{ display:none; }
+.booking-route-loading i{ animation:booking-route-spinner 0.9s linear infinite; }
+@keyframes booking-route-spinner{ to{ transform:rotate(360deg); } }
+@media (prefers-reduced-motion: reduce){
+  .booking-route-loading i{ animation:none; }
+}
 .pickup-map-marker{ display:grid; place-items:center; color:var(--marker-color); font-size:1.65rem; line-height:1; filter:drop-shadow(0 1px 2px rgba(20,20,20,0.45)); cursor:pointer; }
 .pickup-map-marker.is-highlighted,.pickup-map-marker.is-nearest{ font-size:2rem; }
 .booking-location-marker-preview{ opacity:0.62; pointer-events:none; }
