@@ -1,4 +1,5 @@
 import hashlib
+import io
 import json
 import time
 import unittest
@@ -217,6 +218,53 @@ class InquiryNormalizationTests(unittest.TestCase):
 
 
 class TargetLocationValidationTests(unittest.TestCase):
+	def test_request_log_leaves_status_codes_plain_for_powershell_coloring(self):
+		handler = object.__new__(WebsiteHandler)
+		handler.client_address = ("192.0.2.10", 12345)
+		handler.log_date_time_string = Mock(return_value="26/Oct/2026 14:00:00")
+		terminal = io.StringIO()
+		terminal.isatty = Mock(return_value=True)
+
+		with patch("server.sys.stdout", terminal):
+			handler.log_message('"%s" %s -', "GET /config.js HTTP/1.1", 200)
+			handler.log_message('"%s" %s -', "POST /api/target-location/validate HTTP/1.1", 503)
+
+		output = terminal.getvalue()
+		self.assertIn('"GET /config.js HTTP/1.1" 200 -', output)
+		self.assertIn('"POST /api/target-location/validate HTTP/1.1" 503 -', output)
+		self.assertNotIn("\x1b[", output)
+
+	def test_error_response_logs_http_class_and_safe_technical_detail(self):
+		handler = object.__new__(WebsiteHandler)
+		handler.send_response = Mock()
+		handler.send_header = Mock()
+		handler.end_headers = Mock()
+		handler.wfile = io.BytesIO()
+		handler.log_message = Mock()
+
+		handler.send_json(503, {"error": "Upstream service failed.\nRetry later."})
+
+		handler.log_message.assert_called_once_with(
+			"API diagnostic: HTTP %s %s; detail: %s",
+			503,
+			"Service Unavailable",
+			"Upstream service failed. Retry later.",
+		)
+
+	def test_json_response_handles_client_disconnect_without_server_traceback(self):
+		handler = object.__new__(WebsiteHandler)
+		handler.send_response = Mock()
+		handler.send_header = Mock()
+		handler.end_headers = Mock()
+		handler.wfile = Mock()
+		handler.wfile.write.side_effect = ConnectionAbortedError("client disconnected")
+		handler.close_connection = False
+
+		handler.send_json(200, {"valid": True})
+
+		self.assertTrue(handler.close_connection)
+		handler.send_response.assert_called_once_with(200)
+
 	def test_validation_endpoint_passes_through_the_snap_preference(self):
 		handler = object.__new__(WebsiteHandler)
 		handler.read_json = Mock(return_value={

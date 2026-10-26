@@ -9,6 +9,7 @@ import secrets
 import socket
 import smtplib
 import ssl
+import sys
 import time
 from datetime import date
 from email.message import EmailMessage
@@ -331,7 +332,7 @@ def snap_target_location(latitude, longitude, original_assessment):
 			result = json.loads(response.read())
 	except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as error:
 		raise TargetLocationServiceError(
-			"Nearby location snapping is temporarily unavailable. Please choose another point."
+			"I can't check nearby roads right now. Please try again in a moment."
 		) from error
 
 	waypoints = result.get("waypoints") if isinstance(result, dict) else None
@@ -352,7 +353,7 @@ def snap_target_location(latitude, longitude, original_assessment):
 	):
 		return {
 			**original_assessment,
-			"reason": f"No verified residential location was found within {TARGET_LOCATION_SNAP_MAX_METERS} m. Choose a point closer to a road or neighborhood.",
+			"reason": f"I couldn't find a suitable place within {TARGET_LOCATION_SNAP_MAX_METERS} m. Please choose a point closer to a road or neighborhood.",
 		}
 
 	snapped_longitude, snapped_latitude = location
@@ -370,7 +371,7 @@ def snap_target_location(latitude, longitude, original_assessment):
 	if not snapped_assessment.get("valid"):
 		return {
 			**snapped_assessment,
-			"reason": f"The nearest road within {TARGET_LOCATION_SNAP_MAX_METERS} m is not a verified residential location. Choose another point.",
+			"reason": "I couldn't confirm this location. Please choose another place.",
 		}
 	return {
 		**snapped_assessment,
@@ -446,6 +447,15 @@ def search_target_locations(query):
 class WebsiteHandler(SimpleHTTPRequestHandler):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, directory=str(ROOT), **kwargs)
+
+	def log_message(self, format, *args):
+		message = format % args
+		message = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", message)
+		sys.stdout.write(
+			"%s - - [%s] %s\n"
+			% (self.address_string(), self.log_date_time_string(), message)
+		)
+		sys.stdout.flush()
 
 	def translate_path(self, path):
 		request_path = unquote(urlsplit(path).path)
@@ -1494,12 +1504,18 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 
 	def send_json(self, status, payload):
 		body = json.dumps(payload).encode("utf-8")
-		self.send_response(status)
-		self.send_header("Content-Type", "application/json; charset=utf-8")
-		self.send_header("Cache-Control", "no-store")
-		self.send_header("Content-Length", str(len(body)))
-		self.end_headers()
-		self.wfile.write(body)
+		if status >= 400 and isinstance(payload, dict) and payload.get("error"):
+			detail = re.sub(r"[\x00-\x1f\x7f-\x9f]", " ", str(payload["error"]))[:500]
+			self.log_message("API diagnostic: HTTP %s %s; detail: %s", status, self.responses.get(status, ("Unknown status",))[0], detail)
+		try:
+			self.send_response(status)
+			self.send_header("Content-Type", "application/json; charset=utf-8")
+			self.send_header("Cache-Control", "no-store")
+			self.send_header("Content-Length", str(len(body)))
+			self.end_headers()
+			self.wfile.write(body)
+		except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+			self.close_connection = True
 
 	def send_config(self):
 		config = {

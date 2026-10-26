@@ -6,7 +6,9 @@ Customer-facing car rental site with fleet information, booking inquiries, and a
 
 Requirements: Python 3.10 or newer, a Supabase project, and a MongoDB database reachable by the website server. Guest email verification also requires the SMTP settings in `.env`.
 
-From the `Cartogo` directory, run `start_site.cmd`. On first launch, it creates `main/cartogo-website/.env` from `.env.example` and stops so you can configure it. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and the server-only `MONGODB_URI`; follow the migration steps below before launching the cut-over site. The default port is `8002`; the launcher prints local and LAN addresses.
+From the `Cartogo` directory, run `start_site.cmd`. On first launch, it creates `main/cartogo-website/.env` from `.env.example` and stops so you can configure it. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and the server-only `MONGODB_URI`; follow the migration steps below before launching the cut-over site. The default port is `8002`; the launcher prints local and LAN addresses and updates the PowerShell window title with the current LAN site address.
+
+When launched with `start_site.ps1` (including `start_site.cmd`), the console highlights successful responses in green, redirects in cyan, client errors in yellow, and server errors in red with contrasting text. API errors also print their HTTP category and a sanitized, length-limited detail for troubleshooting. Set `NO_COLOR` to disable status colors.
 
 To start manually, run `python server.py` from `main/cartogo-website`. To start the website, chatbot, and AWS login together, run `start_cartogo.cmd` from the `Cartogo` directory. The chatbot has separate setup instructions in [OPERATIONAL_TUTORIAL.md](../../chatbot/OPERATIONAL_TUTORIAL.md).
 
@@ -22,7 +24,7 @@ The booking and pickup maps use MapLibre GL JS with Esri World Street Map tiles;
 
 The server exposes these public settings through `/config.js` and blocks direct requests for dotfiles. Restart the server after changing `.env`.
 
-The booking map verifies selected destinations on the server through OpenStreetMap Nominatim. If the selected point is invalid, OSRM may snap it to the nearest routable road within 75 metres; that snapped point must still pass the same residential-area validation. When adjusted, the map shows the original pin, selected pin, dotted connector, and adjustment distance. If no valid point is found within 75 metres, the selection is rejected. Search results are restricted to the Philippines; selecting one runs the same destination-validation flow. Hovering over the map shows the mapped place name above the distance readout; the name is also shown for a selected destination. Nominatim search and reverse-geocoding requests are cached and spaced to respect the public service's usage policy.
+The booking map verifies selected destinations on the server through OpenStreetMap Nominatim. The supported road-service area is limited to classified locations in Luzon; destinations in Visayas, Mindanao, Palawan, and other island areas requiring a water crossing are rejected with a randomly selected out-of-bounds message. Hover previews outside the supported area do not request an OSRM road route. If the selected point is invalid, OSRM may snap it to the nearest routable road within 75 metres; that snapped point must still pass the same residential-area validation. When adjusted, the map shows the original pin, selected pin, dotted connector, and adjustment distance. If no valid point is found within 75 metres, the selection is rejected. Search results are restricted to the Philippines; selecting one runs the same destination-validation flow. Hovering over the map shows the mapped place name above the distance readout; the name is also shown for a selected destination. Nominatim search and reverse-geocoding requests are cached and spaced to respect the public service's usage policy.
 
 ## Supabase and Google sign-in
 

@@ -117,6 +117,7 @@ if ($LASTEXITCODE -ne 0) {
 
 $PreviousHost = $env:HOST
 $PreviousPort = $env:PORT
+$PreviousWindowTitle = $Host.UI.RawUI.WindowTitle
 $env:HOST = $HostName
 $env:PORT = [string]$Port
 $LanAddresses = @(
@@ -130,16 +131,50 @@ $LanAddresses = @(
 )
 if ($LanAddresses.Count -eq 0) {
 	Write-Warning "No LAN IPv4 address detected. Connect this computer to a network to allow other devices to connect."
+	$SiteHeaderAddress = "http://127.0.0.1:$Port"
 }
+else {
+	$SiteHeaderAddress = "http://$($LanAddresses[0]):$Port"
+}
+$Host.UI.RawUI.WindowTitle = "carTOGO Website - $SiteHeaderAddress"
 Write-Host "Allow Python through Windows Firewall on private networks if prompted."
 Write-Host "Starting the website server. Its local and LAN URLs will appear below."
+
+function Write-ServerOutputLine {
+	param([object]$OutputLine)
+
+	$Text = [string]$OutputLine
+	$StatusMatch = [regex]::Match($Text, 'HTTP/\d(?:\.\d)?["'']?\s+(?<Status>\d{3})')
+	if (-not $StatusMatch.Success -or $env:NO_COLOR) {
+		Write-Host $Text
+		return
+	}
+
+	$StatusCode = [int]$StatusMatch.Groups["Status"].Value
+	$StatusColor = switch ($StatusCode) {
+		{ $_ -lt 300 } { @{ Foreground = "Black"; Background = "Green" }; break }
+		{ $_ -lt 400 } { @{ Foreground = "Black"; Background = "Cyan" }; break }
+		{ $_ -lt 500 } { @{ Foreground = "Black"; Background = "Yellow" }; break }
+		default { @{ Foreground = "White"; Background = "Red" } }
+	}
+	$StatusGroup = $StatusMatch.Groups["Status"]
+	$Prefix = $Text.Substring(0, $StatusGroup.Index)
+	$Suffix = $Text.Substring($StatusGroup.Index + $StatusGroup.Length)
+	Write-Host $Prefix -NoNewline
+	Write-Host $StatusGroup.Value -NoNewline -ForegroundColor $StatusColor.Foreground -BackgroundColor $StatusColor.Background
+	Write-Host $Suffix
+}
+
 Push-Location $ProjectRoot
 try {
-	& $PythonPath (Join-Path $ProjectRoot "server.py")
+	& $PythonPath -u (Join-Path $ProjectRoot "server.py") | ForEach-Object {
+		Write-ServerOutputLine $_
+	}
 	$ServerExitCode = $LASTEXITCODE
 }
 finally {
 	Pop-Location
+	$Host.UI.RawUI.WindowTitle = $PreviousWindowTitle
 	if ($null -eq $PreviousHost) { Remove-Item Env:HOST -ErrorAction SilentlyContinue } else { $env:HOST = $PreviousHost }
 	if ($null -eq $PreviousPort) { Remove-Item Env:PORT -ErrorAction SilentlyContinue } else { $env:PORT = $PreviousPort }
 }

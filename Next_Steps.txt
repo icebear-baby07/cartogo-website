@@ -164,3 +164,15 @@ CARTOGO (V1.2)
 - Replace the "Metro Manila" in the "Pickup Area" section with the number of present car units available. When clicked, bring the display to the map part, center the display in that section.
 - When the "Easy online Inquiry" got hovered, have it some color too. When clicked, bring the display to the "TELL US YOUR TRIP" section (prompting the user to start booking).
 3.2. All loading parts in route processing should have a loading indicator, make it clean and professional.
+
+4. Include a validation checking to places outside Luzon (i.e. Visayas, and Mindanao), Add palawan as well and other places that needed to cross a large body of water or if a road isn't applicable.
+- Display an "out of bounds" message if a marker is placed to those areas, I want the display message to vary, make it 10.
+
+5. I want these Improvements
+5.1. abstract the technical terms from this part "The nearest road within 75 m is not a verified residential location. Choose another point.", use simple-word choices instead.
+5.2. Change this one too "Nearby location snapping is temporarily unavailable. Please choose another point."
+5.3. I want the message prompts' perspective to focus on First-person that utilize the word "I".
+
+6. Backend Improvements
+6.1. Add a color highlight to status code in server ps1 file (e.g. 200 = Green, 503 = Red), include contrast if the color seems darker to the font color.
+6.2. Include display the abstract/tecnical term in server terminal, prepare it for technical analysis.

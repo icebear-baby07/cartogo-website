@@ -32,6 +32,8 @@ let BOOKING_ROUTE_TIMER = null;
 let BOOKING_ROUTE_CONTROLLER = null;
 let BOOKING_ROUTE_SEQUENCE = 0;
 let BOOKING_NEAREST_ROUTE = null;
+let BOOKING_ROUTE_LOADING_TIMER = null;
+let BOOKING_ROUTE_LOADING_SWAP_TIMER = null;
 let BOOKING_LOCATION_SEARCH_CONTROLLER = null;
 let BOOKING_DURATION_SELECTED = false;
 let BOOKING_GEOCODE_CONTROLLER = null;
@@ -853,14 +855,59 @@ function displayBookingNearestRoute(route, pickup) {
   });
 }
 
-function setBookingRouteLoading(message) {
-  document.getElementById("bookingRouteLoadingText").textContent = message;
+const BOOKING_ROUTE_LOADING_PROMPTS = [
+  "I'm processing your route request...",
+  "I'm checking your location and nearby roads...",
+  "I'm finding the best way to a pickup area...",
+  "I'm calculating the road distance to your nearest pickup...",
+  "I'm looking for a suitable driving route...",
+  "I'm comparing roads to your nearest pickup...",
+  "I'm preparing your driving route...",
+  "I'm mapping the route from your location...",
+  "I'm getting your distance and route details...",
+  "I'm almost done — just finishing your route preview..."
+];
+
+function shuffleBookingPrompts(prompts) {
+  const shuffled = [...prompts];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  return shuffled;
+}
+
+function setBookingRouteLoading() {
+  if (!document.getElementById("bookingRouteLoading").hidden) return;
+  const status = document.getElementById("bookingRouteLoadingText");
+  const prompt = document.createElement("span");
+  prompt.className = "booking-target-waiting-prompt";
+  const messages = shuffleBookingPrompts(BOOKING_ROUTE_LOADING_PROMPTS);
+  let messageIndex = 0;
+  prompt.textContent = messages[messageIndex];
+  status.replaceChildren(prompt);
   document.getElementById("bookingRouteLoading").hidden = false;
+  BOOKING_ROUTE_LOADING_TIMER = window.setInterval(() => {
+    prompt.classList.add("is-transitioning");
+    BOOKING_ROUTE_LOADING_SWAP_TIMER = window.setTimeout(() => {
+      if (!prompt.isConnected) {
+        clearBookingRouteLoading();
+        return;
+      }
+      messageIndex = (messageIndex + 1) % messages.length;
+      prompt.textContent = messages[messageIndex];
+      prompt.classList.remove("is-transitioning");
+    }, 220);
+  }, 2800);
 }
 
 function clearBookingRouteLoading() {
+  window.clearInterval(BOOKING_ROUTE_LOADING_TIMER);
+  window.clearTimeout(BOOKING_ROUTE_LOADING_SWAP_TIMER);
+  BOOKING_ROUTE_LOADING_TIMER = null;
+  BOOKING_ROUTE_LOADING_SWAP_TIMER = null;
   document.getElementById("bookingRouteLoading").hidden = true;
-  document.getElementById("bookingRouteLoadingText").textContent = "";
+  document.getElementById("bookingRouteLoadingText").replaceChildren();
 }
 
 function updateMapDistance(location, prefix = "", routedNearest = null, distanceType = "straight-line") {
@@ -915,15 +962,19 @@ function scheduleBookingRoutePreview(location) {
     BOOKING_ROUTE_TIMER = null;
     BOOKING_ROUTE_CONTROLLER = new AbortController();
     try {
-      setBookingRouteLoading("Verifying this location...");
+      setBookingRouteLoading();
       const validation = await getBookingHoverValidation(location);
       if (sequence !== BOOKING_ROUTE_SEQUENCE || BOOKING_TARGET || !validation.valid) return;
-      setBookingRouteLoading("Finding the nearest pickup area...");
+      if (!isBookingRegionSupported(classifyTargetRegion(validation.address))) {
+        showBookingOutOfBoundsPreview();
+        return;
+      }
+      setBookingRouteLoading();
       const nearest = await findNearestPickupByRoad(location, BOOKING_ROUTE_CONTROLLER.signal);
       if (sequence !== BOOKING_ROUTE_SEQUENCE || BOOKING_TARGET) return;
       updateMapDistance(location, "", nearest, "driving");
       try {
-        setBookingRouteLoading("Loading the private-vehicle route...");
+        setBookingRouteLoading();
         const route = await findDrivingRoute(location, nearest, BOOKING_ROUTE_CONTROLLER.signal);
         if (sequence !== BOOKING_ROUTE_SEQUENCE || BOOKING_TARGET) return;
         displayBookingNearestRoute(route, nearest);
@@ -950,7 +1001,7 @@ async function updateSelectedTargetRoadDistance(target) {
   const sequence = BOOKING_ROUTE_SEQUENCE;
   BOOKING_ROUTE_CONTROLLER = new AbortController();
   try {
-    setBookingRouteLoading("Finding the nearest pickup area...");
+    setBookingRouteLoading();
     const nearest = await findNearestPickupByRoad(target, BOOKING_ROUTE_CONTROLLER.signal);
     if (BOOKING_TARGET !== target || sequence !== BOOKING_ROUTE_SEQUENCE) return;
     target.nearestPickupName = nearest.name;
@@ -959,7 +1010,7 @@ async function updateSelectedTargetRoadDistance(target) {
     document.getElementById("bookingNearestPickupDistance").value = nearest.distanceKm.toFixed(3);
     updateMapDistance(target, "Selected: ", nearest, "driving");
     try {
-      setBookingRouteLoading("Loading the private-vehicle route...");
+      setBookingRouteLoading();
       const route = await findDrivingRoute(target, nearest, BOOKING_ROUTE_CONTROLLER.signal);
       if (BOOKING_TARGET !== target || sequence !== BOOKING_ROUTE_SEQUENCE) return;
       displayBookingNearestRoute(route, nearest);
@@ -983,6 +1034,24 @@ function classifyTargetRegion(address) {
   const normalized = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
   const addressParts = Object.values(address || {}).filter(value => typeof value === "string").map(normalized);
   const matches = candidates => addressParts.some(part => candidates.some(candidate => part === candidate || part.includes(candidate)));
+  const island = normalized(address?.island);
+  if (island && !["luzon", "luzon island"].includes(island)) return "out_of_bounds";
+  const outOfBoundsRegionsAndIslands = [
+    "visayas", "western visayas", "central visayas", "eastern visayas", "negros island region",
+    "mindanao", "northern mindanao", "davao region", "soccsksargen", "zamboanga peninsula",
+    "caraga", "bangsamoro", "barmm", "mimaropa", "palawan", "batanes", "marinduque",
+    "occidental mindoro", "oriental mindoro", "mindoro", "romblon", "catanduanes", "masbate",
+    "aklan", "antique", "bacolod", "basilan", "biliran", "bohol", "bukidnon", "cagayan de oro",
+    "camiguin", "capiz", "cebu", "davao de oro", "compostela valley", "davao del norte",
+    "davao del sur", "davao occidental", "davao oriental", "dinagat islands", "eastern samar",
+    "guimaras", "iloilo", "lanao del norte", "lanao del sur", "leyte", "maguindanao",
+    "misamis occidental", "misamis oriental", "negros occidental", "negros oriental",
+    "northern samar", "samar", "siquijor", "south cotabato", "southern leyte", "sulu",
+    "surigao del norte", "surigao del sur", "tawi tawi", "zamboanga del norte",
+    "zamboanga del sur", "zamboanga sibugay"
+  ];
+  if (matches(outOfBoundsRegionsAndIslands)) return "out_of_bounds";
+
   const metroManilaNames = [
     "national capital region", "metro manila", "ncr", "caloocan", "las pinas", "makati", "malabon",
     "mandaluyong", "manila", "marikina", "muntinlupa", "navotas", "paranaque", "pasay", "pasig",
@@ -994,18 +1063,50 @@ function classifyTargetRegion(address) {
   if (matches(neighboringProvinces)) return "out";
 
   const luzonRegionsAndProvinces = [
-    "ilocos region", "cagayan valley", "central luzon", "calabarzon", "mimaropa", "bicol region",
+    "ilocos region", "cagayan valley", "central luzon", "calabarzon", "bicol region",
     "cordillera administrative region", "luzon", "abra", "albay", "apayao", "aurora", "bataan",
-    "batangas", "benguet", "cagayan", "camarines norte", "camarines sur", "catanduanes", "ifugao",
+    "batangas", "benguet", "cagayan", "camarines norte", "camarines sur", "ifugao",
     "ilocos norte", "ilocos sur", "isabela", "kalinga", "la union", "mountain province", "nueva ecija",
-    "nueva vizcaya", "occidental mindoro", "oriental mindoro", "palawan", "pampanga", "pangasinan",
-    "quezon", "quirino", "romblon", "sorsogon", "tarlac", "zambales"
+    "nueva vizcaya", "pampanga", "pangasinan", "quezon", "quirino", "sorsogon", "tarlac", "zambales"
   ];
   return matches(luzonRegionsAndProvinces) ? "luzon" : null;
 }
 
 function regionDisplayName(region) {
   return ({ in: "Metro Manila", out: "Nearby areas", luzon: "Luzon" })[region] || "Unclassified destination";
+}
+
+const BOOKING_OUT_OF_BOUNDS_MESSAGES = [
+  "I can't serve this location yet. Please choose a destination in Luzon.",
+  "I can only help with trips within our Luzon service area. Please select another place.",
+  "I can't arrange a road trip to this destination. Please choose a different location in Luzon.",
+  "I can't support this area yet. Try a road-accessible place in Luzon.",
+  "I can't provide service for this destination. Please select another location.",
+  "I can only help with supported destinations in Luzon. Please choose a different point.",
+  "I can't serve places that require crossing open water. Please select a location in Luzon.",
+  "I don't have service in this area yet. Please choose another destination in Luzon.",
+  "I can't connect this destination to our supported road network. Please try another place.",
+  "I can't accept this location right now. Please choose a road-accessible place in Luzon."
+];
+
+function getBookingOutOfBoundsMessage() {
+  return shuffleBookingPrompts(BOOKING_OUT_OF_BOUNDS_MESSAGES)[0];
+}
+
+function isBookingRegionSupported(region) {
+  return ["in", "out", "luzon"].includes(region);
+}
+
+function showBookingOutOfBoundsPreview() {
+  document.getElementById("bookingMapDistancePrompt").textContent =
+    "I can only preview road distances within our supported Luzon service area.";
+  document.getElementById("bookingMapDistancePrompt").hidden = false;
+  document.getElementById("bookingMapDistanceResult").hidden = true;
+}
+
+function resetBookingMapDistancePrompt() {
+  document.getElementById("bookingMapDistancePrompt").textContent =
+    "Move the cursor over the map to preview road distance from the nearest pickup point.";
 }
 
 function setBookingLocationPreview(label, prefix = "Hovered location: ") {
@@ -1015,12 +1116,16 @@ function setBookingLocationPreview(label, prefix = "Hovered location: ") {
 }
 
 const BOOKING_VALIDATION_PROMPTS = [
-  "Processing... Please wait.",
-  "Checking nearby roads and residential areas...",
-  "Verifying your selected location...",
-  "Finding the closest valid point...",
-  "Confirming this area is suitable for your booking...",
-  "Almost there — finalizing your location..."
+  "I'm checking your location. Please wait...",
+  "I'm looking for nearby roads and neighborhoods...",
+  "I'm verifying the place you selected...",
+  "I'm finding the closest suitable place...",
+  "I'm checking that this area works for your booking...",
+  "I'm making sure this place is on the map...",
+  "I'm checking that you can reach this location...",
+  "I'm looking over the area around your selected point...",
+  "I'm confirming the details of your location...",
+  "I'm almost done — just confirming your location..."
 ];
 
 function stopBookingValidationPrompts() {
@@ -1040,11 +1145,7 @@ function startBookingValidationPrompts() {
   const status = document.getElementById("bookingTargetStatus");
   const prompt = document.createElement("span");
   prompt.className = "booking-target-waiting-prompt";
-  const messages = [...BOOKING_VALIDATION_PROMPTS];
-  for (let index = messages.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [messages[index], messages[swapIndex]] = [messages[swapIndex], messages[index]];
-  }
+  const messages = shuffleBookingPrompts(BOOKING_VALIDATION_PROMPTS);
   let messageIndex = 0;
   prompt.textContent = messages[messageIndex];
   status.replaceChildren(prompt);
@@ -1184,9 +1285,6 @@ async function resolveBookingTargetRegion(target) {
         signal: BOOKING_GEOCODE_CONTROLLER.signal
       });
       const data = await response.json();
-      if (response.status === 503) {
-        throw new Error("Location verification is temporarily unavailable. Please retry. If you use Android Private DNS, a VPN, or a DNS/content filter, try switching it off or setting DNS to Automatic, then try again.");
-      }
       if (!response.ok) throw new Error(data.error || "Location verification failed. Please choose another point.");
       result = {
         ...data,
@@ -1203,6 +1301,10 @@ async function resolveBookingTargetRegion(target) {
   if (BOOKING_TARGET !== target) return;
   if (!result.valid) {
     clearBookingTarget(result.reason || "This location could not be verified as a residential destination. Choose another map location.");
+    return;
+  }
+  if (!isBookingRegionSupported(result.rateRegion)) {
+    clearBookingTarget(getBookingOutOfBoundsMessage());
     return;
   }
   if (result.snapped) {
@@ -1258,6 +1360,7 @@ function clearBookingTarget(message) {
   });
   setBookingTargetStatus(message);
   setBookingLocationPreview("");
+  resetBookingMapDistancePrompt();
   document.getElementById("bookingMapDistancePrompt").hidden = false;
   document.getElementById("bookingMapDistanceResult").hidden = true;
   renderBookingEstimate();
@@ -1444,6 +1547,7 @@ function bindBookingMap() {
         document.getElementById(id).value = "";
       });
       setBookingTargetStatus("Click the map to choose your target location.");
+      resetBookingMapDistancePrompt();
       searchInput.value = "";
       searchStatus.textContent = "";
       document.getElementById("bookingMapDistancePrompt").hidden = false;
@@ -1558,6 +1662,7 @@ function bindBookingMap() {
       cancelBookingRouteLookup();
       clearBookingNearestRoute();
       setBookingLocationPreview("");
+      resetBookingMapDistancePrompt();
       document.getElementById("bookingMapDistancePrompt").hidden = false;
       document.getElementById("bookingMapDistanceResult").hidden = true;
       BOOKING_PREVIEW_MARKER?.remove();
