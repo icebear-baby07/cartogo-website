@@ -137,7 +137,7 @@ function renderHeroShortcuts() {
   const shortcuts = [
     { value: CARS.length, label: "Cars in our fleet", icon: "fa-car-side", href: "#fleet", action: "fleet" },
     { value: CARS.length, label: "Vehicle options", icon: "fa-list-check", href: "#fleet", action: "fleet" },
-    { value: CARS.filter(car => car.available).length, label: "Pickup areas", icon: "fa-location-dot", href: "#booking", action: "pickup" },
+    { value: CARS.filter((car) => car.available).length, label: "Pickup areas", icon: "fa-location-dot", href: "#booking", action: "pickup" },
     { value: "Easy", label: "Online inquiry", icon: "fa-arrow-right", href: "#booking", action: "inquiry" }
   ];
   wrap.innerHTML = shortcuts.map(item => `
@@ -1312,9 +1312,9 @@ async function resolveBookingTargetRegion(target) {
       !Number.isFinite(result.latitude)
       || !Number.isFinite(result.longitude)
       || !Number.isFinite(result.snapDistanceMeters)
-      || result.snapDistanceMeters > 75
+      || result.snapDistanceMeters > 150
     ) {
-      clearBookingTarget("The nearby location could not be verified within 75 m. Choose another map point.");
+      clearBookingTarget("The nearby location could not be verified within 150 m. Choose another map point.");
       return;
     }
     target.lat = result.latitude;
