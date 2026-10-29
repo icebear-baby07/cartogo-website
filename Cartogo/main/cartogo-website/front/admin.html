@@ -11,7 +11,7 @@
 
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-<link rel="stylesheet" href="css/admin.css?v=step12.4-mobile-actions-menu-v2">
+<link rel="stylesheet" href="css/admin.css?v=step14.2-pending-arrow-action">
 </head>
 <body class="admin-body">
 
@@ -44,10 +44,10 @@
       <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
     </button>
     <nav class="admin-tabs">
-      <button class="admin-tab-btn active" data-tab="tab-fleet">Fleet &amp; Rates</button>
+      <button class="admin-tab-btn" data-tab="tab-fleet">Fleet &amp; Rates</button>
       <button class="admin-tab-btn" data-tab="tab-site-assets">Site Assets</button>
       <button class="admin-tab-btn" data-tab="tab-labels">Site Labels</button>
-      <button class="admin-tab-btn" data-tab="tab-inquiries">Inquiries</button>
+      <button class="admin-tab-btn active" data-tab="tab-inquiries">Inquiries</button>
       <button class="admin-tab-btn" data-tab="tab-chat">Chat Monitor</button>
       <button class="admin-tab-btn" data-tab="tab-settings">Settings</button>
     </nav>
@@ -60,7 +60,7 @@
   <main class="admin-main">
 
     <!-- ---------- FLEET TAB ---------- -->
-    <section class="admin-panel active" id="tab-fleet">
+    <section class="admin-panel" id="tab-fleet">
       <div class="admin-header">
         <div>
           <h1>Fleet &amp; rates</h1>
@@ -157,7 +157,7 @@
     </section>
 
     <!-- ---------- INQUIRIES TAB ---------- -->
-    <section class="admin-panel" id="tab-inquiries">
+    <section class="admin-panel active" id="tab-inquiries">
       <div class="admin-header">
         <div>
           <h1>Inquiries</h1>
@@ -169,9 +169,8 @@
           <button class="btn btn-dark btn-sm" id="exportCsvBtn" type="button" title="Export inquiries as CSV" aria-label="Export inquiries as CSV"><i class="fa-solid fa-file-csv" aria-hidden="true"></i><span class="admin-action-label">Export CSV</span></button>
         </div>
       </div>
-      <div class="inquiry-metrics" id="inquiryMetrics" aria-label="Inquiry totals by status"></div>
-      <p class="inquiry-filter-hint">Select one or more categories to filter. Clear all selections to show every inquiry.</p>
-      <div id="inquiriesContent" aria-live="polite">
+      <div class="inquiry-metrics" id="inquiryMetrics" role="tablist" aria-label="Inquiry categories"></div>
+      <div id="inquiriesContent" role="tabpanel" aria-live="polite" aria-labelledby="inquiry-tab-pending_review">
         <div class="empty-state">Loading inquiries from the database…</div>
       </div>
     </section>
@@ -242,6 +241,54 @@
       <div class="inquiry-details" id="inquiryDetails"></div>
     </div>
   </div>
+  <div class="admin-modal inquiry-status-modal" id="inquiryStatusModal" hidden role="dialog" aria-modal="true" aria-labelledby="inquiryStatusTitle" aria-describedby="inquiryStatusDescription">
+    <div class="admin-modal-panel inquiry-status-panel">
+      <header class="admin-modal-header">
+        <div>
+          <p class="eyebrow">Update inquiry</p>
+          <h2 id="inquiryStatusTitle">Confirm status change</h2>
+        </div>
+        <button class="icon-btn" id="closeInquiryStatus" type="button" title="Cancel status change" aria-label="Cancel status change"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+      </header>
+      <form id="inquiryStatusForm" class="inquiry-status-form">
+        <p class="inquiry-status-description" id="inquiryStatusDescription"></p>
+        <div class="inquiry-status-transition" aria-live="polite">
+          <span id="inquiryStatusCurrent"></span>
+          <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+          <strong id="inquiryStatusTarget"></strong>
+        </div>
+        <p class="inquiry-status-error" id="inquiryStatusError" role="alert" hidden></p>
+        <div class="inquiry-status-actions">
+          <button class="btn btn-ghost" id="cancelInquiryStatus" type="button">Cancel</button>
+          <button class="btn btn-dark" id="proceedInquiryStatus" type="submit">Confirm update</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="admin-modal inquiry-delete-modal" id="inquiryDeleteModal" hidden role="dialog" aria-modal="true" aria-labelledby="inquiryDeleteTitle" aria-describedby="inquiryDeleteDescription">
+    <div class="admin-modal-panel inquiry-delete-panel">
+      <header class="admin-modal-header">
+        <div>
+          <p class="eyebrow">Permanent action</p>
+          <h2 id="inquiryDeleteTitle">Delete inquiry?</h2>
+        </div>
+        <button class="icon-btn" id="closeInquiryDelete" type="button" title="Cancel deletion" aria-label="Cancel deletion"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+      </header>
+      <form id="inquiryDeleteForm" class="inquiry-delete-form">
+        <p id="inquiryDeleteDescription">This inquiry will be permanently removed and cannot be restored.</p>
+        <dl class="inquiry-delete-summary">
+          <div><dt>Customer</dt><dd id="inquiryDeleteName"></dd></div>
+          <div><dt>Email</dt><dd id="inquiryDeleteEmail"></dd></div>
+          <div><dt>Vehicle</dt><dd id="inquiryDeleteVehicle"></dd></div>
+        </dl>
+        <p class="inquiry-delete-error" id="inquiryDeleteError" role="alert" hidden></p>
+        <div class="inquiry-delete-actions">
+          <button class="btn btn-ghost" id="cancelInquiryDelete" type="button">Keep inquiry</button>
+          <button class="btn btn-dark inquiry-delete-proceed" id="proceedInquiryDelete" type="submit"><i class="fa-solid fa-trash-can" aria-hidden="true"></i> Delete permanently</button>
+        </div>
+      </form>
+    </div>
+  </div>
   <div class="admin-modal inquiry-rejection-modal" id="inquiryRejectionModal" hidden role="dialog" aria-modal="true" aria-labelledby="inquiryRejectionTitle" aria-describedby="inquiryRejectionDescription">
     <div class="admin-modal-panel inquiry-rejection-panel">
       <header class="admin-modal-header">
@@ -305,6 +352,6 @@
 <script src="../config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../back/js/data.js?v=step11-owner-approval"></script>
-<script src="../back/js/admin.js?v=step12.4-mobile-actions-menu-v2"></script>
+<script src="../back/js/admin.js?v=step14.2-pending-arrow-action"></script>
 </body>
 </html>

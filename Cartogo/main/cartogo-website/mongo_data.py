@@ -93,6 +93,25 @@ class MongoDataStore:
 			raise RuntimeError("That inquiry no longer exists. Refresh the list and try again.")
 		return self._public_document(updated)
 
+	def restore_inquiry(self, inquiry_id):
+		updated = self.inquiries.find_one_and_update(
+			{"_id": inquiry_id, "status": "rejected"},
+			{
+				"$set": {"status": "pending_review"},
+				"$unset": {
+					"rejection_reason": "",
+					"rejection_email_sent": "",
+					"rejection_email_sent_at": "",
+				},
+			},
+			return_document=ReturnDocument.AFTER,
+		)
+		if updated is None:
+			if self.inquiries.find_one({"_id": inquiry_id}) is None:
+				raise RuntimeError("That inquiry no longer exists. Refresh the list and try again.")
+			raise ValueError("Only rejected inquiries can be restored.")
+		return self._public_document(updated)
+
 	def get_inquiry(self, inquiry_id):
 		document = self.inquiries.find_one({"_id": inquiry_id})
 		return self._public_document(document) if document else None

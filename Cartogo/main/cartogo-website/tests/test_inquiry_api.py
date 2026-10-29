@@ -68,7 +68,7 @@ class InquiryNormalizationTests(unittest.TestCase):
 		self.assertEqual(result["name"], "Verified Customer")
 		self.assertEqual(result["email"], "customer@example.com")
 		self.assertEqual(result["user_id"], "user-123")
-		self.assertEqual(result["status"], "confirmed")
+		self.assertEqual(result["status"], "pending_review")
 		self.assertEqual(result["verification_method"], "google_oauth")
 		self.assertEqual(result["car_id"], "4")
 
@@ -121,6 +121,7 @@ class InquiryNormalizationTests(unittest.TestCase):
 		self.assertEqual(result["name"], "Customer, Alex")
 		self.assertEqual(result["email"], "someone-else@example.com")
 		self.assertIsNone(result["user_id"])
+		self.assertEqual(result["status"], "pending_review")
 		self.assertEqual(result["verification_method"], "guest_form")
 
 	def test_guest_inquiry_requires_phone_and_validates_email(self):
@@ -724,6 +725,18 @@ class InquiryRejectionTests(unittest.TestCase):
 			{"data": {**rejected, "rejection_email_sent": True}, "emailSent": True},
 		)
 
+	def test_restore_action_returns_restored_inquiry(self):
+		restored = {"id": 42, "status": "pending_review"}
+		store = Mock()
+		store.restore_inquiry.return_value = restored
+		handler = self.make_admin_handler({"action": "restore", "id": 42})
+
+		with patch("server.get_mongo_store", return_value=store):
+			handler.manage_inquiries()
+
+		store.restore_inquiry.assert_called_once_with(42)
+		handler.send_json.assert_called_once_with(200, {"data": restored})
+
 	def test_reject_action_keeps_status_and_reports_failed_email_delivery(self):
 		rejected = {
 			"id": 42,
@@ -809,8 +822,20 @@ class InquiryRejectionTests(unittest.TestCase):
 			{"data": {**rejected, "rejection_email_sent": True}, "emailSent": True},
 		)
 
-	def test_status_update_does_not_allow_pending_or_rejected_values(self):
-		for status in ("pending_review", "rejected"):
+	def test_status_update_allows_reviewable_statuses(self):
+		for status in ("confirmed",):
+			with self.subTest(status=status):
+				updated = {"id": 42, "status": status}
+				store = Mock()
+				store.update_inquiry_status.return_value = updated
+				handler = self.make_admin_handler({"action": "update", "id": 42, "status": status})
+				with patch("server.get_mongo_store", return_value=store):
+					handler.manage_inquiries()
+				store.update_inquiry_status.assert_called_once_with(42, status)
+				handler.send_json.assert_called_once_with(200, {"data": updated})
+
+	def test_status_update_does_not_allow_pending_contacted_rejected_or_unknown_values(self):
+		for status in ("pending_review", "contacted", "rejected", "unknown"):
 			with self.subTest(status=status):
 				store = Mock()
 				handler = self.make_admin_handler({"action": "update", "id": 42, "status": status})

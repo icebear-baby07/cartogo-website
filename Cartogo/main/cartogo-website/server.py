@@ -763,9 +763,12 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			store = get_mongo_store()
 			if action == "update":
 				status = payload.get("status")
-				if not isinstance(status, str) or status not in {"contacted", "confirmed"}:
+				if not isinstance(status, str) or status != "confirmed":
 					raise ValueError("Choose a valid inquiry status.")
 				result = store.update_inquiry_status(inquiry_id, status)
+				self.send_json(200, {"data": result})
+			elif action == "restore":
+				result = store.restore_inquiry(inquiry_id)
 				self.send_json(200, {"data": result})
 			elif action == "reject":
 				reason = payload.get("reason")
@@ -989,7 +992,7 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 				"quotedRate", "Quoted rate", required=True, maximum=9999999999.99
 			),
 			"notes": text_value("notes", "Notes", 2000, required=False),
-			"status": "confirmed",
+			"status": "pending_review",
 			"user_id": str(user["id"]) if user else None,
 			"verification_method": "google_oauth" if user else "guest_form",
 		}

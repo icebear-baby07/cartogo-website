@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock
 
 from mongo_data import MongoDataStore
 
@@ -96,6 +96,35 @@ class MongoDataStoreTests(unittest.TestCase):
 
 		with self.assertRaisesRegex(RuntimeError, "no longer exists"):
 			self.store.update_inquiry_status(42, "confirmed")
+
+		self.inquiries.find_one_and_update.assert_called_once()
+
+	def test_restoring_rejected_inquiry_clears_rejection_metadata(self):
+		restored = {"_id": 42, "id": 42, "status": "pending_review"}
+		self.inquiries.find_one_and_update.return_value = restored
+
+		result = self.store.restore_inquiry(42)
+
+		self.inquiries.find_one_and_update.assert_called_once_with(
+			{"_id": 42, "status": "rejected"},
+			{
+				"$set": {"status": "pending_review"},
+				"$unset": {
+					"rejection_reason": "",
+					"rejection_email_sent": "",
+					"rejection_email_sent_at": "",
+				},
+			},
+			return_document=ANY,
+		)
+		self.assertEqual(result, {"id": 42, "status": "pending_review"})
+
+	def test_restoring_non_rejected_inquiry_is_rejected(self):
+		self.inquiries.find_one_and_update.return_value = None
+		self.inquiries.find_one.return_value = {"_id": 42, "status": "confirmed"}
+
+		with self.assertRaisesRegex(ValueError, "Only rejected inquiries"):
+			self.store.restore_inquiry(42)
 
 		self.inquiries.find_one_and_update.assert_called_once()
 

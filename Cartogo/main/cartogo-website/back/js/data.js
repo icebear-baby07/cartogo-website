@@ -230,6 +230,10 @@ const DB = {
     });
     return result.data;
   },
+  async restoreInquiry(id) {
+    const result = await adminRequest("/api/admin/inquiries", { action: "restore", id });
+    return result.data;
+  },
   async rejectInquiry(id, reason) {
     return adminRequest("/api/admin/inquiries", {
       action: "reject",

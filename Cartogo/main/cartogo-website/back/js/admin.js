@@ -18,8 +18,10 @@ let SITE_ASSETS = [];
 let SITE_ASSETS_ERROR = "";
 let SELECTED_INQUIRY = null;
 let SELECTED_INQUIRY_CARD_ID = null;
-let INQUIRY_FILTERS = new Set();
+let ACTIVE_INQUIRY_TAB = "pending_review";
 let REJECTING_INQUIRY = null;
+let PENDING_INQUIRY_STATUS_CHANGE = null;
+let DELETING_INQUIRY = null;
 let CURRENT_ADMIN_EMAIL = "";
 let UNIT_APPROVAL_CHALLENGE_ID = "";
 let UNIT_APPROVAL_RESOLVE = null;
@@ -827,55 +829,70 @@ async function renderInquiriesTab({ reload = true } = {}) {
   const count = INQUIRIES.length;
   countBadge.textContent = `${displayInquiryCount(count)} inquir${count === 1 ? "y" : "ies"}`;
   const statuses = [
-    ["pending_review", "Pending review"],
-    ["contacted", "Contacted"],
-    ["confirmed", "Confirmed"],
-    ["rejected", "Rejected"]
+    ["pending_review", "Pending Overview", "fa-inbox"],
+    ["confirmed", "Confirmed", "fa-circle-check"],
+    ["operating", "Operating", "fa-car-side"],
+    ["rejected", "Rejected", "fa-ban"]
   ];
   const statusCounts = new Map(statuses.map(([value]) => [value, 0]));
   INQUIRIES.forEach(inquiry => {
-    const status = statusCounts.has(inquiry.status) ? inquiry.status : "pending_review";
-    statusCounts.set(status, statusCounts.get(status) + 1);
+    const status = inquiryStatus(inquiry);
+    if (statusCounts.has(status)) statusCounts.set(status, statusCounts.get(status) + 1);
   });
-  metrics.innerHTML = statuses.map(([value, label]) => `
-    <button class="inquiry-metric inquiry-metric-${value}${INQUIRY_FILTERS.has(value) ? " is-filtered" : ""}" type="button" data-inquiry-filter="${value}" aria-pressed="${INQUIRY_FILTERS.has(value)}">
+  metrics.innerHTML = statuses.map(([value, label, icon]) => `
+    <button class="inquiry-metric inquiry-metric-${value}${ACTIVE_INQUIRY_TAB === value ? " is-active" : ""}" id="inquiry-tab-${value}" type="button" role="tab" data-inquiry-filter="${value}" aria-selected="${ACTIVE_INQUIRY_TAB === value}" aria-controls="inquiriesContent" tabindex="${ACTIVE_INQUIRY_TAB === value ? "0" : "-1"}">
+      <i class="fa-solid ${icon} inquiry-metric-icon" aria-hidden="true"></i>
       <span class="inquiry-metric-count">${displayInquiryCount(statusCounts.get(value))}</span>
       <span class="inquiry-metric-label">${label}</span>
     </button>
   `).join("");
+  document.getElementById("inquiriesContent").setAttribute("aria-labelledby", `inquiry-tab-${ACTIVE_INQUIRY_TAB}`);
 
-  if (count === 0) {
-    content.innerHTML = `<div class="admin-card"><div class="empty-state">No inquiries yet — new booking submissions will appear here.</div></div>`;
+  if (ACTIVE_INQUIRY_TAB === "operating") {
+    content.innerHTML = `
+      <section class="admin-card operating-placeholder" aria-labelledby="operatingPlaceholderTitle">
+        <div class="operating-placeholder-art" aria-hidden="true">
+          <span class="operating-placeholder-orbit operating-placeholder-orbit-one"></span>
+          <span class="operating-placeholder-orbit operating-placeholder-orbit-two"></span>
+          <i class="fa-solid fa-car-side"></i>
+        </div>
+        <div class="operating-placeholder-copy">
+          <span class="operating-placeholder-badge"><span></span> In development</span>
+          <h2 id="operatingPlaceholderTitle">Operating dashboard coming soon</h2>
+          <p>This part is reserved to track current units in use. The tools for monitoring active rentals are not available yet.</p>
+          <div class="operating-placeholder-progress" aria-label="This dashboard is not available yet">
+            <span></span><span></span><span></span><span></span>
+          </div>
+          <small>Unit tracking is not available yet</small>
+        </div>
+      </section>
+    `;
     return true;
   }
 
-  const sections = statuses
-    .map(([value, label]) => ({
-      value,
-      label,
-      inquiries: INQUIRIES.filter(inquiry => (statusCounts.has(inquiry.status) ? inquiry.status : "pending_review") === value)
-    }))
-    .filter(section => INQUIRY_FILTERS.size === 0 || INQUIRY_FILTERS.has(section.value))
-    .filter(section => section.inquiries.length > 0);
-
-  if (sections.length === 0) {
-    content.innerHTML = `<div class="admin-card"><div class="empty-state">No inquiries match the selected categories. Clear the category selections to show all inquiries.</div></div>`;
+  const activeStatus = statuses.find(([value]) => value === ACTIVE_INQUIRY_TAB);
+  const inquiries = INQUIRIES.filter(inquiry => inquiryStatus(inquiry) === ACTIVE_INQUIRY_TAB);
+  if (inquiries.length === 0) {
+    const emptyMessage = count === 0
+      ? "No inquiries yet — new booking submissions will appear here."
+      : `No inquiries in ${activeStatus[1]}.`;
+    content.innerHTML = `<div class="admin-card"><div class="empty-state">${emptyMessage}</div></div>`;
     return true;
   }
 
-  content.innerHTML = sections.map(section => `
-    <section class="admin-card inquiry-status-section inquiry-status-section-${section.value}" aria-labelledby="inquiry-section-${section.value}">
+  content.innerHTML = `
+    <section class="admin-card inquiry-status-section inquiry-status-section-${activeStatus[0]}" aria-labelledby="inquiry-section-${activeStatus[0]}">
       <header class="inquiry-section-header">
         <div>
-          <h2 id="inquiry-section-${section.value}">${section.label}</h2>
-          <p>${displayInquiryCount(section.inquiries.length)} ${section.inquiries.length === 1 ? "inquiry" : "inquiries"}</p>
+          <h2 id="inquiry-section-${activeStatus[0]}">${activeStatus[1]}</h2>
+          <p>${displayInquiryCount(inquiries.length)} ${inquiries.length === 1 ? "inquiry" : "inquiries"}</p>
         </div>
-        <span class="inquiry-section-count">${displayInquiryCount(section.inquiries.length)}</span>
+        <span class="inquiry-section-count">${displayInquiryCount(inquiries.length)}</span>
       </header>
-      <div class="inquiry-card-grid ${section.inquiries.length === 1 ? "is-single" : section.inquiries.length >= 8 ? "is-dense" : "is-standard"}" data-count="${section.inquiries.length}">
-        ${section.inquiries.map(inq => {
+      <div class="inquiry-card-grid ${inquiries.length === 1 ? "is-single" : inquiries.length >= 8 ? "is-dense" : "is-standard"}" data-count="${inquiries.length}">
+        ${inquiries.map(inq => {
           const submitted = inquiryDisplayDate(inq.created_at || inq.submittedAt);
-          const status = statusCounts.has(inq.status) ? inq.status : "pending_review";
+          const status = inquiryStatus(inq);
           const rental = inq.rental_mode === "hourly"
             ? `${text(inq.rental_period_hours ?? "—")}-hour rental`
             : `${text(inq.rental_days ?? "—")} custom days`;
@@ -888,19 +905,16 @@ async function renderInquiriesTab({ reload = true } = {}) {
                 <div class="inquiry-card-controls">
                   ${isRejected
                     ? `<span class="inquiry-status-badge status-rejected">Rejected</span>`
-                    : `<label class="inquiry-status-control">
-                        <span class="sr-only">Inquiry status</span>
-                        <select class="status-select status-${status}" aria-label="Inquiry status">
-                          ${status === "pending_review" ? `<option value="" selected disabled>Mark status…</option>` : ""}
-                          <option value="contacted" ${status === "contacted" ? "selected" : ""}>Contacted</option>
-                          <option value="confirmed" ${status === "confirmed" ? "selected" : ""}>Confirmed</option>
-                        </select>
-                      </label>`}
+                    : status === "pending_review" ? `<button class="icon-btn inquiry-confirm-action" type="button" title="Confirm inquiry" aria-label="Confirm inquiry"><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>`
+                    : `<span class="inquiry-status-badge status-confirmed">Confirmed</span>`}
                   ${isRejected
                     ? inq.rejection_email_sent === false
                       ? `<button class="icon-btn retry-rejection-email" type="button" title="Retry rejection email" aria-label="Retry rejection email"><i class="fa-solid fa-envelope" aria-hidden="true"></i></button>`
-                      : `<button class="icon-btn inquiry-reject-action is-complete" type="button" disabled title="Inquiry already rejected" aria-label="Inquiry already rejected"><i class="fa-solid fa-ban" aria-hidden="true"></i></button>`
+                      : ""
                     : `<button class="icon-btn inquiry-reject-action" type="button" title="Reject inquiry and email customer" aria-label="Reject inquiry and email customer"><i class="fa-solid fa-ban" aria-hidden="true"></i></button>`}
+                  ${isRejected
+                    ? `<button class="icon-btn inquiry-restore-action" type="button" title="Restore inquiry to Pending Overview" aria-label="Restore inquiry to Pending Overview"><i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i></button>`
+                    : ""}
                 </div>
               </div>
               <h3 class="inquiry-card-name">${text(inq.name || "Unnamed customer")}</h3>
@@ -933,8 +947,23 @@ async function renderInquiriesTab({ reload = true } = {}) {
         }).join("")}
       </div>
     </section>
-  `).join("");
+  `;
   return true;
+}
+
+function inquiryStatus(inquiry) {
+  return ["pending_review", "contacted", "confirmed", "rejected"].includes(inquiry.status)
+    ? inquiry.status
+    : "pending_review";
+}
+
+function inquiryStatusLabel(status) {
+  return {
+    pending_review: "Pending review",
+    contacted: "Contacted",
+    confirmed: "Confirmed",
+    rejected: "Rejected"
+  }[status] || "Pending review";
 }
 
 function displayInquiryCount(count) {
@@ -1017,12 +1046,13 @@ function showInquiryDetails(id) {
   SELECTED_INQUIRY = inquiry;
   const submitted = inquiry.created_at || inquiry.submittedAt;
   const coordinates = getInquiryCoordinates(inquiry);
+  const status = inquiryStatus(inquiry);
   document.getElementById("inquiryDetailTitle").textContent = inquiry.name || "Inquiry details";
   document.getElementById("inquiryDetailMeta").textContent = submitted ? `Submitted ${formatDate(submitted)}` : "Submission time unavailable";
   document.getElementById("inquiryDetails").innerHTML = `
     <div class="inquiry-detail-grid">
       <div><dt>Full name</dt><dd>${text(inquiry.name)}</dd></div>
-      <div><dt>Status</dt><dd><span class="status-pill status-${text(inquiry.status || "New")}">${text(inquiry.status || "New")}</span></dd></div>
+      <div><dt>Status</dt><dd><span class="status-pill status-${status}">${text(inquiryStatusLabel(status))}</span></dd></div>
       <div><dt>Email</dt><dd>${text(inquiry.email || "—")}</dd></div>
       <div><dt>Phone number</dt><dd>${text(inquiry.phone || "—")}</dd></div>
       <div><dt>Secondary phone</dt><dd>${text(inquiry.secondary_phone || "—")}</dd></div>
@@ -1045,6 +1075,67 @@ function showInquiryDetails(id) {
   `;
   document.getElementById("inquiryDetailModal").hidden = false;
   document.getElementById("closeInquiryDetail").focus();
+}
+
+function openInquiryStatusConfirmation(id, previousStatus, nextStatus, returnFocus) {
+  const inquiry = INQUIRIES.find(item => String(item.id) === String(id));
+  if (!inquiry || previousStatus === nextStatus || nextStatus === "rejected") return;
+  const transitionCopy = {
+    pending_review: previousStatus === "rejected" ? {
+      title: "Restore this inquiry?",
+      description: "This inquiry will return to Pending Overview. Its rejection reason and rejection-email retry state will be cleared. No email will be sent."
+    } : null,
+    confirmed: {
+      title: "Confirm this inquiry?",
+      description: "This inquiry will move to Confirmed. This status change does not send an email to the customer."
+    }
+  }[nextStatus];
+  if (!transitionCopy) return;
+
+  PENDING_INQUIRY_STATUS_CHANGE = { id, previousStatus, nextStatus, returnFocus };
+  document.getElementById("inquiryStatusTitle").textContent = transitionCopy.title;
+  document.getElementById("inquiryStatusDescription").textContent =
+    `${transitionCopy.description} Customer: ${inquiry.name || "Unnamed customer"}.`;
+  document.getElementById("inquiryStatusCurrent").textContent = inquiryStatusLabel(previousStatus);
+  const target = document.getElementById("inquiryStatusTarget");
+  target.textContent = inquiryStatusLabel(nextStatus);
+  target.className = `status-confirmation-target status-confirmation-target-${nextStatus}`;
+  document.getElementById("inquiryStatusError").hidden = true;
+  document.getElementById("proceedInquiryStatus").disabled = false;
+  document.getElementById("proceedInquiryStatus").textContent = "Confirm update";
+  const modal = document.getElementById("inquiryStatusModal");
+  modal.hidden = false;
+  document.getElementById("cancelInquiryStatus").focus();
+}
+
+function closeInquiryStatusConfirmation({ restoreFocus = true } = {}) {
+  const pendingChange = PENDING_INQUIRY_STATUS_CHANGE;
+  document.getElementById("inquiryStatusModal").hidden = true;
+  PENDING_INQUIRY_STATUS_CHANGE = null;
+  if (restoreFocus && pendingChange?.returnFocus?.isConnected) pendingChange.returnFocus.focus();
+}
+
+function openInquiryDelete(id, returnFocus) {
+  const inquiry = INQUIRIES.find(item => String(item.id) === String(id));
+  if (!inquiry) return;
+  DELETING_INQUIRY = { inquiry, returnFocus };
+  document.getElementById("inquiryDeleteName").textContent = inquiry.name || "Unnamed customer";
+  document.getElementById("inquiryDeleteEmail").textContent = inquiry.email || "No email provided";
+  document.getElementById("inquiryDeleteVehicle").textContent =
+    inquiry.car_name || inquiry.carName || "No vehicle specified";
+  document.getElementById("inquiryDeleteError").hidden = true;
+  document.getElementById("proceedInquiryDelete").disabled = false;
+  document.getElementById("proceedInquiryDelete").innerHTML =
+    '<i class="fa-solid fa-trash-can" aria-hidden="true"></i> Delete permanently';
+  document.getElementById("inquiryDeleteModal").hidden = false;
+  document.getElementById("cancelInquiryDelete").focus();
+}
+
+function closeInquiryDelete({ restoreFocus = true } = {}) {
+  const pendingDelete = DELETING_INQUIRY;
+  document.getElementById("inquiryDeleteModal").hidden = true;
+  DELETING_INQUIRY = null;
+  if (restoreFocus && pendingDelete?.returnFocus?.isConnected) pendingDelete.returnFocus.focus();
 }
 
 function openInquiryRejection(id) {
@@ -1099,8 +1190,18 @@ function bindInquiryTools() {
       showInquiryDetails(card.dataset.id);
       return;
     }
+    const confirmButton = event.target.closest(".inquiry-confirm-action");
+    if (confirmButton) {
+      openInquiryStatusConfirmation(card.dataset.id, "pending_review", "confirmed", confirmButton);
+      return;
+    }
     if (event.target.closest(".inquiry-reject-action") && !event.target.closest(".inquiry-reject-action").disabled) {
       openInquiryRejection(card.dataset.id);
+      return;
+    }
+    const restoreButton = event.target.closest(".inquiry-restore-action");
+    if (restoreButton) {
+      openInquiryStatusConfirmation(card.dataset.id, "rejected", "pending_review", restoreButton);
       return;
     }
     if (event.target.closest(".retry-rejection-email")) {
@@ -1116,44 +1217,106 @@ function bindInquiryTools() {
       }
       return;
     }
-    if (!event.target.closest(".delete-inquiry")) return;
-    if (!confirm("Delete this inquiry permanently?")) return;
+    const deleteButton = event.target.closest(".delete-inquiry");
+    if (deleteButton) openInquiryDelete(card.dataset.id, deleteButton);
+  });
+
+  const statusModal = document.getElementById("inquiryStatusModal");
+  const statusForm = document.getElementById("inquiryStatusForm");
+  const closeStatus = () => closeInquiryStatusConfirmation();
+  document.getElementById("closeInquiryStatus").addEventListener("click", closeStatus);
+  document.getElementById("cancelInquiryStatus").addEventListener("click", closeStatus);
+  statusModal.addEventListener("click", event => {
+    if (event.target === statusModal) closeStatus();
+  });
+  statusForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!PENDING_INQUIRY_STATUS_CHANGE) return;
+    const { id, nextStatus } = PENDING_INQUIRY_STATUS_CHANGE;
+    const proceed = document.getElementById("proceedInquiryStatus");
+    const error = document.getElementById("inquiryStatusError");
+    proceed.disabled = true;
+    proceed.textContent = "Updating…";
+    error.hidden = true;
     try {
-      await DB.deleteInquiry(Number(card.dataset.id));
-      if (String(SELECTED_INQUIRY_CARD_ID) === String(card.dataset.id)) SELECTED_INQUIRY_CARD_ID = null;
+      if (nextStatus === "pending_review") await DB.restoreInquiry(id);
+      else await DB.updateInquiry(id, { status: nextStatus });
+      closeInquiryStatusConfirmation({ restoreFocus: false });
+      const successMessage = nextStatus === "pending_review"
+        ? "Inquiry restored to Pending Overview."
+        : "Inquiry status updated successfully.";
+      toast(await renderInquiriesTab() ? successMessage : `${successMessage} The list could not be refreshed.`);
+    } catch (requestError) {
+      error.textContent = `Could not update inquiry: ${requestError.message}`;
+      error.hidden = false;
+    } finally {
+      if (!statusModal.hidden) {
+        proceed.disabled = false;
+        proceed.textContent = "Confirm update";
+      }
+    }
+  });
+
+  const deleteModal = document.getElementById("inquiryDeleteModal");
+  const deleteForm = document.getElementById("inquiryDeleteForm");
+  const closeDelete = () => closeInquiryDelete();
+  document.getElementById("closeInquiryDelete").addEventListener("click", closeDelete);
+  document.getElementById("cancelInquiryDelete").addEventListener("click", closeDelete);
+  deleteModal.addEventListener("click", event => {
+    if (event.target === deleteModal) closeDelete();
+  });
+  deleteForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!DELETING_INQUIRY) return;
+    const inquiryId = DELETING_INQUIRY.inquiry.id;
+    const proceed = document.getElementById("proceedInquiryDelete");
+    const error = document.getElementById("inquiryDeleteError");
+    proceed.disabled = true;
+    proceed.textContent = "Deleting…";
+    error.hidden = true;
+    try {
+      await DB.deleteInquiry(Number(inquiryId));
+      if (String(SELECTED_INQUIRY_CARD_ID) === String(inquiryId)) SELECTED_INQUIRY_CARD_ID = null;
+      closeInquiryDelete({ restoreFocus: false });
       toast(await renderInquiriesTab() ? "Inquiry deleted." : "Inquiry deleted, but the list could not be refreshed.");
-    } catch (error) {
-      toast(`Could not delete inquiry: ${error.message}`);
+    } catch (requestError) {
+      error.textContent = `Could not delete inquiry: ${requestError.message}`;
+      error.hidden = false;
+    } finally {
+      if (!deleteModal.hidden) {
+        proceed.disabled = false;
+        proceed.innerHTML = '<i class="fa-solid fa-trash-can" aria-hidden="true"></i> Delete permanently';
+      }
     }
   });
 
-  document.getElementById("inquiriesContent").addEventListener("change", async event => {
-    const select = event.target.closest(".status-select");
-    if (!select) return;
-    const card = select.closest(".inquiry-card");
-    const inquiry = INQUIRIES.find(item => String(item.id) === card?.dataset.id);
-    if (!card || !inquiry) return;
-    const previousStatus = inquiry.status;
-    const nextStatus = select.value;
-    if (!nextStatus) return;
-    select.disabled = true;
-    try {
-      await DB.updateInquiry(card.dataset.id, { status: nextStatus });
-      toast(await renderInquiriesTab() ? "Inquiry status updated successfully." : "Status updated, but the list could not be refreshed.");
-    } catch (error) {
-      toast(`Could not update inquiry: ${error.message}`);
-      select.value = previousStatus;
-      select.disabled = false;
-    }
+  document.addEventListener("keydown", event => {
+    if (event.key !== "Escape") return;
+    if (!statusModal.hidden) closeStatus();
+    else if (!deleteModal.hidden) closeDelete();
   });
 
-  document.getElementById("inquiryMetrics").addEventListener("click", async event => {
-    const filter = event.target.closest("[data-inquiry-filter]");
-    if (!filter) return;
-    const value = filter.dataset.inquiryFilter;
-    if (INQUIRY_FILTERS.has(value)) INQUIRY_FILTERS.delete(value);
-    else INQUIRY_FILTERS.add(value);
+  const inquiryTabs = document.getElementById("inquiryMetrics");
+  inquiryTabs.addEventListener("click", async event => {
+    const tab = event.target.closest("[data-inquiry-filter]");
+    if (!tab) return;
+    ACTIVE_INQUIRY_TAB = tab.dataset.inquiryFilter;
     await renderInquiriesTab({ reload: false });
+  });
+  inquiryTabs.addEventListener("keydown", async event => {
+    const tab = event.target.closest("[data-inquiry-filter]");
+    if (!tab || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const tabs = Array.from(inquiryTabs.querySelectorAll("[data-inquiry-filter]"));
+    const currentIndex = tabs.indexOf(tab);
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? tabs.length - 1
+        : (currentIndex + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length;
+    ACTIVE_INQUIRY_TAB = tabs[nextIndex].dataset.inquiryFilter;
+    await renderInquiriesTab({ reload: false });
+    document.getElementById(`inquiry-tab-${ACTIVE_INQUIRY_TAB}`).focus();
   });
 
   document.getElementById("inquiriesContent").addEventListener("keydown", event => {
