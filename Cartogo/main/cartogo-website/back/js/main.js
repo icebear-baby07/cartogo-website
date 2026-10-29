@@ -704,10 +704,9 @@ function bindContactMap() {
 
   const panel = document.getElementById("contactMapPanel");
   const button = document.getElementById("contactMapFullscreen");
-  const header = document.getElementById("siteHeader");
   const updateTop = () => {
     if (!CONTACT_MAP_FULLSCREEN) return;
-    panel.style.setProperty("--contact-map-top", `${header.getBoundingClientRect().bottom}px`);
+    panel.style.setProperty("--contact-map-top", "0px");
     window.requestAnimationFrame(() => {
       if (!CONTACT_MAP) return;
       CONTACT_MAP.resize();
@@ -1465,7 +1464,6 @@ function bindBookingMap() {
   const fullscreenButton = document.getElementById("bookingMapFullscreen");
   const styleToggleButton = document.getElementById("bookingMapStyleToggle");
   const bookingPanel = document.querySelector(".booking-panel");
-  const siteHeader = document.getElementById("siteHeader");
   const searchInput = document.getElementById("bookingMapSearchInput");
   const searchSubmit = document.getElementById("bookingMapSearchSubmit");
   const searchStatus = document.getElementById("bookingMapSearchStatus");
@@ -1529,7 +1527,7 @@ function bindBookingMap() {
 
   const updateFullscreenTop = () => {
     if (!BOOKING_MAP_FULLSCREEN) return;
-    bookingPanel.style.setProperty("--booking-map-top", `${siteHeader.getBoundingClientRect().bottom}px`);
+    bookingPanel.style.setProperty("--booking-map-top", "0px");
     window.requestAnimationFrame(() => {
       if (!BOOKING_MAP) return;
       BOOKING_MAP.resize();

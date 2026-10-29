@@ -760,7 +760,8 @@ table.rates .skeleton-line{ height:0.7rem; }
 .booking-panel.is-map-fullscreen .booking-map-field{ position:absolute; inset:0; display:flex; height:auto; min-height:0; flex-direction:column; }
 .booking-panel.is-map-fullscreen .booking-map{ height:auto; min-height:0; flex:1; }
 .booking-panel.is-map-fullscreen .booking-map-fullscreen{ color:var(--danger); }
-body.has-map-fullscreen{ overflow:hidden; }
+body.has-map-fullscreen,body.has-contact-map-fullscreen{ overflow:hidden; }
+body.has-map-fullscreen .site-header,body.has-contact-map-fullscreen .site-header{ display:none; }
 .booking-estimate{ min-width:0; padding:0.8rem 1rem; background:var(--concrete); border-left:3px solid var(--signal); border-radius:0 var(--radius-sm) var(--radius-sm) 0; }
 .booking-estimate[hidden]{ display:none; }
 .booking-estimate dl{ margin:0; }
@@ -876,7 +877,6 @@ body.has-map-fullscreen{ overflow:hidden; }
 .contact-map-empty[hidden]{ display:none; }
 .contact-map-panel.is-fullscreen{ position:fixed; inset:var(--contact-map-top, 0px) 0 0; z-index:1100; width:100vw; height:auto; min-height:0; border:0; border-radius:0; }
 .contact-map-panel.is-fullscreen .contact-map{ height:auto; min-height:0; flex:1; }
-body.has-contact-map-fullscreen{ overflow:hidden; }
 @keyframes live-agent-ring{ 0%,100%{ transform:rotate(0); } 28%{ transform:rotate(-14deg); } 66%{ transform:rotate(12deg); } }
 @media (prefers-reduced-motion:reduce){
   .hero-shortcut,.booking-map-search button{ transition:none; }
