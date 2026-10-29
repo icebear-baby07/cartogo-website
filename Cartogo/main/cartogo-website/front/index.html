@@ -13,7 +13,7 @@
 <!-- Styles -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css">
-<link rel="stylesheet" href="css/style.css?v=fullscreen-header-hidden">
+<link rel="stylesheet" href="css/style.css?v=map-controls-grouped">
 </head>
 <body>
 
@@ -282,8 +282,10 @@
                 <div class="field span-2 booking-map-field">
                   <div class="booking-map-heading">
                     <span class="booking-map-label">Target location</span>
-                    <button class="map-style-toggle" id="bookingMapStyleToggle" type="button" aria-label="Satellite map view" aria-pressed="false" title="Switch to satellite view" disabled><i class="fa-solid fa-satellite" aria-hidden="true"></i> Satellite</button>
-                    <button class="icon-btn booking-map-fullscreen" id="bookingMapFullscreen" type="button" aria-label="Expand target map to fullscreen" aria-pressed="false" title="Expand map"><i class="fa-solid fa-expand" aria-hidden="true"></i></button>
+                    <div class="map-heading-controls">
+                      <button class="map-style-toggle" id="bookingMapStyleToggle" type="button" aria-label="Satellite map view" aria-pressed="false" title="Switch to satellite view" disabled><i class="fa-solid fa-satellite" aria-hidden="true"></i> Satellite</button>
+                      <button class="icon-btn booking-map-fullscreen" id="bookingMapFullscreen" type="button" aria-label="Expand target map to fullscreen" aria-pressed="false" title="Expand map"><i class="fa-solid fa-expand" aria-hidden="true"></i></button>
+                    </div>
                   </div>
                   <div class="booking-map-search" role="search">
                     <label class="visually-hidden" for="bookingMapSearchInput">Search for a target location</label>
@@ -448,8 +450,10 @@
         <div class="contact-map-panel" id="contactMapPanel">
           <div class="contact-map-heading">
             <span><i class="fa-solid fa-map-location-dot" aria-hidden="true"></i> Pickup locations</span>
-            <button class="map-style-toggle" id="contactMapStyleToggle" type="button" aria-label="Satellite map view" aria-pressed="false" title="Switch to satellite view" disabled><i class="fa-solid fa-satellite" aria-hidden="true"></i> Satellite</button>
-            <button class="icon-btn contact-map-fullscreen" id="contactMapFullscreen" type="button" aria-label="Expand pickup locations map" aria-pressed="false" title="Expand map"><i class="fa-solid fa-expand" aria-hidden="true"></i></button>
+            <div class="map-heading-controls">
+              <button class="map-style-toggle" id="contactMapStyleToggle" type="button" aria-label="Satellite map view" aria-pressed="false" title="Switch to satellite view" disabled><i class="fa-solid fa-satellite" aria-hidden="true"></i> Satellite</button>
+              <button class="icon-btn contact-map-fullscreen" id="contactMapFullscreen" type="button" aria-label="Expand pickup locations map" aria-pressed="false" title="Expand map"><i class="fa-solid fa-expand" aria-hidden="true"></i></button>
+            </div>
           </div>
           <div class="contact-map" id="contactMap" role="application" aria-label="Map of pickup locations. Select a pin or location name to see details."></div>
           <p class="contact-map-empty" id="contactMapEmpty" hidden>No pickup locations are configured yet.</p>

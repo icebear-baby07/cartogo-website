@@ -698,6 +698,7 @@ table.rates .skeleton-line{ height:0.7rem; }
 .booking-map-field{ min-width:0; }
 .booking-map-heading{ display:flex; align-items:center; justify-content:space-between; gap:0.75rem; margin-bottom:0.45rem; }
 .booking-map-label{ color:var(--slate); font-size:0.78rem; font-weight:600; }
+.map-heading-controls{ display:flex; flex:none; align-items:center; gap:0.4rem; }
 .map-style-toggle{ display:flex; min-height:36px; align-items:center; justify-content:center; gap:0.4rem; padding:0.4rem 0.65rem; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--paper); color:var(--asphalt); font:inherit; font-size:0.75rem; font-weight:700; cursor:pointer; transition:border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease, opacity 0.18s ease; }
 .map-style-toggle:hover:not(:disabled),.map-style-toggle[aria-pressed="true"]{ border-color:var(--signal); background:#fff2ef; color:var(--signal); }
 .map-style-toggle:focus-visible{ outline:2px solid var(--route-blue); outline-offset:2px; }
