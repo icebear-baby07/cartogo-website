@@ -698,6 +698,10 @@ table.rates .skeleton-line{ height:0.7rem; }
 .booking-map-field{ min-width:0; }
 .booking-map-heading{ display:flex; align-items:center; justify-content:space-between; gap:0.75rem; margin-bottom:0.45rem; }
 .booking-map-label{ color:var(--slate); font-size:0.78rem; font-weight:600; }
+.map-style-toggle{ display:flex; min-height:36px; align-items:center; justify-content:center; gap:0.4rem; padding:0.4rem 0.65rem; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--paper); color:var(--asphalt); font:inherit; font-size:0.75rem; font-weight:700; cursor:pointer; transition:border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease, opacity 0.18s ease; }
+.map-style-toggle:hover:not(:disabled),.map-style-toggle[aria-pressed="true"]{ border-color:var(--signal); background:#fff2ef; color:var(--signal); }
+.map-style-toggle:focus-visible{ outline:2px solid var(--route-blue); outline-offset:2px; }
+.map-style-toggle:disabled{ opacity:0.45; cursor:not-allowed; }
 .booking-map-fullscreen{ flex:none; display:grid; width:38px; height:38px; place-items:center; padding:0; transition:transform 0.24s ease, color 0.24s ease, background-color 0.24s ease; }
 .booking-map-fullscreen.is-expanded{ transform:rotate(180deg); }
 .booking-map-search{ display:flex; min-width:0; gap:0.35rem; margin:0 0 0.45rem; }

@@ -573,19 +573,44 @@ function showBookingSnapConnection(target) {
   document.getElementById("bookingMapSnapStatus").hidden = false;
 }
 
-function createEsriStreetMapStyle() {
+function createEsriMapStyle() {
+  const streetAttribution = "Sources: Esri, HERE, Garmin, USGS, Intermap, INCREMENT P, NRCan, Esri Japan, METI, Esri China (Hong Kong), Esri Korea, Esri (Thailand), NGCC, &copy; OpenStreetMap contributors, and the GIS User Community";
   return {
     version: 8,
     sources: {
-      esri: {
+      "esri-street": {
         type: "raster",
         tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"],
         tileSize: 256,
-        attribution: "Sources: Esri, HERE, Garmin, USGS, Intermap, INCREMENT P, NRCan, Esri Japan, METI, Esri China (Hong Kong), Esri Korea, Esri (Thailand), NGCC, &copy; OpenStreetMap contributors, and the GIS User Community"
+        attribution: streetAttribution
+      },
+      "esri-imagery": {
+        type: "raster",
+        tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+        tileSize: 256,
+        attribution: "Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community"
       }
     },
-    layers: [{ id: "esri-world-street-map", type: "raster", source: "esri" }]
+    layers: [
+      { id: "esri-world-imagery", type: "raster", source: "esri-imagery", layout: { visibility: "none" } },
+      { id: "esri-world-street-map", type: "raster", source: "esri-street" }
+    ]
   };
+}
+
+function bindMapStyleToggle(map, button) {
+  let satelliteEnabled = false;
+  button.disabled = true;
+  button.addEventListener("click", () => {
+    satelliteEnabled = !satelliteEnabled;
+    map.setLayoutProperty("esri-world-street-map", "visibility", satelliteEnabled ? "none" : "visible");
+    map.setLayoutProperty("esri-world-imagery", "visibility", satelliteEnabled ? "visible" : "none");
+    button.setAttribute("aria-pressed", String(satelliteEnabled));
+    button.title = satelliteEnabled ? "Satellite view enabled; switch to street map" : "Switch to satellite view";
+  });
+  map.once("style.load", () => {
+    button.disabled = false;
+  });
 }
 
 function addCollapsedMapAttribution(map) {
@@ -716,12 +741,13 @@ function bindContactMap() {
   try {
     CONTACT_MAP = new window.maplibregl.Map({
       container: mapElement,
-      style: createEsriStreetMapStyle(),
+      style: createEsriMapStyle(),
       center: [121.0, 14.65],
       zoom: 10,
       cooperativeGestures: true,
       attributionControl: false
     });
+    bindMapStyleToggle(CONTACT_MAP, document.getElementById("contactMapStyleToggle"));
     CONTACT_MAP.addControl(new window.maplibregl.NavigationControl({ showCompass: false }), "top-right");
     CONTACT_MAP.once("load", () => {
       addCollapsedMapAttribution(CONTACT_MAP);
@@ -1437,6 +1463,7 @@ function restoreBookingTargetFromDraft() {
 function bindBookingMap() {
   const mapElement = document.getElementById("bookingMap");
   const fullscreenButton = document.getElementById("bookingMapFullscreen");
+  const styleToggleButton = document.getElementById("bookingMapStyleToggle");
   const bookingPanel = document.querySelector(".booking-panel");
   const siteHeader = document.getElementById("siteHeader");
   const searchInput = document.getElementById("bookingMapSearchInput");
@@ -1580,12 +1607,13 @@ function bindBookingMap() {
   try {
     BOOKING_MAP = new window.maplibregl.Map({
       container: mapElement,
-      style: createEsriStreetMapStyle(),
+      style: createEsriMapStyle(),
       center: [121.0, 14.65],
       zoom: 10,
       cooperativeGestures: true,
       attributionControl: false
     });
+    bindMapStyleToggle(BOOKING_MAP, styleToggleButton);
     BOOKING_MAP.addControl(new window.maplibregl.NavigationControl({ showCompass: false }), "top-right");
     BOOKING_MAP.on("load", () => {
       addCollapsedMapAttribution(BOOKING_MAP);
