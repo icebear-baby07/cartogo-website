@@ -569,7 +569,7 @@ function showBookingSnapConnection(target) {
     anchor: "bottom"
   }).setLngLat([target.originalLng, target.originalLat]).addTo(BOOKING_MAP);
   document.getElementById("bookingMapSnapStatusText").textContent =
-    `Moved ${Math.round(target.snappedDistanceMeters)} m to the nearest verified residential location. The dotted line links your original point to the selected pin.`;
+    `The nearest road I can point to the destination is ${target.label} (${(target.snappedDistanceMeters / 1000).toFixed(2)} km away). The dotted line links your original point to the selected pin.`;
   document.getElementById("bookingMapSnapStatus").hidden = false;
 }
 
@@ -958,6 +958,7 @@ function scheduleBookingRoutePreview(location) {
   clearBookingNearestRoute();
   if (!PICKUP_POINTS.length) return;
   const sequence = BOOKING_ROUTE_SEQUENCE;
+  let roadLocation = location;
   BOOKING_ROUTE_TIMER = window.setTimeout(async () => {
     BOOKING_ROUTE_TIMER = null;
     BOOKING_ROUTE_CONTROLLER = new AbortController();
@@ -969,13 +970,16 @@ function scheduleBookingRoutePreview(location) {
         showBookingOutOfBoundsPreview();
         return;
       }
+      roadLocation = validation.snapped
+        ? { lat: validation.latitude, lng: validation.longitude }
+        : location;
       setBookingRouteLoading();
-      const nearest = await findNearestPickupByRoad(location, BOOKING_ROUTE_CONTROLLER.signal);
+      const nearest = await findNearestPickupByRoad(roadLocation, BOOKING_ROUTE_CONTROLLER.signal);
       if (sequence !== BOOKING_ROUTE_SEQUENCE || BOOKING_TARGET) return;
-      updateMapDistance(location, "", nearest, "driving");
+      updateMapDistance(roadLocation, "", nearest, "driving");
       try {
         setBookingRouteLoading();
-        const route = await findDrivingRoute(location, nearest, BOOKING_ROUTE_CONTROLLER.signal);
+        const route = await findDrivingRoute(roadLocation, nearest, BOOKING_ROUTE_CONTROLLER.signal);
         if (sequence !== BOOKING_ROUTE_SEQUENCE || BOOKING_TARGET) return;
         displayBookingNearestRoute(route, nearest);
       } catch (error) {
@@ -985,7 +989,7 @@ function scheduleBookingRoutePreview(location) {
     } catch (error) {
       if (error.name === "AbortError" || sequence !== BOOKING_ROUTE_SEQUENCE) return;
       console.warn("OSRM road distance is unavailable for the map preview; using straight-line distance.", error);
-      updateMapDistance(location, "", null, "fallback");
+      updateMapDistance(roadLocation, "", null, "fallback");
     } finally {
       if (sequence === BOOKING_ROUTE_SEQUENCE) {
         BOOKING_ROUTE_CONTROLLER = null;
@@ -1187,7 +1191,7 @@ function getBookingHoverValidation(location) {
   const request = fetch("/api/target-location/validate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ latitude: location.lat, longitude: location.lng }),
+    body: JSON.stringify({ latitude: location.lat, longitude: location.lng, snapInvalid: true }),
     signal: controller.signal
   }).then(async response => {
     const data = await response.json();
@@ -1221,9 +1225,17 @@ function scheduleBookingLocationPreview(location) {
       return;
     }
     if (sequence !== BOOKING_PREVIEW_LOOKUP_SEQUENCE || BOOKING_TARGET) return;
-    setBookingLocationPreview(result.valid
-      ? result.label || "No exact mapped place name is available here."
-      : result.reason || result.label || "This point is not a verified residential location.");
+    if (result.valid && result.snapped) {
+      setBookingLocationPreview(
+        `${result.label || "Verified road"} (${(result.snapDistanceMeters / 1000).toFixed(2)} km away)`,
+        "The nearest road I can point to the destination is "
+      );
+      BOOKING_PREVIEW_MARKER?.setLngLat([result.longitude, result.latitude]);
+    } else {
+      setBookingLocationPreview(result.valid
+        ? result.label || "No exact mapped place name is available here."
+        : result.reason || result.label || "This point is not a verified residential location.");
+    }
   }, 650);
 }
 
@@ -1312,9 +1324,9 @@ async function resolveBookingTargetRegion(target) {
       !Number.isFinite(result.latitude)
       || !Number.isFinite(result.longitude)
       || !Number.isFinite(result.snapDistanceMeters)
-      || result.snapDistanceMeters > 150
+      || result.snapDistanceMeters < 0
     ) {
-      clearBookingTarget("The nearby location could not be verified within 150 m. Choose another map point.");
+      clearBookingTarget("The nearest road could not be verified. Choose another map point.");
       return;
     }
     target.lat = result.latitude;

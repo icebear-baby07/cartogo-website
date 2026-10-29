@@ -282,7 +282,7 @@ class TargetLocationValidationTests(unittest.TestCase):
 		lookup.assert_called_once_with(14.7, 121.0, True)
 		handler.send_json.assert_called_once_with(200, result)
 
-	def test_invalid_target_snaps_to_verified_residential_road_within_75_metres(self):
+	def test_invalid_target_snaps_to_verified_accessible_road_without_distance_limit(self):
 		def response(payload):
 			mock_response = MagicMock()
 			mock_response.__enter__.return_value = mock_response
@@ -298,13 +298,13 @@ class TargetLocationValidationTests(unittest.TestCase):
 			}),
 			response({
 				"code": "Ok",
-				"waypoints": [{"location": [121.0001, 14.7001], "distance": 15.2}],
+				"waypoints": [{"location": [121.0001, 14.7001], "distance": 1250.2}],
 			}),
 			response({
-				"display_name": "Residential Road, Quezon City",
+				"display_name": "Main Road, Quezon City",
 				"category": "highway",
-				"type": "residential",
-				"address": {"road": "Residential Road", "neighbourhood": "Example Neighborhood", "city": "Quezon City"},
+				"type": "primary",
+				"address": {"road": "Main Road", "city": "Quezon City"},
 			}),
 		]) as open_url, patch("server.TARGET_LOCATION_CACHE", {}), \
 			patch("server.TARGET_LOCATION_LAST_REQUEST_AT", 0), \
@@ -315,11 +315,11 @@ class TargetLocationValidationTests(unittest.TestCase):
 		self.assertTrue(result["snapped"])
 		self.assertEqual(result["latitude"], 14.7001)
 		self.assertEqual(result["longitude"], 121.0001)
-		self.assertEqual(result["snapDistanceMeters"], 15.2)
+		self.assertEqual(result["snapDistanceMeters"], 1250.2)
 		self.assertIn("nearest/v1/driving/121.000000,14.700000", open_url.call_args_list[1].args[0].full_url)
-		self.assertIn("radiuses=75", open_url.call_args_list[1].args[0].full_url)
+		self.assertIn("radiuses=unlimited", open_url.call_args_list[1].args[0].full_url)
 
-	def test_invalid_target_is_not_snapped_beyond_75_metres(self):
+	def test_invalid_target_snaps_beyond_previous_distance_limit(self):
 		def response(payload):
 			mock_response = MagicMock()
 			mock_response.__enter__.return_value = mock_response
@@ -337,13 +337,20 @@ class TargetLocationValidationTests(unittest.TestCase):
 				"code": "Ok",
 				"waypoints": [{"location": [121.001, 14.701], "distance": 75.1}],
 			}),
+			response({
+				"display_name": "Main Road, Quezon City",
+				"category": "highway",
+				"type": "primary",
+				"address": {"road": "Main Road", "city": "Quezon City"},
+			}),
 		]), patch("server.TARGET_LOCATION_CACHE", {}), \
 			patch("server.TARGET_LOCATION_LAST_REQUEST_AT", 0), \
 			patch("server.time.time", return_value=100), patch("server.time.sleep"):
 			result = lookup_target_location(14.7, 121.0, snap_invalid=True)
 
-		self.assertFalse(result["valid"])
-		self.assertIn("within 75 m", result["reason"])
+		self.assertTrue(result["valid"])
+		self.assertTrue(result["snapped"])
+		self.assertEqual(result["snapDistanceMeters"], 75.1)
 
 	def test_search_returns_valid_philippines_results_and_caches_queries(self):
 		handler_response = MagicMock()
@@ -387,13 +394,12 @@ class TargetLocationValidationTests(unittest.TestCase):
 		self.assertTrue(result["valid"])
 		self.assertEqual(result["label"], "Road, Neighborhood, Quezon City")
 
-	def test_rejects_unmapped_ocean_and_mountain_locations(self):
+	def test_rejects_unmapped_ocean_mountain_and_track_locations(self):
 		cases = (
 			{"error": "Unable to geocode"},
 			{"category": "natural", "type": "ocean", "address": {"sea": "Pacific Ocean"}},
 			{"category": "natural", "type": "peak", "address": {"mountain": "Remote Peak"}},
 			{"category": "highway", "type": "track", "address": {"road": "Remote Track"}},
-			{"category": "highway", "type": "primary", "address": {"road": "Main Road", "city": "Quezon City"}},
 		)
 
 		for location in cases:
@@ -401,6 +407,16 @@ class TargetLocationValidationTests(unittest.TestCase):
 				result = assess_target_location(location)
 				self.assertFalse(result["valid"])
 				self.assertIn("reason", result)
+
+	def test_accepts_a_mapped_accessible_road_outside_a_residential_area(self):
+		result = assess_target_location({
+			"display_name": "Main Road",
+			"category": "highway",
+			"type": "primary",
+			"address": {"road": "Main Road"},
+		})
+
+		self.assertTrue(result["valid"])
 
 	def test_unverified_reverse_lookup_keeps_place_name_for_the_hover_preview(self):
 		result = assess_target_location({

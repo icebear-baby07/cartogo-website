@@ -1,20 +1,18 @@
-1. I want it to be like this:
-- After a successful "send inquiry", the record should reflect to "Pending Review" panel as default in admin.html.
+(FOR USER SIDE)
 
-1.1. When moving any record from one tab to another, it should have a various confirmation dialogue (Depending on the tab) before proceeding, design the dialogue display as well.
-
-1.2. Add the missing scrollbar in delete window (admin.html/inquiries)
-
-
-2. (In admin panel), default open the "Inquiries" tab during first load
-- Replace the spinner with contents; "Contacted" and "Confirmed" with just an icon pertaining to the Confirmed tab (A caret icon / Greater-than sign, include color highlight and animation when hovered)
-- Add a fill color (according to their respective color hues) to 4 tabs (Pending review, Confirmed, Operating, Rejected) when hovered
+1. Include 
+1.1 Structure the site to allow tourist spots by eliminating locked types list in server.py
+- Base it on the nearest accessible road, instead of listi
+1.2 Limit the scope of operations to only have the whole Luzon's boundaries (including the click and hover actions)
 
 
-3. (In admin panel) Replace "Contacted" with "Operating"
-- Order them like this; 1. Pending Overview, 2. Confirmed, 3. Operating, 4. Rejected
-- Don't give the "Operating" tab any content yet but this "This part is reserved to track current units in use".
+2. Modify the existing Hero Section (Under this section "Clean, well-maintained cars, clear rental rates, and easy reservations. Get on the road with carTOGO.mnl.", this section should not require a complete filled form, thus, should not throw any error prompts but rather, just query any inputed values to fetch from database, separate a session filled from this than the main inquiry form tab at the bottom.)
+2.1 It should be constructed as a progressive modal: Allow for incomplete info forms to display using the list below.
+2.2 (Part A) Include these in order; 1. "Pickup Location" spinner (have our coordinates from the DB), 2. (Eyebrow design) Pickup Date (on the left) / Return date (on the right), 3. Number of seats required (Line it up for max of 5 (for specific variants), and max 7 (for other variants)), 4. Transmission (Radio selection: Any, Automatic, Manual), 5. (Optional) Destination searchbar with hint of random destination (Keep it concise (e.g. Cities, Popular Destination Sites, Etc.)), 6. A checkbox and a link for terms and conditions, 7. Submit button (non-technical CTA to disguise submission text). These should be considered only as an initial inventory inquiry and should not reflect into a real, valid inquiry to prevent errors.
+2.3 (Part B) After the user filled up the PART A, a modal dialog should pop up to display in blurred background showing these remaining information; 1. Almost There! (HEADER), along with supporting text, 2. Full name (Any order should be valid), 3. Contact info (either email address or contact number), it should reflect to admin through a specified display on their tab, 4. Submit button CTA disguised for non-technical users.
 
 
-ADDITIONAL INSTRUCTIONS:
-Verify changes to smaller devices too.
+3. Comparison Tab (Tabular, Dynamic—Can compare two or more variants in a table (adjustable size)), place it under the hero section.
+
+4. Relocate the pricing table of each unit under the comparison tab. Make it a skeletal structure (containing dynamic number of info—2 units horizontally in desktops and wider screens, and 1 unit in smaller devices.)
+4.1 Each unit should have the following (keep blank if currently none); 1. A photo, 2. (Under the photo) Unit name (displayed in bold text), 3. (under unit name) vehicle type/classification and the maximum number of seats excluding the driver seat, so sub 1 seat (both separated with a small dot in the middle), 4. (Under vehicle type) Lowest price per deal, 5. (Under price deal) Progressive transparent button "View Details" to disguise submit button. In smaller screens, consider changing the layout from vertical to horizontal (atleast only at the photo, (contents should still be vertical but in smaller font))

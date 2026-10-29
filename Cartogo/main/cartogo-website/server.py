@@ -53,7 +53,6 @@ TARGET_LOCATION_CACHE_LOCK = Lock()
 TARGET_LOCATION_REQUEST_LOCK = Lock()
 TARGET_LOCATION_LAST_REQUEST_AT = 0
 TARGET_LOCATION_CACHE_TTL = 86400
-TARGET_LOCATION_SNAP_MAX_METERS = 75
 
 
 class TargetLocationServiceError(RuntimeError):
@@ -242,15 +241,18 @@ def assess_target_location(result):
 	has_settlement = any(address.get(key) for key in (
 		"neighbourhood", "suburb", "city_district", "city", "town", "village", "hamlet"
 	))
+	accessible_road = category == "highway" and feature_type in {
+		"living_street", "motorway", "motorway_link", "primary", "primary_link",
+		"residential", "road", "secondary", "secondary_link", "service", "tertiary",
+		"tertiary_link", "trunk", "trunk_link", "unclassified",
+	}
 	residential_context = (
 		(category == "building" and feature_type in {
 			"apartments", "bungalow", "detached", "house", "residential", "semidetached_house", "terrace"
 		})
 		or (category == "landuse" and feature_type == "residential")
 		or (category == "place" and feature_type in {"neighbourhood", "suburb", "village", "hamlet"})
-		or (category == "highway" and feature_type in {
-			"living_street", "residential", "road", "service", "tertiary", "tertiary_link", "unclassified"
-		})
+		or (category == "highway" and feature_type in {"living_street", "residential", "road", "service", "tertiary", "tertiary_link", "unclassified"})
 	)
 	if category in blocked_categories or feature_type in blocked_types:
 		return {
@@ -258,11 +260,11 @@ def assess_target_location(result):
 			"label": label,
 			"reason": "Choose a road-connected residential location, not water, natural terrain, or a non-residential site.",
 		}
-	if not has_road or not has_settlement or not residential_context:
+	if not has_road or not (accessible_road or (has_settlement and residential_context)):
 		return {
 			"valid": False,
 			"label": label,
-			"reason": "We couldn't verify a mapped residential road or building in a populated area. Choose a clearer location within a town or neighborhood.",
+			"reason": "We couldn't verify an accessible mapped road or residential location. Choose another point near a road.",
 		}
 	return {
 		"valid": True,
@@ -324,7 +326,7 @@ def lookup_target_location(latitude, longitude, snap_invalid=False):
 def snap_target_location(latitude, longitude, original_assessment):
 	request = Request(
 		f"https://router.project-osrm.org/nearest/v1/driving/{longitude:.6f},{latitude:.6f}"
-		f"?number=1&radiuses={TARGET_LOCATION_SNAP_MAX_METERS}",
+		"?number=1&radiuses=unlimited",
 		headers={"Accept": "application/json", "User-Agent": "carTOGO.mnl website location selection"},
 	)
 	try:
@@ -349,11 +351,12 @@ def snap_target_location(latitude, longitude, original_assessment):
 		or len(location) != 2
 		or isinstance(distance, bool)
 		or not isinstance(distance, (int, float))
-		or not 0 <= distance <= TARGET_LOCATION_SNAP_MAX_METERS
+		or not math.isfinite(distance)
+		or distance < 0
 	):
 		return {
 			**original_assessment,
-			"reason": f"I couldn't find a suitable place within {TARGET_LOCATION_SNAP_MAX_METERS} m. Please choose a point closer to a road or neighborhood.",
+			"reason": "I couldn't find a suitable mapped road for this location. Please choose another point.",
 		}
 
 	snapped_longitude, snapped_latitude = location
