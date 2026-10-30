@@ -8,7 +8,7 @@
 	<link rel="preconnect" href="https://fonts.googleapis.com">
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 	<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-	<link rel="stylesheet" href="assets/ui/chat.css">
+	<link rel="stylesheet" href="assets/ui/chat.css?v=account-chat-hint-20261030">
 </head>
 <body>
 	<div id="homePage">
@@ -44,6 +44,10 @@
 
 		<main class="chat-body" id="chatBody" aria-live="polite">
 			<div class="day-label">Today</div>
+			<div class="chat-account-prompt" id="chatAccountPrompt" hidden>
+				<p id="chatAccountPromptText">Sign in to save your chats with me to your account.</p>
+				<button type="button" id="chatAccountSignIn">Sign in</button>
+			</div>
 			<div class="welcome">
 				<span class="mini-avatar" aria-hidden="true">
 					<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4.75 5.75h14.5v10.5H11l-5.5 3v-3H4.75V5.75Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 10h8M8 13h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
@@ -113,6 +117,6 @@
 	</section>
 	</div>
 
-	<script src="assets/back/chat.js"></script>
+	<script src="assets/back/chat.js?v=account-chat-hint-20261030"></script>
 </body>
 </html>

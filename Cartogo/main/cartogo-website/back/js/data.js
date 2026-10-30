@@ -273,6 +273,7 @@ const DB = {
     return (remote.data || []).map(session => ({
       id: session.id,
       username: session.username || "Guest",
+      userId: session.user_id || null,
       startedAt: session.started_at,
       lastMessageAt: session.last_message_at,
       messages: session.messages || []
@@ -282,6 +283,7 @@ const DB = {
     const remote = await supa.from("chat_sessions").upsert([{
       id: session.id,
       username: session.username || "Guest",
+      user_id: session.userId || null,
       started_at: session.startedAt,
       last_message_at: session.lastMessageAt,
       messages: session.messages

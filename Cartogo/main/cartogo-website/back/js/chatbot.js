@@ -4,7 +4,10 @@ const chatbotShell = document.getElementById("chatbotShell");
 const chatbotLauncher = document.getElementById("chatbotLauncher");
 const chatbotFrame = document.getElementById("chatbotFrame");
 const siteHeader = document.getElementById("siteHeader");
+const accountDialog = document.getElementById("accountDialog");
+const accountDialogClose = document.getElementById("accountDialogClose");
 let activeChatSession = null;
+let activeChatIdentity = null;
 let launcherDrag = null;
 let suppressLauncherClick = false;
 let chatCloseTimer = null;
@@ -17,6 +20,62 @@ updateChatbotHeaderOffset();
 window.addEventListener("resize", updateChatbotHeaderOffset);
 window.addEventListener("scroll", updateChatbotHeaderOffset, { passive: true });
 
+function getVerifiedGoogleIdentity(user) {
+  const providers = [
+    user?.app_metadata?.provider,
+    ...(Array.isArray(user?.app_metadata?.providers) ? user.app_metadata.providers : []),
+    ...(Array.isArray(user?.identities) ? user.identities.map(identity => identity.provider) : [])
+  ];
+  const emailVerified = user?.user_metadata?.email_verified === true
+    || user?.user_metadata?.email_verified === "true"
+    || Boolean(user?.email_confirmed_at || user?.confirmed_at);
+  if (!user?.id || !providers.includes("google") || !emailVerified) return null;
+  const profile = user.user_metadata || {};
+  const name = String(profile.full_name || profile.name || [
+    profile.given_name,
+    profile.middle_name,
+    profile.family_name
+  ].filter(Boolean).join(" ") || "Google user").trim().slice(0, 160);
+  return { userId: user.id, username: name || "Google user" };
+}
+
+function syncChatAccountState() {
+  if (!chatbotFrame.hasAttribute("src") || !chatbotFrame.contentWindow) return;
+  chatbotFrame.contentWindow.postMessage({
+    type: "cartogo-chat-account-state",
+    account: activeChatIdentity
+      ? { authenticated: true, userId: activeChatIdentity.userId, username: activeChatIdentity.username }
+      : { authenticated: false }
+  }, CHATBOT_URL.origin);
+}
+
+function updateChatAccountIdentity(user) {
+  activeChatIdentity = getVerifiedGoogleIdentity(user);
+  syncChatAccountState();
+  if (!activeChatIdentity || !activeChatSession
+    || (activeChatSession.userId && activeChatSession.userId !== activeChatIdentity.userId)) return;
+  activeChatSession.userId = activeChatIdentity.userId;
+  activeChatSession.username = activeChatIdentity.username;
+  const session = activeChatSession;
+  window.setTimeout(() => {
+    DB.saveChatSession(session).catch(error => console.error("Chat session account binding could not be saved.", error));
+  }, 0);
+}
+
+chatbotFrame.addEventListener("load", syncChatAccountState);
+supabaseAuthSession();
+supa.auth.onAuthStateChange((_event, session) => updateChatAccountIdentity(session?.user || null));
+
+function supabaseAuthSession() {
+  supa.auth.getSession().then(({ data, error }) => {
+    if (error) {
+      console.error("Chat account sign-in status could not be checked.", error);
+      return;
+    }
+    updateChatAccountIdentity(data.session?.user || null);
+  }).catch(error => console.error("Chat account sign-in status could not be checked.", error));
+}
+
 const openChat = () => {
   clearTimeout(chatCloseTimer);
   chatbotShell.classList.remove("is-closing", "is-returning");
@@ -24,7 +83,7 @@ const openChat = () => {
   chatbotLauncher.hidden = true;
   chatbotLauncher.setAttribute("aria-expanded", "true");
   chatbotFrame.hidden = false;
-  chatbotFrame.src = `${CHATBOT_URL}?embed=1`;
+  chatbotFrame.src = `${CHATBOT_URL}?embed=1&v=account-chat-hint-20261030`;
   window.requestAnimationFrame(() => {
     window.requestAnimationFrame(() => chatbotShell.classList.remove("is-opening"));
   });
@@ -135,6 +194,11 @@ window.addEventListener("message", event => {
     closeChat();
   } else if (event.data?.type === "cartogo-chat-fullscreen") {
     chatbotShell.classList.toggle("expanded", event.data.enabled === true);
+  } else if (event.data?.type === "cartogo-chat-ready") {
+    syncChatAccountState();
+  } else if (event.data?.type === "cartogo-chat-account-request") {
+    if (!accountDialog.open) accountDialog.showModal();
+    accountDialogClose.focus();
   } else if (event.data?.type === "cartogo-chat-message") {
     saveChatMessage(event.data);
   }
@@ -145,11 +209,16 @@ function saveChatMessage(data) {
   if (!activeChatSession || activeChatSession.id !== data.sessionId) {
     activeChatSession = {
       id: data.sessionId,
-      username: "Guest",
+      username: activeChatIdentity?.username || "Guest",
+      userId: activeChatIdentity?.userId || null,
       startedAt: data.createdAt,
       lastMessageAt: data.createdAt,
       messages: []
     };
+  }
+  if (activeChatIdentity) {
+    activeChatSession.username = activeChatIdentity.username;
+    activeChatSession.userId = activeChatIdentity.userId;
   }
   activeChatSession.messages.push({ role: data.role, content: data.content, createdAt: data.createdAt });
   activeChatSession.lastMessageAt = data.createdAt;

@@ -2058,6 +2058,16 @@ function bindBookingForm() {
   const authStatus = document.getElementById("bookingAuthStatus");
   const authCopy = document.getElementById("bookingAuthCopy");
   const signoutDialog = document.getElementById("signoutConfirmation");
+  const accountButton = document.getElementById("accountButton");
+  const accountDialog = document.getElementById("accountDialog");
+  const accountDialogClose = document.getElementById("accountDialogClose");
+  const accountDialogProfile = document.getElementById("accountDialogProfile");
+  const accountDialogName = document.getElementById("accountDialogName");
+  const accountDialogEmail = document.getElementById("accountDialogEmail");
+  const accountDialogDescription = document.getElementById("accountDialogDescription");
+  const accountDialogAction = document.getElementById("accountDialogAction");
+  const accountDialogNote = document.getElementById("accountDialogNote");
+  const accountDialogBookingLink = document.getElementById("accountDialogBookingLink");
   const cancelSignOutButton = document.getElementById("cancelSignOutButton");
   const confirmSignOutButton = document.getElementById("confirmSignOutButton");
   const signoutConfirmationError = document.getElementById("signoutConfirmationError");
@@ -2135,6 +2145,20 @@ function bindBookingForm() {
   const updateVerificationUI = () => {
     const isGoogle = hasVerifiedGoogleAccount(currentUser);
     const phoneInput = document.getElementById("bookingPhone");
+    const profileName = getGoogleProfileName(currentUser);
+    accountButton.classList.toggle("is-signed-in", isGoogle);
+    accountButton.setAttribute("aria-label", isGoogle ? "View signed-in account details" : "View account details");
+    accountButton.title = isGoogle ? `Signed in as ${currentUser.email || profileName}` : "Account";
+    accountDialogProfile.hidden = !isGoogle;
+    accountDialogName.textContent = profileName || "Google account";
+    accountDialogEmail.textContent = currentUser?.email || "";
+    accountDialogDescription.textContent = isGoogle
+      ? "Your Google account details will be used automatically when you send a booking inquiry."
+      : "Sign in with Google to have your details ready when you send a booking inquiry.";
+    accountDialogAction.innerHTML = isGoogle
+      ? '<i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i><span>Sign out</span>'
+      : '<i class="fa-brands fa-google" aria-hidden="true"></i><span>Continue with Google</span>';
+    accountDialogNote.hidden = isGoogle;
     document.getElementById("bookingGuestNote").hidden = isGoogle;
     const profile = currentUser?.user_metadata || {};
     const profilePhone = String(profile.phone_number || profile.phone || "").trim();
@@ -2450,6 +2474,16 @@ function bindBookingForm() {
   });
 
   restoreDraft();
+  accountButton.addEventListener("click", () => accountDialog.showModal());
+  accountDialogClose.addEventListener("click", () => accountDialog.close());
+  accountDialog.addEventListener("click", event => {
+    if (event.target === accountDialog) accountDialog.close();
+  });
+  accountDialogBookingLink.addEventListener("click", () => accountDialog.close());
+  accountDialogAction.addEventListener("click", () => {
+    accountDialog.close();
+    googleButton.click();
+  });
   cancelSignOutButton.addEventListener("click", () => signoutDialog.close());
   signoutDialog.addEventListener("click", event => {
     if (event.target === signoutDialog) signoutDialog.close();

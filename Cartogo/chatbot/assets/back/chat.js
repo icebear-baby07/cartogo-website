@@ -23,16 +23,44 @@ const agentSendButton = document.querySelector("#agentSendButton");
 const footerContactPrompt = document.querySelector("#footerContactPrompt");
 const footerContactButton = document.querySelector("#footerContactButton");
 const footerContactDismiss = document.querySelector("#footerContactDismiss");
+const chatAccountPrompt = document.querySelector("#chatAccountPrompt");
+const chatAccountPromptText = document.querySelector("#chatAccountPromptText");
+const chatAccountSignIn = document.querySelector("#chatAccountSignIn");
 const suggestions = document.querySelectorAll(".suggestion");
 const embeddedMode = window.parent !== window && new URLSearchParams(window.location.search).get("embed") === "1";
 const embedParentOrigin = document.referrer ? new URL(document.referrer).origin : window.location.origin;
 let activeChatMode = "bot";
 let agentState = "idle";
+let currentAccountId = null;
 if (embeddedMode) document.body.classList.add("embedded-mode");
+else chatAccountPrompt.hidden = true;
 
 function notifyEmbedParent(type, payload = {}) {
 	if (embeddedMode) window.parent.postMessage({ type, ...payload }, embedParentOrigin);
 }
+
+window.addEventListener("message", (event) => {
+	if (!embeddedMode || event.source !== window.parent || event.origin !== embedParentOrigin) return;
+	if (event.data?.type !== "cartogo-chat-account-state") return;
+
+	const account = event.data.account;
+	const accountId = account?.authenticated === true && typeof account.userId === "string"
+		&& /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(account.userId)
+		? account.userId
+		: null;
+	if (accountId !== currentAccountId) {
+		currentAccountId = accountId;
+		userId = accountId || anonymousUserId;
+		sessionId = createId();
+		window.sessionStorage.setItem("cartogoChatSessionId", sessionId);
+	}
+
+	chatAccountPrompt.hidden = false;
+	chatAccountPromptText.textContent = accountId
+		? "This chat is saved with your Google account."
+		: "Sign in to save your chats with me to your account.";
+	chatAccountSignIn.hidden = Boolean(accountId);
+});
 
 function updateChatMode() {
 	const showingAgent = activeChatMode === "agent";
@@ -180,19 +208,27 @@ function renderAssistantReply(bubble, text) {
 	bubble.replaceChildren(content);
 }
 
+function createId() {
+	const randomBytes = new Uint8Array(16);
+	window.crypto.getRandomValues(randomBytes);
+	return Array.from(randomBytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 function getOrCreateId(storage, key) {
 	let identifier = storage.getItem(key);
 	if (!identifier) {
-		const randomBytes = new Uint8Array(16);
-		window.crypto.getRandomValues(randomBytes);
-		identifier = Array.from(randomBytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+		identifier = createId();
 		storage.setItem(key, identifier);
 	}
 	return identifier;
 }
 
-const userId = getOrCreateId(window.localStorage, "cartogoAnonymousUserId");
-const sessionId = getOrCreateId(window.sessionStorage, "cartogoChatSessionId");
+const anonymousUserId = getOrCreateId(window.localStorage, "cartogoAnonymousUserId");
+let userId = anonymousUserId;
+let sessionId = embeddedMode
+	? createId()
+	: getOrCreateId(window.sessionStorage, "cartogoChatSessionId");
+if (embeddedMode) window.sessionStorage.setItem("cartogoChatSessionId", sessionId);
 
 function openChat() {
 	launcher.hidden = true;
@@ -212,6 +248,8 @@ function showFooterContactPrompt() {
 
 launcher.addEventListener("click", openChat);
 if (embeddedMode) openChat();
+chatAccountSignIn.addEventListener("click", () => notifyEmbedParent("cartogo-chat-account-request"));
+if (embeddedMode) notifyEmbedParent("cartogo-chat-ready");
 botModeButton.addEventListener("click", () => switchChatMode("bot"));
 agentModeButton.addEventListener("click", () => switchChatMode("agent"));
 collapseButton.addEventListener("click", () => {

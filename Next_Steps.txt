@@ -1,18 +1,17 @@
-(FOR USER SIDE)
+Part 1. Account binding (google account)
+- Add an icon on the left side of the "RESERVE A CAR" part of the header.
+- It should be an icon by default for now.
+- Allow it to be clickable that displays a modal once clicked (For viewing account details).
+- The account used should result in automatic sign in when booking an inquiry.
 
-1. Include 
-1.1 Structure the site to allow tourist spots by eliminating locked types list in server.py
-- Base it on the nearest accessible road, instead of listi
-1.2 Limit the scope of operations to only have the whole Luzon's boundaries (including the click and hover actions)
-
-
-2. Modify the existing Hero Section (Under this section "Clean, well-maintained cars, clear rental rates, and easy reservations. Get on the road with carTOGO.mnl.", this section should not require a complete filled form, thus, should not throw any error prompts but rather, just query any inputed values to fetch from database, separate a session filled from this than the main inquiry form tab at the bottom.)
-2.1 It should be constructed as a progressive modal: Allow for incomplete info forms to display using the list below.
-2.2 (Part A) Include these in order; 1. "Pickup Location" spinner (have our coordinates from the DB), 2. (Eyebrow design) Pickup Date (on the left) / Return date (on the right), 3. Number of seats required (Line it up for max of 5 (for specific variants), and max 7 (for other variants)), 4. Transmission (Radio selection: Any, Automatic, Manual), 5. (Optional) Destination searchbar with hint of random destination (Keep it concise (e.g. Cities, Popular Destination Sites, Etc.)), 6. A checkbox and a link for terms and conditions, 7. Submit button (non-technical CTA to disguise submission text). These should be considered only as an initial inventory inquiry and should not reflect into a real, valid inquiry to prevent errors.
-2.3 (Part B) After the user filled up the PART A, a modal dialog should pop up to display in blurred background showing these remaining information; 1. Almost There! (HEADER), along with supporting text, 2. Full name (Any order should be valid), 3. Contact info (either email address or contact number), it should reflect to admin through a specified display on their tab, 4. Submit button CTA disguised for non-technical users.
+Additional Instructions:
+1.1. Adjust it for smaller devices sizes
+1.2. Allow design changes of each component when hovered, clicked, or hold
+1.3. have this text "You can also send an inquiry as a guest." be clickable that acts as a link to go into inquiry section for convenience
 
 
-3. Comparison Tab (Tabular, Dynamic—Can compare two or more variants in a table (adjustable size)), place it under the hero section.
+Part 2. Bind the account to an AI chat session ID if the chatbot is used.
+- I want a subtle placeholder or anything similar that can hold this intent: "Interact with me to log in, so that the chats you have with the bot will stay persistent."
 
-4. Relocate the pricing table of each unit under the comparison tab. Make it a skeletal structure (containing dynamic number of info—2 units horizontally in desktops and wider screens, and 1 unit in smaller devices.)
-4.1 Each unit should have the following (keep blank if currently none); 1. A photo, 2. (Under the photo) Unit name (displayed in bold text), 3. (under unit name) vehicle type/classification and the maximum number of seats excluding the driver seat, so sub 1 seat (both separated with a small dot in the middle), 4. (Under vehicle type) Lowest price per deal, 5. (Under price deal) Progressive transparent button "View Details" to disguise submit button. In smaller screens, consider changing the layout from vertical to horizontal (atleast only at the photo, (contents should still be vertical but in smaller font))
+Additional Instructions:
+- Disregard semantic memory (from user-to-bot past conversations) for now, but prepare it for application.

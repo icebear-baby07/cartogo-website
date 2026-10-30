@@ -266,6 +266,18 @@ input, select, textarea{ font-family: inherit; font-size: 1rem; }
 }
 .nav-links a:hover::after{ width:100%; }
 .header-actions{ display:flex; align-items:center; gap:1rem; }
+.header-account{
+  position:relative; flex:none; width:42px; height:42px; display:grid; place-items:center;
+  border:1px solid var(--line); border-radius:50%; background:var(--paper); color:var(--asphalt);
+  font-size:1rem; cursor:pointer; transition:background 0.18s ease, color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+.header-account:hover{ transform:translateY(-2px); border-color:var(--signal); background:var(--signal); color:var(--paper); }
+.header-account:active{ transform:scale(0.94); }
+.header-account:focus-visible{ outline:3px solid var(--signal); outline-offset:3px; }
+.header-account.is-signed-in::after{
+  content:""; position:absolute; right:1px; bottom:1px; width:9px; height:9px;
+  border:2px solid var(--concrete); border-radius:50%; background:#258448;
+}
 .nav-toggle{ display:none; background:none; border:none; padding:0.4rem; }
 .nav-toggle span{ display:block; width:24px; height:2px; background:var(--asphalt); margin:5px 0; }
 
@@ -786,6 +798,33 @@ body.has-map-fullscreen .site-header,body.has-contact-map-fullscreen .site-heade
 .signout-confirmation-actions .btn{ min-width:7rem; }
 .signout-confirmation-error{ color:var(--danger)!important; }
 .signout-confirmation-error[hidden]{ display:none; }
+.account-dialog{
+  width:min(27rem, calc(100vw - 2rem)); max-width:none; max-height:min(90dvh, 36rem); margin:auto; padding:0; overflow:auto;
+  border:1px solid var(--line); border-top:4px solid var(--signal); border-radius:var(--radius-md);
+  background:var(--paper); color:var(--ink); box-shadow:0 24px 80px rgba(20,20,20,0.28);
+}
+.account-dialog[open]{ display:block; animation:signout-dialog-in 0.2s ease both; }
+.account-dialog::backdrop{ background:rgba(20,20,20,0.36); backdrop-filter:blur(8px); }
+.account-dialog-inner{ padding:clamp(1.25rem, 4vw, 2rem); }
+.account-dialog-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:1.2rem; }
+.account-dialog-avatar{ width:3.5rem; height:3.5rem; display:grid; place-items:center; border-radius:50%; background:var(--concrete); color:var(--asphalt); font-size:1.35rem; }
+.account-dialog-close{ width:40px; height:40px; }
+.account-dialog-inner .eyebrow{ margin:0 0 0.4rem; }
+.account-dialog-inner h2{ margin:0; font-size:clamp(1.4rem, 5vw, 1.8rem); line-height:1.2; }
+.account-dialog-description,.account-dialog-note{ color:var(--slate); font-size:0.9rem; line-height:1.55; }
+.account-dialog-description{ margin:0.7rem 0 1.1rem; }
+.account-dialog-profile{ display:grid; gap:0.3rem; margin:1rem 0; padding:0.9rem 1rem; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--concrete); overflow-wrap:anywhere; }
+.account-dialog-profile[hidden]{ display:none; }
+.account-dialog-name{ font-weight:700; }
+.account-dialog-email{ color:var(--slate); font-size:0.9rem; }
+.account-dialog-verified{ display:flex; align-items:center; gap:0.4rem; margin-top:0.3rem; color:#258448; font-size:0.78rem; font-weight:700; }
+.account-dialog-action{ width:100%; display:flex; align-items:center; justify-content:center; gap:0.55rem; }
+.account-dialog-action:active{ transform:scale(0.98); }
+.account-dialog-note{ margin:0.85rem 0 0; text-align:center; }
+.account-dialog-note[hidden]{ display:none; }
+.account-dialog-booking-link{ color:var(--signal); text-decoration:underline; text-underline-offset:0.2em; }
+.account-dialog-booking-link:hover{ color:var(--danger); }
+.account-dialog-booking-link:focus-visible{ border-radius:2px; outline:2px solid var(--signal); outline-offset:3px; }
 @keyframes signout-dialog-in{ from{ opacity:0; transform:translateY(8px) scale(0.98); } to{ opacity:1; transform:none; } }
 .reservation-recap-inner{ padding:0 clamp(1.25rem, 4vw, 2rem) clamp(1.25rem, 4vw, 2rem); }
 .recap-header{ position:sticky; top:0; z-index:2; display:flex; align-items:center; justify-content:space-between; gap:1rem; margin:0 calc(-1 * clamp(1.25rem, 4vw, 2rem)) 0.75rem; padding:clamp(0.85rem, 2.5vw, 1.25rem) clamp(1.25rem, 4vw, 2rem); border-bottom:1px solid var(--line); background:var(--paper); }
@@ -956,6 +995,9 @@ body.has-map-fullscreen .site-header,body.has-contact-map-fullscreen .site-heade
   .site-header.open .nav-links .mobile-nav-cta{ display:inline-flex; }
 }
 @media (max-width: 680px){
+  .site-header .wrap{ gap:0.75rem; }
+  .header-actions{ gap:0.6rem; }
+  .header-account{ width:40px; height:40px; }
   .hero-art{ min-height:0; }
   .hero-shortcuts-wrap{ margin-bottom:1.5rem; }
   .hero-shortcuts{ grid-template-columns: minmax(0, 1fr); min-width:0; transform:none; margin-top:1.25rem; }
