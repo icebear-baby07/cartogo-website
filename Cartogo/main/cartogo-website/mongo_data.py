@@ -1,9 +1,9 @@
 import os
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from pymongo import MongoClient, ReturnDocument
-from pymongo.errors import PyMongoError
+from pymongo.errors import DuplicateKeyError, PyMongoError
 
 
 INQUIRY_LOCATION_FIELDS = (
@@ -28,7 +28,7 @@ class MongoDataStore:
 	def __init__(self, client, database_name, units_collection, site_assets_collection,
 			site_content_collection, inquiries_collection, sequences_collection,
 			site_database_name=None, admin_roles_collection="admin_roles",
-			chat_sessions_collection="chat_sessions"):
+			chat_sessions_collection="chat_sessions", email_outbox_collection="email_outbox"):
 		self.client = client
 		self.database = client[database_name]
 		self.site_database = client[site_database_name or database_name]
@@ -39,6 +39,7 @@ class MongoDataStore:
 		self.sequences = self.site_database[sequences_collection]
 		self.admin_roles = self.site_database[admin_roles_collection]
 		self.chat_sessions = self.site_database[chat_sessions_collection]
+		self.email_outbox = self.database[email_outbox_collection]
 
 	@classmethod
 	def from_environment(cls):
@@ -46,11 +47,11 @@ class MongoDataStore:
 		if not uri:
 			raise RuntimeError("MONGODB_URI is not configured on the website server.")
 		try:
-			client = MongoClient(uri, serverSelectionTimeoutMS=5000)
+			client = MongoClient(uri, serverSelectionTimeoutMS=5000, timeoutMS=10000)
 			client.admin.command("ping")
 		except PyMongoError as error:
 			raise RuntimeError(f"Could not connect to MongoDB ({type(error).__name__}). Check the website server configuration.") from None
-		return cls(
+		store = cls(
 			client,
 			os.environ.get("MONGODB_DATABASE", "cartogo").strip() or "cartogo",
 			os.environ.get("MONGODB_UNITS_COLLECTION", "vehicles").strip() or "vehicles",
@@ -61,7 +62,19 @@ class MongoDataStore:
 			os.environ.get("MONGODB_SITE_DATABASE", "Site").strip() or "Site",
 			os.environ.get("MONGODB_ADMIN_ROLES_COLLECTION", "admin_roles").strip() or "admin_roles",
 			os.environ.get("MONGODB_CHAT_SESSIONS_COLLECTION", "chat_sessions").strip() or "chat_sessions",
+			os.environ.get("MONGODB_EMAIL_OUTBOX_COLLECTION", "email_outbox").strip() or "email_outbox",
 		)
+		store.inquiries.create_index(
+			"client_request_id",
+			unique=True,
+			sparse=True,
+			name="client_request_id_unique",
+		)
+		store.email_outbox.create_index(
+			[("status", 1), ("next_attempt_at", 1), ("created_at", 1)],
+			name="email_outbox_pending",
+		)
+		return store
 
 	@staticmethod
 	def _public_document(document):
@@ -69,6 +82,7 @@ class MongoDataStore:
 			return None
 		document = dict(document)
 		document.pop("_id", None)
+		document.pop("client_request_id", None)
 		return document
 
 	def ensure_admin_role_definitions(self):
@@ -222,7 +236,11 @@ class MongoDataStore:
 			for document in self.inquiries.find({}).sort("created_at", -1)
 		]
 
-	def add_inquiry(self, inquiry):
+	def add_inquiry(self, inquiry, client_request_id=None):
+		if client_request_id:
+			existing = self.get_inquiry_by_client_request_id(client_request_id)
+			if existing is not None:
+				return existing
 		inquiry_id = self._next_id("inquiries", self.inquiries)
 		timestamp = datetime.now(timezone.utc).isoformat()
 		document = {
@@ -235,8 +253,77 @@ class MongoDataStore:
 			"created_at": timestamp,
 			"verified_at": timestamp,
 		}
-		self.inquiries.insert_one(document)
+		if client_request_id:
+			document["client_request_id"] = client_request_id
+		try:
+			self.inquiries.insert_one(document)
+		except DuplicateKeyError:
+			if not client_request_id:
+				raise
+			existing = self.get_inquiry_by_client_request_id(client_request_id)
+			if existing is None:
+				raise
+			return existing
 		return self._public_document(document)
+
+	def get_inquiry_by_client_request_id(self, client_request_id):
+		document = self.inquiries.find_one({"client_request_id": client_request_id})
+		return self._public_document(document) if document is not None else None
+
+	def enqueue_inquiry_confirmation(self, inquiry):
+		inquiry_id = inquiry["id"]
+		timestamp = datetime.now(timezone.utc)
+		self.email_outbox.update_one(
+			{"_id": f"inquiry-confirmation:{inquiry_id}"},
+			{"$setOnInsert": {
+				"inquiry_id": inquiry_id,
+				"inquiry": inquiry,
+				"status": "queued",
+				"attempts": 0,
+				"created_at": timestamp,
+				"next_attempt_at": timestamp,
+			}},
+			upsert=True,
+		)
+
+	def claim_inquiry_confirmation(self, now=None):
+		now = now or datetime.now(timezone.utc)
+		return self.email_outbox.find_one_and_update(
+			{"$or": [
+				{"status": "queued", "next_attempt_at": {"$lte": now}},
+				{"status": "processing", "locked_at": {"$lte": now - timedelta(minutes=5)}},
+			]},
+			{
+				"$set": {"status": "processing", "locked_at": now},
+				"$inc": {"attempts": 1},
+			},
+			sort=[("created_at", 1)],
+			return_document=ReturnDocument.AFTER,
+		)
+
+	def mark_inquiry_confirmation_sent(self, outbox_id):
+		self.email_outbox.update_one(
+			{"_id": outbox_id, "status": "processing"},
+			{"$set": {
+				"status": "sent",
+				"sent_at": datetime.now(timezone.utc),
+			}, "$unset": {"locked_at": "", "last_error": ""}},
+		)
+
+	def retry_inquiry_confirmation(self, outbox_id, attempts, error_type):
+		now = datetime.now(timezone.utc)
+		failed = attempts >= 5
+		delay_seconds = min(60 * (2 ** max(0, attempts - 1)), 3600)
+		updates = {
+			"status": "failed" if failed else "queued",
+			"last_error": error_type,
+		}
+		if not failed:
+			updates["next_attempt_at"] = now + timedelta(seconds=delay_seconds)
+		self.email_outbox.update_one(
+			{"_id": outbox_id, "status": "processing"},
+			{"$set": updates, "$unset": {"locked_at": ""}},
+		)
 
 	def remove_inquiry_location_data(self):
 		result = self.inquiries.update_many(

@@ -23,7 +23,17 @@ class MongoInitializerTests(unittest.TestCase):
 		)
 		store.inquiries.create_index.assert_any_call("id", unique=True)
 		store.inquiries.create_index.assert_any_call([("created_at", -1)])
+		store.inquiries.create_index.assert_any_call(
+			"client_request_id",
+			unique=True,
+			sparse=True,
+			name="client_request_id_unique",
+		)
 		store.chat_sessions.create_index.assert_called_once_with("last_message_at")
+		store.email_outbox.create_index.assert_called_once_with(
+			[("status", 1), ("next_attempt_at", 1), ("created_at", 1)],
+			name="email_outbox_pending",
+		)
 
 	def test_starter_assets_are_inserted_only_into_an_empty_collection(self):
 		store = MagicMock()

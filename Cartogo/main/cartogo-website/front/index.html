@@ -213,6 +213,7 @@
                     <input type="time" id="bookingPickupTime" required>
                     <input type="hidden" id="bookingReturn">
                   </div>
+                  <p class="booking-date-time-prompt span-2" id="bookingDateTimePrompt" role="alert" hidden>Please, pick an appropriate date and time.</p>
                   <div class="field span-2">
                     <label for="bookingRateArea">Rate area</label>
                     <select id="bookingRateArea" required>
@@ -262,8 +263,6 @@
                 </div>
               </details>
             </div>
-            <button type="submit" class="btn btn-primary btn-block booking-submit booking-submit-desktop" style="margin-top:1.25rem;">Send Inquiry</button>
-            <div class="form-msg" id="formMsg"></div>
           </form>
           <div class="booking-info">
             <div class="booking-auth-cta">
@@ -318,7 +317,8 @@
               <label for="bookingNotes">Notes <small class="field-note">optional</small></label>
               <textarea id="bookingNotes" form="bookingForm" rows="3" placeholder="Extra driver, child seat, airport flight number, etc."></textarea>
             </div>
-            <button type="submit" form="bookingForm" class="btn btn-primary btn-block booking-submit booking-submit-mobile">Send Inquiry</button>
+            <button type="submit" form="bookingForm" class="btn btn-primary btn-block booking-submit span-2">Send Inquiry</button>
+            <div class="form-msg span-2" id="formMsg"></div>
           </div>
         </div>
 
@@ -541,8 +541,8 @@
 <script src="../config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
-<script src="../back/js/data.js?v=step9.5-email-design"></script>
-<script src="../back/js/main.js?v=fullscreen-header-hidden"></script>
+<script src="../back/js/data.js?v=inquiry-debug-v1"></script>
+<script src="../back/js/main.js?v=inquiry-debug-v3"></script>
 <script src="../back/js/chatbot.js?v=account-chat-hint-20261030"></script>
 </body>
 </html>

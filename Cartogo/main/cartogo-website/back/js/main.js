@@ -1846,11 +1846,22 @@ function renderBookingEstimate() {
   deposit.textContent = formatCurrency(Math.round(rentalSubtotal * depositPercent / 100), SETTINGS.currency);
 }
 
+function isValidBookingPickupDateTime(pickupDate, pickupTime) {
+  if (!pickupDate || !pickupTime) return false;
+  const [year, month, day] = pickupDate.split("-").map(Number);
+  const [hour, minute] = pickupTime.split(":").map(Number);
+  const selectedDateTime = new Date(year, month - 1, day, hour, minute);
+  const now = new Date();
+  now.setSeconds(0, 0);
+  return !Number.isNaN(selectedDateTime.getTime()) && selectedDateTime >= now;
+}
+
 function bindBookingEstimate() {
   const capacityInput = document.getElementById("bookingCapacity");
   const carSelect = document.getElementById("bookingCar");
   const pickupInput = document.getElementById("bookingPickup");
   const pickupTimeInput = document.getElementById("bookingPickupTime");
+  const pickupDateTimePrompt = document.getElementById("bookingDateTimePrompt");
   const rateAreaSelect = document.getElementById("bookingRateArea");
   const returnInput = document.getElementById("bookingReturn");
   const daysInput = document.getElementById("bookingRentalDays");
@@ -1874,6 +1885,16 @@ function bindBookingEstimate() {
   pickupInput.addEventListener("change", syncPickupDateTimeConstraints);
   pickupTimeInput.addEventListener("focus", syncPickupDateTimeConstraints);
   pickupTimeInput.addEventListener("change", syncPickupDateTimeConstraints);
+  const clearPickupDateTimePromptWhenValid = () => {
+    if (isValidBookingPickupDateTime(pickupInput.value, pickupTimeInput.value)) {
+      pickupDateTimePrompt.hidden = true;
+    }
+  };
+  pickupInput.addEventListener("input", clearPickupDateTimePromptWhenValid);
+  pickupTimeInput.addEventListener("input", clearPickupDateTimePromptWhenValid);
+  document.getElementById("bookingForm").addEventListener("reset", () => {
+    pickupDateTimePrompt.hidden = true;
+  });
   pickupTimeInput.addEventListener("change", event => {
     event.currentTarget.blur();
   });
@@ -2111,7 +2132,8 @@ function bindBookingForm() {
   const cancelSignOutButton = document.getElementById("cancelSignOutButton");
   const confirmSignOutButton = document.getElementById("confirmSignOutButton");
   const signoutConfirmationError = document.getElementById("signoutConfirmationError");
-  const submitButton = form.querySelector("[type=submit]");
+  const submitButton = form.querySelector("[type=submit]")
+    || document.querySelector('[type="submit"][form="bookingForm"]');
   const draftKey = "cartogo.bookingDraft";
   const signInPendingKey = "cartogo.customerGoogleSignInPending";
   const authToast = document.getElementById("authToast");
@@ -2324,10 +2346,10 @@ function bindBookingForm() {
     sessionStorage.removeItem(draftKey);
     form.reset();
     msg.className = "form-msg success";
-    msg.textContent = result.emailNotificationSent
-      ? `Thanks, ${inquiry.name}. Your inquiry was received. A confirmation email is on its way.`
-      : `Thanks, ${inquiry.name}. Your inquiry was received, but we couldn't send the confirmation email. Our team will follow up using your phone number.`;
-    showAuthToast("Booking request received successfully.");
+    msg.textContent = result.emailNotificationQueued
+      ? `Thanks, ${inquiry.name}. Your inquiry was received. A confirmation email is queued.`
+      : `Thanks, ${inquiry.name}. Your inquiry was received, but we couldn't queue the confirmation email. Our team will follow up using your phone number.`;
+    showAuthToast("Success! We'll get in touch with you shortly.");
     updateVerificationUI();
   };
 
@@ -2336,6 +2358,23 @@ function bindBookingForm() {
     month: "short",
     day: "numeric"
   });
+
+  const createInquiryRequestId = () => {
+    if (typeof window.crypto?.randomUUID === "function") return window.crypto.randomUUID();
+
+    const bytes = new Uint8Array(16);
+    if (typeof window.crypto?.getRandomValues === "function") {
+      window.crypto.getRandomValues(bytes);
+    } else {
+      for (let index = 0; index < bytes.length; index += 1) {
+        bytes[index] = Math.floor(Math.random() * 256);
+      }
+    }
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  };
 
   const openReservationRecap = inquiry => {
     document.getElementById("recapName").textContent = inquiry.name;
@@ -2362,12 +2401,24 @@ function bindBookingForm() {
     recapDialog.setAttribute("aria-busy", "false");
     recapError.hidden = true;
     recapError.textContent = "";
-    pendingInquiry = { ...inquiry, email: inquiry.email || currentUser?.email || "" };
+    pendingInquiry = {
+      ...inquiry,
+      email: inquiry.email || currentUser?.email || "",
+      clientRequestId: createInquiryRequestId()
+    };
     recapDialog.showModal();
   };
 
   const closeReservationRecap = () => {
-    if (isSendingInquiry) return;
+    if (isSendingInquiry) {
+      console.log("[booking] Recap close ignored while inquiry is submitting", {
+        requestId: pendingInquiry?.clientRequestId
+      });
+      return;
+    }
+    console.log("[booking] Recap closed before submission", {
+      requestId: pendingInquiry?.clientRequestId
+    });
     pendingInquiry = null;
     recapDialog.close();
   };
@@ -2375,15 +2426,34 @@ function bindBookingForm() {
   recapCloseButton.addEventListener("click", closeReservationRecap);
   recapEditButton.addEventListener("click", closeReservationRecap);
   recapDialog.addEventListener("cancel", event => {
-    if (isSendingInquiry) event.preventDefault();
+    if (isSendingInquiry) {
+      event.preventDefault();
+      console.log("[booking] Escape close ignored while inquiry is submitting", {
+        requestId: pendingInquiry?.clientRequestId
+      });
+    }
   });
   recapDialog.addEventListener("close", () => {
     if (!isSendingInquiry) pendingInquiry = null;
   });
   recapConfirmButton.addEventListener("click", async () => {
-    if (!pendingInquiry || isSendingInquiry) return;
+    if (!pendingInquiry || isSendingInquiry) {
+      console.log("[booking] Confirm click ignored", {
+        hasPendingInquiry: Boolean(pendingInquiry),
+        isSendingInquiry
+      });
+      return;
+    }
+    const requestId = pendingInquiry.clientRequestId;
+    console.log("[booking] Confirm clicked", {
+      requestId,
+      recapOpen: recapDialog.open
+    });
     const isGoogle = hasVerifiedGoogleAccount(currentUser);
     if (!isGoogle && (!guestEmailVerificationToken || guestEmailVerifiedAddress !== pendingInquiry.email.toLowerCase())) {
+      console.warn("[booking] Guest confirmation blocked: verified email is unavailable or changed", {
+        requestId
+      });
       recapError.textContent = "Verify your email address before confirming this guest inquiry.";
       recapError.hidden = false;
       return;
@@ -2397,16 +2467,22 @@ function bindBookingForm() {
     recapEditButton.disabled = true;
     submitButton.disabled = true;
     submitButton.textContent = "Sending…";
+    console.log("[booking] Submission UI locked", { requestId });
     try {
       await persistInquiry(pendingInquiry, {
         userId: isGoogle ? currentUser.id : null,
         verificationMethod: isGoogle ? "google_oauth" : "email_otp",
         status: "pending_review"
       });
+      console.log("[booking] Inquiry submission completed", { requestId });
       pendingInquiry = null;
       recapDialog.close();
     } catch (err) {
-      console.error(err);
+      console.error("[booking] Inquiry submission returned an error", {
+        requestId,
+        errorName: err.name || "Error",
+        message: err.message
+      });
       recapError.textContent = `Could not submit your inquiry: ${err.message || "Please try again."}`;
       recapError.hidden = false;
     } finally {
@@ -2418,6 +2494,7 @@ function bindBookingForm() {
       recapEditButton.disabled = false;
       submitButton.disabled = false;
       submitButton.textContent = "Send Inquiry";
+      console.log("[booking] Submission UI unlocked", { requestId });
     }
   });
 
@@ -2622,6 +2699,7 @@ function bindBookingForm() {
     msg.className = "form-msg";
     msg.textContent = "";
     const inquiry = collectInquiry();
+    const pickupDateTimePrompt = document.getElementById("bookingDateTimePrompt");
     const lastName = document.getElementById("bookingLastName").value.trim();
     const firstName = document.getElementById("bookingFirstName").value.trim();
     const isGoogle = hasVerifiedGoogleAccount(currentUser);
@@ -2634,18 +2712,15 @@ function bindBookingForm() {
       return;
     }
     if ((!isGoogle && (!lastName || !firstName)) || (isGoogle && !inquiry.name) || !inquiry.carId || !inquiry.pickupDate || !inquiry.pickupTime) {
+      if (!inquiry.pickupDate || !inquiry.pickupTime) pickupDateTimePrompt.hidden = false;
       msg.className = "form-msg error";
       msg.textContent = isGoogle && !inquiry.name
         ? "Your Google account did not provide a profile name. Add a name to your Google profile and sign in again."
         : "Please fill in your name, unit, pickup date, and pickup time.";
       return;
     }
-    const [pickupYear, pickupMonth, pickupDay] = inquiry.pickupDate.split("-").map(Number);
-    const [pickupHour, pickupMinute] = inquiry.pickupTime.split(":").map(Number);
-    const pickupDateTime = new Date(pickupYear, pickupMonth - 1, pickupDay, pickupHour, pickupMinute);
-    const now = new Date();
-    now.setSeconds(0, 0);
-    if (Number.isNaN(pickupDateTime.getTime()) || pickupDateTime < now) {
+    if (!isValidBookingPickupDateTime(inquiry.pickupDate, inquiry.pickupTime)) {
+      pickupDateTimePrompt.hidden = false;
       msg.className = "form-msg error";
       msg.textContent = "Please, pick an appropriate date and time.";
       document.getElementById("bookingPickup").focus();

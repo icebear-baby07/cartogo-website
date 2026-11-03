@@ -15,6 +15,7 @@ from server import (
 	assess_target_location,
 	build_branded_email,
 	lookup_target_location,
+	process_inquiry_email_job,
 	search_target_locations,
 	send_branded_email,
 	send_inquiry_confirmation,
@@ -457,15 +458,66 @@ class InquiryLocationEnforcementTests(unittest.TestCase):
 			patch.object(WebsiteHandler, "normalize_public_inquiry", return_value=inquiry), \
 			patch("server.get_mongo_store", return_value=store), \
 			patch("server.lookup_target_location") as lookup_location, \
-			patch("server.send_inquiry_confirmation"):
+			patch("server.start_inquiry_email_outbox_worker"):
 			handler.create_inquiry()
 
 		lookup_location.assert_not_called()
-		store.add_inquiry.assert_called_once_with(inquiry)
+		store.add_inquiry.assert_called_once_with(inquiry, None)
+		store.enqueue_inquiry_confirmation.assert_called_once_with({"id": 42})
 		handler.send_json.assert_called_once_with(
 			201,
-			{"data": {"id": 42}, "emailNotificationSent": True},
+			{"data": {"id": 42}, "emailNotificationQueued": True},
 		)
+
+	def test_guest_retry_reuses_saved_inquiry_without_reclaiming_email_verification(self):
+		request_id = "9a73516c-c37c-4123-a70f-ec747450cc83"
+		inquiry = {"email": "customer@example.com"}
+		handler = object.__new__(WebsiteHandler)
+		handler.headers = {}
+		handler.read_json = Mock(return_value={"clientRequestId": request_id})
+		handler.send_json = Mock()
+		handler.log_message = Mock()
+		store = Mock()
+		store.get_inquiry_by_client_request_id.return_value = {"id": 42}
+		with patch.object(WebsiteHandler, "normalize_public_inquiry", return_value=inquiry), \
+			patch.object(WebsiteHandler, "claim_guest_email_verification") as claim_verification, \
+			patch("server.get_mongo_store", return_value=store), \
+			patch("server.start_inquiry_email_outbox_worker"):
+			handler.create_inquiry()
+
+		claim_verification.assert_not_called()
+		store.add_inquiry.assert_not_called()
+		store.enqueue_inquiry_confirmation.assert_called_once_with({"id": 42})
+		handler.send_json.assert_called_once_with(
+			201,
+			{"data": {"id": 42}, "emailNotificationQueued": True},
+		)
+
+
+class InquiryEmailOutboxTests(unittest.TestCase):
+	def test_successful_delivery_marks_the_job_sent(self):
+		store = Mock()
+		job = {"_id": "inquiry-confirmation:42", "inquiry_id": 42, "inquiry": {"email": "customer@example.com"}}
+		with patch("server.sys.stdout", new_callable=io.StringIO), \
+			patch("server.send_inquiry_confirmation") as send_email:
+			delivered = process_inquiry_email_job(store, job)
+
+		self.assertTrue(delivered)
+		send_email.assert_called_once_with(job["inquiry"])
+		store.mark_inquiry_confirmation_sent.assert_called_once_with(job["_id"])
+		store.retry_inquiry_confirmation.assert_not_called()
+
+	def test_failed_delivery_is_logged_and_scheduled_for_retry(self):
+		store = Mock()
+		job = {"_id": "inquiry-confirmation:42", "inquiry_id": 42, "attempts": 2, "inquiry": {}}
+		with patch("server.send_inquiry_confirmation", side_effect=RuntimeError("SMTP unavailable")), \
+			patch("server.sys.stderr", new_callable=io.StringIO) as error_log, \
+			patch("server.sys.stdout", new_callable=io.StringIO):
+			delivered = process_inquiry_email_job(store, job)
+
+		self.assertFalse(delivered)
+		store.retry_inquiry_confirmation.assert_called_once_with(job["_id"], 2, "RuntimeError")
+		self.assertIn("Inquiry 42", error_log.getvalue())
 
 class GuestEmailVerificationTests(unittest.TestCase):
 	def setUp(self):
@@ -643,7 +695,7 @@ class BrandedEmailTests(unittest.TestCase):
 		self.assertIn("Fairview &amp; Quezon City", args[5])
 		self.assertNotIn("Alex <Customer>", args[5])
 
-	def test_saved_inquiry_succeeds_when_confirmation_email_fails(self):
+	def test_saved_inquiry_succeeds_when_confirmation_email_cannot_be_queued(self):
 		token = "receipt-test-token"
 		GUEST_EMAIL_VERIFICATIONS[token] = {
 			"email": "customer@example.com",
@@ -687,8 +739,9 @@ class BrandedEmailTests(unittest.TestCase):
 		handler.log_message = Mock()
 		store = Mock()
 		store.add_inquiry.return_value = {"id": 42}
+		store.enqueue_inquiry_confirmation.side_effect = RuntimeError("MongoDB unavailable")
 		with patch("server.get_mongo_store", return_value=store), \
-			patch("server.send_inquiry_confirmation", side_effect=RuntimeError("SMTP unavailable")):
+			patch("server.start_inquiry_email_outbox_worker") as start_worker:
 			handler.create_inquiry()
 
 		saved_inquiry = store.add_inquiry.call_args.args[0]
@@ -702,10 +755,11 @@ class BrandedEmailTests(unittest.TestCase):
 		} & saved_inquiry.keys())
 		handler.send_json.assert_called_once_with(
 			201,
-			{"data": {"id": 42}, "emailNotificationSent": False},
+			{"data": {"id": 42}, "emailNotificationQueued": False},
 		)
 		self.assertNotIn(token, GUEST_EMAIL_VERIFICATIONS)
-		handler.log_message.assert_called_once()
+		start_worker.assert_not_called()
+		self.assertTrue(any("could not be queued" in call.args[0] for call in handler.log_message.call_args_list))
 
 
 class InquiryRejectionTests(unittest.TestCase):

@@ -148,51 +148,103 @@ const DB = {
     });
   },
   async addInquiry(inquiry) {
-    let accessToken = null;
-    if (inquiry.googleAuthenticated) {
-      const { data, error } = await supa.auth.getSession();
-      if (error) throw error;
-      accessToken = data.session?.access_token;
-      if (!accessToken) throw new Error("Your Google sign-in expired. Sign in again or submit as a guest.");
-    }
-    const payload = {
-      name: inquiry.name,
-      firstName: inquiry.firstName,
-      lastName: inquiry.lastName,
-      middleName: inquiry.middleName,
-      suffix: inquiry.suffix,
-      email: inquiry.email,
-      emailVerificationToken: inquiry.emailVerificationToken || null,
-      carId: inquiry.carId,
-      carName: inquiry.carName,
-      phone: inquiry.phone,
-      rentalMode: inquiry.rentalMode,
-      capacity: inquiry.capacity,
-      pickupDate: inquiry.pickupDate,
-      pickupTime: inquiry.pickupTime,
-      returnDate: inquiry.returnDate,
-      rateRegion: inquiry.rateRegion,
-      rentalPeriodHours: inquiry.rentalPeriodHours,
-      estimatedRentalHours: inquiry.estimatedRentalHours,
-      ratePerPeriod: inquiry.ratePerPeriod,
-      rentalDays: inquiry.rentalDays,
-      discountPercent: inquiry.discountPercent,
-      discountAmount: inquiry.discountAmount,
-      quotedRate: inquiry.quotedRate,
-      notes: inquiry.notes,
-      secondaryPhone: inquiry.secondaryPhone || null
-    };
-    const requestHeaders = { "Content-Type": "application/json" };
-    if (accessToken) requestHeaders.Authorization = `Bearer ${accessToken}`;
-    const result = await siteDataRequest("/api/inquiries", {
-      method: "POST",
-      headers: requestHeaders,
-      body: JSON.stringify(payload)
+    const requestId = inquiry.clientRequestId || "missing";
+    const requestStartedAt = performance.now();
+    console.log("[booking] Inquiry request started", {
+      requestId,
+      authentication: inquiry.googleAuthenticated ? "google" : "guest"
     });
-    return {
-      data: result.data,
-      emailNotificationSent: result.emailNotificationSent === true
-    };
+    const controller = new AbortController();
+    let timeoutId;
+    const request = (async () => {
+      let accessToken = null;
+      if (inquiry.googleAuthenticated) {
+        const sessionStartedAt = performance.now();
+        console.log("[booking] Checking Google session", { requestId });
+        const { data, error } = await supa.auth.getSession();
+        if (error) throw error;
+        accessToken = data.session?.access_token;
+        if (!accessToken) throw new Error("Your Google sign-in expired. Sign in again or submit as a guest.");
+        console.log("[booking] Google session ready", {
+          requestId,
+          durationMs: Math.round(performance.now() - sessionStartedAt)
+        });
+      }
+      const payload = {
+        name: inquiry.name,
+        firstName: inquiry.firstName,
+        lastName: inquiry.lastName,
+        middleName: inquiry.middleName,
+        suffix: inquiry.suffix,
+        email: inquiry.email,
+        emailVerificationToken: inquiry.emailVerificationToken || null,
+        carId: inquiry.carId,
+        carName: inquiry.carName,
+        phone: inquiry.phone,
+        rentalMode: inquiry.rentalMode,
+        capacity: inquiry.capacity,
+        pickupDate: inquiry.pickupDate,
+        pickupTime: inquiry.pickupTime,
+        returnDate: inquiry.returnDate,
+        rateRegion: inquiry.rateRegion,
+        rentalPeriodHours: inquiry.rentalPeriodHours,
+        estimatedRentalHours: inquiry.estimatedRentalHours,
+        ratePerPeriod: inquiry.ratePerPeriod,
+        rentalDays: inquiry.rentalDays,
+        discountPercent: inquiry.discountPercent,
+        discountAmount: inquiry.discountAmount,
+        quotedRate: inquiry.quotedRate,
+        notes: inquiry.notes,
+        clientRequestId: inquiry.clientRequestId,
+        secondaryPhone: inquiry.secondaryPhone || null
+      };
+      const requestHeaders = { "Content-Type": "application/json" };
+      if (accessToken) requestHeaders.Authorization = `Bearer ${accessToken}`;
+      const apiStartedAt = performance.now();
+      console.log("[booking] Sending inquiry to website API", { requestId });
+      const result = await siteDataRequest("/api/inquiries", {
+        method: "POST",
+        headers: requestHeaders,
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      console.log("[booking] Website API responded", {
+        requestId,
+        durationMs: Math.round(performance.now() - apiStartedAt),
+        totalDurationMs: Math.round(performance.now() - requestStartedAt),
+        emailNotificationQueued: result.emailNotificationQueued === true
+      });
+      return {
+        data: result.data,
+        emailNotificationQueued: result.emailNotificationQueued === true
+      };
+    })();
+    const timeout = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        controller.abort();
+        console.error("[booking] Inquiry request timed out", {
+          requestId,
+          durationMs: Math.round(performance.now() - requestStartedAt)
+        });
+        reject(new Error("INQUIRY_REQUEST_TIMEOUT"));
+      }, 60000);
+    });
+    try {
+      return await Promise.race([request, timeout]);
+    } catch (error) {
+      if (error.message === "INQUIRY_REQUEST_TIMEOUT") {
+        throw new Error("We couldn't confirm the inquiry within one minute. It may already have been received; retrying this same request is safe.");
+      }
+      console.error("[booking] Inquiry request failed", {
+        requestId,
+        durationMs: Math.round(performance.now() - requestStartedAt),
+        errorName: error.name || "Error",
+        status: error.status ?? null
+      });
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   },
   async requestGuestEmailCode(email) {
     try {

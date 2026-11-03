@@ -69,7 +69,7 @@ On first launch, the launcher creates `main\cartogo-website\.env` from `.env.exa
 | `SUPABASE_ANON_KEY` | That project's publishable/anon key. This is not the service-role key. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-only service-role key. Needed for Owner-approved allowlist changes and migrations; never put it in browser code or share it. |
 | `MONGODB_URI` | MongoDB connection URI. Use a database user with read/write privileges for the databases below. |
-| `MONGODB_DATABASE` | Usually `cartogo`; stores customer inquiries. |
+| `MONGODB_DATABASE` | Usually `cartogo`; stores customer inquiries and the email outbox. |
 | `MONGODB_SITE_DATABASE` | Usually `Site`; stores fleet, site assets, site content, sequences, roles, and website chat sessions. |
 | `CARTOGO_INITIAL_OWNER_EMAIL` | The exact email address of the first administrator you will bootstrap in Supabase. |
 | `SMTP_USER`, `SMTP_APP_PASSWORD` | Gmail address and Google-generated app password for email delivery. |
@@ -77,6 +77,8 @@ On first launch, the launcher creates `main\cartogo-website\.env` from `.env.exa
 | `SMTP_FROM` | Optional sender address; usually the same address as `SMTP_USER`. |
 
 The checked-in `.env.example` has the remaining collection names and defaults. Keep the actual `.env` private and local; it is ignored by Git. Never expose the MongoDB URI or Supabase service-role key through `config.js`, browser JavaScript, or a public repository.
+
+`MONGODB_EMAIL_OUTBOX_COLLECTION` defaults to `email_outbox`. The website saves confirmation-email jobs there and sends them in the background, so a slow SMTP server does not keep a successful booking inquiry waiting. Failed sends retry with backoff up to five times; inspect the outbox collection for jobs marked `failed`.
 
 For MongoDB Atlas, also allow the device/server's network address in the Atlas network access list. Avoid broad public access unless you understand and accept the exposure.
 
@@ -102,7 +104,7 @@ py -3 back\db\initialize_mongodb.py --seed-starter-assets
 
 The initializer:
 
-- Creates the website's unique vehicle ID index, unique site-asset indexes, inquiry ID and date indexes, and chat-session date index.
+- Creates the website's unique vehicle ID index, unique site-asset indexes, inquiry ID/date/idempotency indexes, email-outbox processing index, and chat-session date index.
 - Inserts the default public site-content document only if it does not already exist.
 - Creates/updates the Owner and Moderator permission definitions in MongoDB.
 - Synchronizes vehicle, site-asset, and inquiry ID sequences to existing records.
@@ -199,6 +201,7 @@ Removing the old SQL files from this repository does not run SQL against Supabas
 - **Admin page says the account is not authorized:** Run the bootstrap SQL in the same project used by the website, verify the Google account email, and sign in again.
 - **Admin can sign in but lacks Owner access:** Confirm `CARTOGO_INITIAL_OWNER_EMAIL` matches the allowlisted account and that the MongoDB role record was not previously assigned a different title.
 - **Owner PIN or guest verification email does not arrive:** Check `SMTP_USER`, `SMTP_APP_PASSWORD`, `SMTP_HOST`, `SMTP_PORT`, and `SMTP_FROM`; use a Google app password rather than the normal account password.
+- **Inquiry confirmation email is delayed:** The inquiry is saved independently from email delivery. Check the `email_outbox` collection (or the configured `MONGODB_EMAIL_OUTBOX_COLLECTION`) for queued/failed jobs and review the website server log for retry errors.
 - **Site content is not initialized:** Rerun the MongoDB initializer and check its output and MongoDB write permissions.
 - **Pickup/contact list is empty:** On a blank installation, rerun with `--seed-starter-assets`; the seed only runs if the site-assets collection has no documents. If assets were migrated, verify the configured MongoDB database/collection instead.
 - **Chatbot cannot see vehicles:** Check that the chatbot uses `MONGODB_UNITS_DATABASE=Site` and `MONGODB_UNITS_COLLECTION=vehicles`, and that the fleet collection has records.

@@ -25,6 +25,7 @@ WEBSITE_ENV_KEYS = {
 	"MONGODB_SEQUENCES_COLLECTION",
 	"MONGODB_ADMIN_ROLES_COLLECTION",
 	"MONGODB_CHAT_SESSIONS_COLLECTION",
+	"MONGODB_EMAIL_OUTBOX_COLLECTION",
 }
 
 STARTER_SITE_ASSETS = (
@@ -117,7 +118,17 @@ def ensure_website_indexes(store):
 	)
 	store.inquiries.create_index("id", unique=True)
 	store.inquiries.create_index([("created_at", DESCENDING)])
+	store.inquiries.create_index(
+		"client_request_id",
+		unique=True,
+		sparse=True,
+		name="client_request_id_unique",
+	)
 	store.chat_sessions.create_index("last_message_at")
+	store.email_outbox.create_index(
+		[("status", ASCENDING), ("next_attempt_at", ASCENDING), ("created_at", ASCENDING)],
+		name="email_outbox_pending",
+	)
 
 
 def seed_site_content(store):

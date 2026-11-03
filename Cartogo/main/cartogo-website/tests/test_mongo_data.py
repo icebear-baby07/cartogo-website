@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import ANY, MagicMock, patch
+from datetime import datetime, timezone
 
 from mongo_data import MongoDataStore
 
@@ -47,6 +48,7 @@ class MongoDataStoreTests(unittest.TestCase):
 		self.sequences = self.store.sequences
 		self.admin_roles = self.store.admin_roles
 		self.chat_sessions = self.store.chat_sessions
+		self.email_outbox = self.store.email_outbox
 
 	def test_site_collections_and_sequences_use_site_database(self):
 		self.assertIs(self.store.units, self.site_database["vehicles"])
@@ -54,6 +56,7 @@ class MongoDataStoreTests(unittest.TestCase):
 		self.assertIs(self.store.site_content, self.site_database["site_content"])
 		self.assertIs(self.store.sequences, self.site_database["site_sequences"])
 		self.assertIs(self.store.inquiries, self.database["inquiries"])
+		self.assertIs(self.store.email_outbox, self.database["email_outbox"])
 
 	def test_public_unit_listing_excludes_inactive_and_hides_mongo_id(self):
 		self.units.find.return_value.sort.return_value = [
@@ -210,6 +213,61 @@ class MongoDataStoreTests(unittest.TestCase):
 			"nearest_pickup_name",
 			"nearest_pickup_distance_km",
 		} & document.keys())
+
+	def test_adding_inquiry_is_idempotent_for_a_client_request_id(self):
+		request_id = "9a73516c-c37c-4123-a70f-ec747450cc83"
+		self.inquiries.find_one.return_value = {
+			"_id": 13,
+			"id": 13,
+			"client_request_id": request_id,
+			"name": "Existing customer",
+		}
+
+		result = self.store.add_inquiry({"name": "Changed payload"}, request_id)
+
+		self.assertEqual(result, {"id": 13, "name": "Existing customer"})
+		self.sequences.find_one_and_update.assert_not_called()
+		self.inquiries.insert_one.assert_not_called()
+
+	def test_email_confirmation_is_queued_once_per_inquiry(self):
+		inquiry = {"id": 13, "email": "customer@example.com"}
+
+		self.store.enqueue_inquiry_confirmation(inquiry)
+
+		query, update = self.email_outbox.update_one.call_args.args
+		self.assertEqual(query, {"_id": "inquiry-confirmation:13"})
+		self.assertEqual(update["$setOnInsert"]["inquiry"], inquiry)
+		self.assertEqual(update["$setOnInsert"]["status"], "queued")
+		self.assertEqual(self.email_outbox.update_one.call_args.kwargs, {"upsert": True})
+
+	def test_claiming_email_confirmation_increments_attempts(self):
+		now = datetime.now(timezone.utc)
+
+		self.store.claim_inquiry_confirmation(now)
+
+		query, update = self.email_outbox.find_one_and_update.call_args.args
+		self.assertEqual(query["$or"][0], {
+			"status": "queued",
+			"next_attempt_at": {"$lte": now},
+		})
+		self.assertEqual(query["$or"][1]["status"], "processing")
+		self.assertEqual(update["$inc"], {"attempts": 1})
+		self.assertEqual(update["$set"], {"status": "processing", "locked_at": now})
+		self.assertEqual(self.email_outbox.find_one_and_update.call_args.kwargs["return_document"], ANY)
+
+	def test_failed_email_job_is_scheduled_or_marked_failed(self):
+		self.store.retry_inquiry_confirmation("job-1", 2, "SMTPException")
+
+		updates = self.email_outbox.update_one.call_args.args[1]
+		self.assertEqual(updates["$set"]["status"], "queued")
+		self.assertEqual(updates["$set"]["last_error"], "SMTPException")
+		self.assertIn("next_attempt_at", updates["$set"])
+		self.assertEqual(updates["$unset"], {"locked_at": ""})
+
+		self.store.retry_inquiry_confirmation("job-1", 5, "SMTPException")
+		updates = self.email_outbox.update_one.call_args.args[1]
+		self.assertEqual(updates["$set"]["status"], "failed")
+		self.assertNotIn("next_attempt_at", updates["$set"])
 
 	def test_location_cleanup_unsets_only_requested_inquiry_fields(self):
 		self.inquiries.update_many.return_value.modified_count = 3

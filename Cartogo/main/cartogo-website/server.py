@@ -15,7 +15,7 @@ from datetime import date
 from email.message import EmailMessage
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from threading import Lock
+from threading import Event, Lock, Thread
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, unquote, urlsplit
 from urllib.request import Request, urlopen
@@ -31,6 +31,7 @@ ENV_KEYS = {
 	"MONGODB_SITE_ASSETS_COLLECTION", "MONGODB_SITE_CONTENT_COLLECTION",
 	"MONGODB_INQUIRIES_COLLECTION", "MONGODB_SEQUENCES_COLLECTION",
 	"MONGODB_ADMIN_ROLES_COLLECTION", "MONGODB_CHAT_SESSIONS_COLLECTION",
+	"MONGODB_EMAIL_OUTBOX_COLLECTION",
 	"CARTOGO_INITIAL_OWNER_EMAIL",
 	"SMTP_USER", "SMTP_APP_PASSWORD", "SMTP_HOST", "SMTP_PORT", "SMTP_FROM",
 	"GEOCODING_CONTACT_EMAIL",
@@ -50,6 +51,9 @@ MAX_API_BODY_BYTES = 16 * 1024
 MAX_CHAT_API_BODY_BYTES = 256 * 1024
 MONGO_STORE = None
 MONGO_STORE_LOCK = Lock()
+EMAIL_OUTBOX_WORKER_LOCK = Lock()
+EMAIL_OUTBOX_WORKER = None
+EMAIL_OUTBOX_WAKEUP = Event()
 TARGET_LOCATION_CACHE = {}
 TARGET_LOCATION_SEARCH_CACHE = {}
 TARGET_LOCATION_CACHE_LOCK = Lock()
@@ -193,6 +197,66 @@ def send_inquiry_rejection(inquiry):
 		f"Reason: {reason}\n\nThank you for considering carTOGO.mnl. Please contact our team if you have "
 		"questions or would like help with another option.",
 	)
+
+
+def process_inquiry_email_job(store, job):
+	started_at = time.monotonic()
+	inquiry_id = job.get("inquiry_id", "unknown")
+	sys.stdout.write(f"Inquiry {inquiry_id} confirmation email send started.\n")
+	sys.stdout.flush()
+	try:
+		send_inquiry_confirmation(job["inquiry"])
+	except Exception as error:
+		store.retry_inquiry_confirmation(
+			job["_id"],
+			job.get("attempts", 1),
+			type(error).__name__,
+		)
+		sys.stderr.write(
+			f"Inquiry {inquiry_id} confirmation email failed after "
+			f"{round((time.monotonic() - started_at) * 1000)} ms ({type(error).__name__}).\n"
+		)
+		sys.stderr.flush()
+		return False
+	store.mark_inquiry_confirmation_sent(job["_id"])
+	sys.stdout.write(
+		f"Inquiry {inquiry_id} confirmation email sent in "
+		f"{round((time.monotonic() - started_at) * 1000)} ms.\n"
+	)
+	sys.stdout.flush()
+	return True
+
+
+def process_inquiry_email_outbox():
+	while True:
+		try:
+			store = get_mongo_store()
+			job = store.claim_inquiry_confirmation()
+			if job is None:
+				EMAIL_OUTBOX_WAKEUP.wait(2)
+				EMAIL_OUTBOX_WAKEUP.clear()
+				continue
+			process_inquiry_email_job(store, job)
+		except Exception as error:
+			sys.stderr.write(
+				f"Inquiry email outbox worker failed ({type(error).__name__}); it will retry.\n"
+			)
+			sys.stderr.flush()
+			EMAIL_OUTBOX_WAKEUP.wait(5)
+			EMAIL_OUTBOX_WAKEUP.clear()
+
+
+def start_inquiry_email_outbox_worker():
+	global EMAIL_OUTBOX_WORKER
+	with EMAIL_OUTBOX_WORKER_LOCK:
+		if EMAIL_OUTBOX_WORKER is not None and EMAIL_OUTBOX_WORKER.is_alive():
+			return
+		EMAIL_OUTBOX_WORKER = Thread(
+			target=process_inquiry_email_outbox,
+			name="inquiry-email-outbox",
+			daemon=True,
+		)
+		EMAIL_OUTBOX_WORKER.start()
 
 
 def get_mongo_store():
@@ -657,41 +721,93 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			self.send_json(503, {"error": "MongoDB inquiries are unavailable."})
 
 	def create_inquiry(self):
+		request_started_at = time.monotonic()
+		request_id = "unassigned"
 		try:
 			payload = self.read_json()
+			client_request_id = payload.get("clientRequestId")
+			if client_request_id is not None and (
+				not isinstance(client_request_id, str)
+				or not re.fullmatch(
+					r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+					r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+					client_request_id,
+				)
+			):
+				raise ValueError("The inquiry request identifier is invalid. Refresh the page and try again.")
+			request_id = client_request_id or "legacy"
+			self.log_message("Inquiry request %s started.", request_id)
+			auth_started_at = time.monotonic()
 			user = self.get_verified_google_user() if self.headers.get("Authorization") else None
+			if user:
+				self.log_message(
+					"Inquiry request %s Google verification completed in %d ms.",
+					request_id,
+					round((time.monotonic() - auth_started_at) * 1000),
+				)
 			inquiry = self.normalize_public_inquiry(payload, user)
+			mongo_started_at = time.monotonic()
+			store = get_mongo_store()
+			result = store.get_inquiry_by_client_request_id(client_request_id) if client_request_id else None
+			already_saved = result is not None
+			if already_saved:
+				self.log_message("Inquiry request %s matched an existing saved inquiry.", request_id)
 			email_verification_token = None
-			if not user:
+			if not user and not already_saved:
 				email_verification_token = payload.get("emailVerificationToken")
 				if not self.claim_guest_email_verification(email_verification_token, inquiry["email"]):
 					raise ValueError("Verify your email address before submitting the inquiry.")
 			try:
-				result = get_mongo_store().add_inquiry(inquiry)
+				if not already_saved:
+					result = store.add_inquiry(inquiry, client_request_id)
+					self.log_message(
+						"Inquiry request %s saved to MongoDB in %d ms (inquiry %s).",
+						request_id,
+						round((time.monotonic() - mongo_started_at) * 1000),
+						result.get("id", "unknown"),
+					)
 			except (RuntimeError, PyMongoError, ValueError):
 				if email_verification_token:
 					self.finish_guest_email_verification(email_verification_token, consume=False)
 				raise
 			if email_verification_token:
 				self.finish_guest_email_verification(email_verification_token, consume=True)
-			email_notification_sent = True
+			email_notification_queued = False
 			try:
-				send_inquiry_confirmation(inquiry)
-			except (OSError, RuntimeError, smtplib.SMTPException, ValueError) as error:
-				email_notification_sent = False
+				store.enqueue_inquiry_confirmation(result)
+				email_notification_queued = True
+				EMAIL_OUTBOX_WAKEUP.set()
+				start_inquiry_email_outbox_worker()
+				self.log_message("Inquiry request %s confirmation email queued.", request_id)
+			except (RuntimeError, PyMongoError, ValueError) as error:
 				self.log_message(
-					"Inquiry %s was saved, but its confirmation email could not be sent: %s",
+					"Inquiry %s was saved, but its confirmation email could not be queued (%s).",
 					result.get("id", "unknown"),
-					error,
+					type(error).__name__,
 				)
-			self.send_json(201, {"data": result, "emailNotificationSent": email_notification_sent})
+			response_data = {"id": result["id"]} if already_saved else result
+			self.send_json(201, {"data": response_data, "emailNotificationQueued": email_notification_queued})
+			self.log_message(
+				"Inquiry request %s responded with HTTP 201 in %d ms.",
+				request_id,
+				round((time.monotonic() - request_started_at) * 1000),
+			)
 		except ValueError as error:
+			self.log_message("Inquiry request %s rejected after %d ms.", request_id, round((time.monotonic() - request_started_at) * 1000))
 			self.send_json(400, {"error": str(error)})
 		except PermissionError as error:
+			self.log_message("Inquiry request %s authorization failed after %d ms.", request_id, round((time.monotonic() - request_started_at) * 1000))
 			self.send_json(403, {"error": str(error)})
 		except TargetLocationServiceError as error:
+			self.log_message("Inquiry request %s location validation failed after %d ms.", request_id, round((time.monotonic() - request_started_at) * 1000))
 			self.send_json(503, {"error": str(error)})
-		except (RuntimeError, PyMongoError):
+		except (RuntimeError, PyMongoError) as error:
+			self.log_message(
+				"Inquiry request %s backend failed after %d ms (%s).",
+				request_id,
+				round((time.monotonic() - request_started_at) * 1000),
+				type(error).__name__,
+			)
 			self.send_json(503, {"error": "MongoDB could not save the inquiry."})
 
 	def validate_target_location(self):
@@ -1673,6 +1789,7 @@ if __name__ == "__main__":
 	host = os.environ.get("HOST", "0.0.0.0")
 	port = int(os.environ.get("PORT", "8000"))
 	server = ThreadingHTTPServer((host, port), WebsiteHandler)
+	start_inquiry_email_outbox_worker()
 	print(f"Local access: http://127.0.0.1:{port}/front/")
 	lan_addresses = {
 		info[4][0]
