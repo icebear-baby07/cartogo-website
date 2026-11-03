@@ -257,15 +257,15 @@ const DB = {
     if (error) throw error;
     return data === true;
   },
+  async isOwner() {
+    const identity = await adminGet("/api/admin/me");
+    return identity.titles.includes("Owner");
+  },
 
-  // --- Chat sessions (Supabase only) ---
+  // --- Chat sessions (MongoDB) ---
   async getChatSessions() {
-    const remote = await supa
-      .from("chat_sessions")
-      .select()
-      .order("last_message_at", { ascending: false });
-    if (remote.error) throw remote.error;
-    return (remote.data || []).map(session => ({
+    const sessions = await adminGet("/api/admin/chat-sessions");
+    return (sessions || []).map(session => ({
       id: session.id,
       username: session.username || "Guest",
       userId: session.user_id || null,
@@ -275,20 +275,47 @@ const DB = {
     }));
   },
   async saveChatSession(session) {
-    const remote = await supa.from("chat_sessions").upsert([{
-      id: session.id,
-      username: session.username || "Guest",
-      user_id: session.userId || null,
-      started_at: session.startedAt,
-      last_message_at: session.lastMessageAt,
-      messages: session.messages
-    }]);
-    if (remote.error) throw remote.error;
+    await siteDataRequest("/api/chat-sessions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(session.userId ? { Authorization: `Bearer ${await getChatAccessToken()}` } : {})
+      },
+      body: JSON.stringify({
+        id: session.id,
+        username: session.username || "Guest",
+        userId: session.userId || null,
+        startedAt: session.startedAt,
+        lastMessageAt: session.lastMessageAt,
+        messages: session.messages
+      })
+    });
     return session;
+  },
+  async getAdminRoles() {
+    return adminGet("/api/admin/roles");
   },
 };
 
 /* ---------- Small shared helpers used by both main.js and admin.js ---------- */
+async function adminGet(path) {
+  const { data, error } = await supa.auth.getSession();
+  if (error) throw error;
+  const accessToken = data.session?.access_token;
+  if (!accessToken) throw new Error("Sign in again to manage site data.");
+  return siteDataRequest(path, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+}
+
+async function getChatAccessToken() {
+  const { data, error } = await supa.auth.getSession();
+  if (error) throw error;
+  const accessToken = data.session?.access_token;
+  if (!accessToken) throw new Error("Sign in again to link this chat session.");
+  return accessToken;
+}
+
 function formatCurrency(amount, currencySymbol) {
   const num = Number(amount) || 0;
   return currencySymbol + num.toLocaleString("en-PH", { maximumFractionDigits: 0 });

@@ -1,7 +1,7 @@
 /* ===========================================================================
    carTOGO.mnl — ADMIN PANEL LOGIC (js/admin.js)
    Everything here reads/writes through DB (js/data.js). Public site content
-   and inquiries are stored in MongoDB; authentication and admin roles use Supabase.
+   and inquiries are stored in MongoDB; Supabase Auth and the admin account allowlist provide sign-in.
 
    SECURITY NOTE: the password gate below is a convenience lock so a casual
    visitor doesn't stumble into edit mode — it is NOT real authentication
@@ -143,8 +143,10 @@ async function enterAdmin() {
       await supa.auth.signOut();
       throw new Error("This Google account is not authorized to access the admin panel.");
     }
-    SETTINGS.adminEmails = await DB.getAdminEmails();
     await loadAll();
+    SETTINGS.isOwner = await DB.isOwner();
+    SETTINGS.adminEmails = SETTINGS.isOwner ? await DB.getAdminEmails() : [];
+    SETTINGS.adminRoles = SETTINGS.isOwner ? await DB.getAdminRoles() : [];
     document.getElementById("loginScreen").style.display = "none";
     document.getElementById("adminShell").classList.add("visible");
     bindTabs();
@@ -171,7 +173,11 @@ async function enterAdmin() {
 }
 
 async function loadAll() {
+  const isOwner = SETTINGS.isOwner;
+  const adminEmails = SETTINGS.adminEmails;
   SETTINGS = await DB.getSettings();
+  SETTINGS.isOwner = isOwner;
+  SETTINGS.adminEmails = adminEmails;
   LABELS = await DB.getLabels();
   UNITS = await DB.getUnits({ admin: true });
   try {
@@ -456,7 +462,7 @@ function renderSiteAssetsTab() {
   errorBox.hidden = !SITE_ASSETS_ERROR;
   errorBox.style.display = SITE_ASSETS_ERROR ? "block" : "none";
   errorBox.textContent = SITE_ASSETS_ERROR
-    ? `Could not load site assets: ${SITE_ASSETS_ERROR}. Run back/db/site_assets.sql in Supabase, then refresh this tab.`
+    ? `Could not load site assets: ${SITE_ASSETS_ERROR}. Check the website MongoDB connection and run back/db/initialize_mongodb.py if this is a new installation, then refresh this tab.`
     : "";
 
   const contact = SITE_ASSETS.find(asset => asset.asset_type === "contact");
@@ -520,7 +526,7 @@ function bindSiteAssetsTab() {
     event.preventDefault();
     const contact = SITE_ASSETS.find(asset => asset.asset_type === "contact");
     if (!contact?.id) {
-      toast("The contact record is missing. Run the site_assets.sql migration first.");
+      toast("The contact record is missing. Initialize or restore the website MongoDB site assets first.");
       return;
     }
     const asset = {
@@ -1491,15 +1497,17 @@ function renderSettingsTab() {
       <div class="label-field"><label for="setExtraDriver">Extra driver fee</label><input id="setExtraDriver" type="number" value="${SETTINGS.extraDriverFee}"></div>
       <div class="label-field"><label for="setChildSeat">Child seat fee</label><input id="setChildSeat" type="number" value="${SETTINGS.childSeatFee}"></div>
       <div class="label-field"><label for="setLateFee">Late return fee (per hour)</label><input id="setLateFee" type="number" value="${SETTINGS.lateFeePerHour}"></div>
-      <div class="settings-admin-email">
-        <h2>Administrator accounts</h2>
-        <p class="sub">Each account must sign in with Google once before it can be added.</p>
-        <ul class="admin-account-list" id="adminAccountsList"></ul>
-        <div class="admin-account-add">
-          <label class="label-field" for="newAdminEmail">Google account email<input id="newAdminEmail" type="email" autocomplete="email" required></label>
-          <button type="button" class="btn btn-dark" id="addAdminEmailBtn"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add account</button>
+      ${SETTINGS.isOwner ? `
+        <div class="settings-admin-email">
+          <h2>Administrator accounts</h2>
+          <p class="sub">Each account must sign in with Google once before it can be added.</p>
+          <ul class="admin-account-list" id="adminAccountsList"></ul>
+          <div class="admin-account-add">
+            <label class="label-field" for="newAdminEmail">Google account email<input id="newAdminEmail" type="email" autocomplete="email" required></label>
+            <button type="button" class="btn btn-dark" id="addAdminEmailBtn"><i class="fa-solid fa-plus" aria-hidden="true"></i> Add account</button>
+          </div>
         </div>
-      </div>
+      ` : ""}
     </div>
     <div class="settings-actions"><button type="button" class="btn btn-primary" id="saveSettingsBtn">Save settings</button></div>
 
@@ -1508,49 +1516,75 @@ function renderSettingsTab() {
       <button type="button" class="btn btn-ghost btn-sm" id="resetAllBtn">Reset everything to defaults</button>
     </section>
   `;
-  renderAdminAccounts();
+  if (SETTINGS.isOwner) {
+    renderAdminAccounts();
 
-  document.getElementById("addAdminEmailBtn").addEventListener("click", async () => {
-    const input = document.getElementById("newAdminEmail");
-    const email = input.value.trim().toLowerCase();
-    if (!input.reportValidity()) return;
-    try {
-      await requestAndApproveAdminChange(
-        "administrator account",
-        "add",
-        { email },
-        (action, data) => DB.requestOwnerChange("admin_accounts", action, data),
-        DB.approveOwnerChange
-      );
-      SETTINGS.adminEmails = await DB.getAdminEmails();
-      input.value = "";
-      renderAdminAccounts();
-      toast("Administrator account added.");
-    } catch (error) {
-      toast(`Could not add administrator: ${error.message}`);
-    }
-  });
+    document.getElementById("addAdminEmailBtn").addEventListener("click", async () => {
+      const input = document.getElementById("newAdminEmail");
+      const email = input.value.trim().toLowerCase();
+      if (!input.reportValidity()) return;
+      try {
+        await requestAndApproveAdminChange(
+          "administrator account",
+          "add",
+          { email },
+          (action, data) => DB.requestOwnerChange("admin_accounts", action, data),
+          DB.approveOwnerChange
+        );
+        SETTINGS.adminEmails = await DB.getAdminEmails();
+        SETTINGS.adminRoles = await DB.getAdminRoles();
+        input.value = "";
+        renderAdminAccounts();
+        toast("Administrator account added.");
+      } catch (error) {
+        toast(`Could not add administrator: ${error.message}`);
+      }
+    });
 
-  document.getElementById("adminAccountsList").addEventListener("click", async event => {
-    const button = event.target.closest("[data-remove-admin]");
-    if (!button) return;
-    const email = button.dataset.removeAdmin;
-    if (!confirm(`Remove ${email} from administrator accounts?`)) return;
-    try {
-      await requestAndApproveAdminChange(
-        "administrator account",
-        "remove",
-        { email },
-        (action, data) => DB.requestOwnerChange("admin_accounts", action, data),
-        DB.approveOwnerChange
-      );
-      SETTINGS.adminEmails = await DB.getAdminEmails();
-      renderAdminAccounts();
-      toast("Administrator account removed.");
-    } catch (error) {
-      toast(`Could not remove administrator: ${error.message}`);
-    }
-  });
+    document.getElementById("adminAccountsList").addEventListener("click", async event => {
+      const saveTitlesButton = event.target.closest("[data-save-admin-titles]");
+      if (saveTitlesButton) {
+        const row = saveTitlesButton.closest("[data-admin-email]");
+        const email = row.dataset.adminEmail;
+        const titles = [...row.querySelectorAll("[data-admin-title]:checked")]
+          .map(input => input.dataset.adminTitle);
+        try {
+          await requestAndApproveAdminChange(
+            "administrator titles",
+            "update",
+            { email, titles },
+            (action, data) => DB.requestOwnerChange("admin_roles", action, data),
+            DB.approveOwnerChange
+          );
+          SETTINGS.adminRoles = await DB.getAdminRoles();
+          renderAdminAccounts();
+          toast(`Titles updated for ${email}.`);
+        } catch (error) {
+          toast(`Could not update administrator titles: ${error.message}`);
+        }
+        return;
+      }
+      const button = event.target.closest("[data-remove-admin]");
+      if (!button) return;
+      const email = button.dataset.removeAdmin;
+      if (!confirm(`Remove ${email} from administrator accounts?`)) return;
+      try {
+        await requestAndApproveAdminChange(
+          "administrator account",
+          "remove",
+          { email },
+          (action, data) => DB.requestOwnerChange("admin_accounts", action, data),
+          DB.approveOwnerChange
+        );
+        SETTINGS.adminEmails = await DB.getAdminEmails();
+        SETTINGS.adminRoles = await DB.getAdminRoles();
+        renderAdminAccounts();
+        toast("Administrator account removed.");
+      } catch (error) {
+        toast(`Could not remove administrator: ${error.message}`);
+      }
+    });
+  }
 
   document.getElementById("saveSettingsBtn").addEventListener("click", async () => {
     try {
@@ -1604,13 +1638,23 @@ function renderSettingsTab() {
 function renderAdminAccounts() {
   const list = document.getElementById("adminAccountsList");
   if (!list) return;
+  const rolesByEmail = new Map((SETTINGS.adminRoles || []).map(role => [role.email, role]));
   const emails = SETTINGS.adminEmails || [];
-  list.innerHTML = emails.map(email => `
-    <li>
-      <span>${text(email)}${email.toLowerCase() === CURRENT_ADMIN_EMAIL ? " (you)" : ""}</span>
-      <button type="button" class="icon-btn danger" data-remove-admin="${attr(email)}" title="Remove ${attr(email)}" aria-label="Remove ${attr(email)}" ${email.toLowerCase() === CURRENT_ADMIN_EMAIL ? "disabled" : ""}><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
-    </li>
-  `).join("");
+  list.innerHTML = emails.map(email => {
+    const role = rolesByEmail.get(email) || { titles: ["Moderator"] };
+    const isCurrentAdmin = email.toLowerCase() === CURRENT_ADMIN_EMAIL;
+    return `
+      <li data-admin-email="${attr(email)}">
+        <div class="admin-account-titles">
+          <strong>${text(email)}${isCurrentAdmin ? " (you)" : ""}</strong>
+          <label><input type="checkbox" data-admin-title="Owner" ${role.titles.includes("Owner") ? "checked" : ""}> Owner</label>
+          <label><input type="checkbox" data-admin-title="Moderator" ${role.titles.includes("Moderator") ? "checked" : ""}> Moderator</label>
+          <button type="button" class="btn btn-ghost btn-sm" data-save-admin-titles>Save titles</button>
+        </div>
+        <button type="button" class="icon-btn danger" data-remove-admin="${attr(email)}" title="Remove ${attr(email)}" aria-label="Remove ${attr(email)}" ${isCurrentAdmin ? "disabled" : ""}><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
+      </li>
+    `;
+  }).join("");
 }
 
 /* ---------- Utility ---------- */

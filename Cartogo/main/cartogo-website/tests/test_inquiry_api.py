@@ -880,6 +880,44 @@ class InquiryRejectionTests(unittest.TestCase):
 				handler.send_json.assert_called_once_with(400, {"error": "Choose a valid inquiry status."})
 
 
+class AdminTitleAuthorizationTests(unittest.TestCase):
+	def make_handler(self, rpc_responses, roles):
+		handler = object.__new__(WebsiteHandler)
+		handler.headers = {"Authorization": "Bearer admin-token"}
+		handler.supabase_request = Mock(side_effect=rpc_responses)
+		roles.get_admin_role.return_value = {"email": "moderator@example.com", "titles": ["Moderator"]}
+		return handler
+
+	def test_moderator_without_permission_is_denied(self):
+		roles = Mock()
+		roles.has_admin_permission.return_value = False
+		handler = self.make_handler([
+			{"id": "admin-1", "email": "moderator@example.com"},
+			True,
+		], roles)
+		with patch.dict("os.environ", {
+			"SUPABASE_URL": "https://example.supabase.co",
+			"SUPABASE_ANON_KEY": "anon-key",
+		}), patch("server.get_mongo_store", return_value=roles), \
+			self.assertRaisesRegex(PermissionError, "title does not allow"):
+			handler.get_authorized_admin(permission="admin_accounts")
+
+		roles.has_admin_permission.assert_called_once_with("moderator@example.com", "admin_accounts")
+
+	def test_moderator_cannot_approve_owner_changes(self):
+		roles = Mock()
+		handler = self.make_handler([
+			{"id": "admin-1", "email": "moderator@example.com"},
+			True,
+		], roles)
+		with patch.dict("os.environ", {
+			"SUPABASE_URL": "https://example.supabase.co",
+			"SUPABASE_ANON_KEY": "anon-key",
+		}), patch("server.get_mongo_store", return_value=roles), \
+			self.assertRaisesRegex(PermissionError, "Only an Owner"):
+			handler.get_authorized_admin(required_title="Owner")
+
+
 class OwnerApprovalTests(unittest.TestCase):
 	def make_handler(self, payload):
 		handler = object.__new__(WebsiteHandler)
@@ -891,8 +929,32 @@ class OwnerApprovalTests(unittest.TestCase):
 			"email": "staff@example.com",
 			"access_token": "admin-token",
 		})
-		handler.get_cartogo_owner_email = Mock(return_value="owner@example.com")
+		handler.get_cartogo_owner_emails = Mock(return_value=["owner@example.com"])
 		return handler
+
+	def test_non_owner_cannot_approve_using_an_owner_pin(self):
+		challenge_id = "owner-change-challenge"
+		code = "012345"
+		challenge = {
+			"resource": "site_content",
+			"owner_emails": ["owner@example.com"],
+			"action": "update",
+			"data": {"settings": {"companyName": "Should not apply"}},
+			"code_hash": hashlib.sha256(f"{challenge_id}:{code}".encode()).hexdigest(),
+			"expires_at": time.time() + 60,
+			"attempts": 0,
+		}
+		handler = self.make_handler({"challengeId": challenge_id, "code": code})
+		handler.get_authorized_admin.return_value["email"] = "moderator@example.com"
+		handler.execute_owner_change = Mock()
+		with patch.dict("server.UNIT_APPROVALS", {challenge_id: challenge}, clear=True):
+			handler.approve_owner_change()
+
+		handler.execute_owner_change.assert_not_called()
+		handler.send_json.assert_called_once_with(
+			403,
+			{"error": "This PIN was not issued to your Owner account."},
+		)
 
 	def test_direct_site_content_write_is_disabled(self):
 		handler = object.__new__(WebsiteHandler)
@@ -904,7 +966,7 @@ class OwnerApprovalTests(unittest.TestCase):
 			"error": "Owner approval is required. Request a PIN before changing site content.",
 		})
 
-	def test_owner_pin_is_sent_to_database_designated_owner(self):
+	def test_owner_pin_is_sent_to_all_accounts_with_owner_title(self):
 		handler = self.make_handler({
 			"resource": "site_content",
 			"action": "update",
@@ -918,18 +980,22 @@ class OwnerApprovalTests(unittest.TestCase):
 			patch("server.secrets.token_urlsafe", return_value="owner-change-challenge"), \
 			patch("server.secrets.randbelow", return_value=1234), \
 			patch("server.send_branded_email") as send_email:
+			handler.get_cartogo_owner_emails.return_value = ["owner@example.com", "owner2@example.com"]
 			handler.request_owner_change()
 			challenge = UNIT_APPROVALS["owner-change-challenge"].copy()
 
-		send_email.assert_called_once()
-		self.assertEqual(send_email.call_args.args[0], "owner@example.com")
+		self.assertEqual(
+			[email_call.args[0] for email_call in send_email.call_args_list],
+			["owner@example.com", "owner2@example.com"],
+		)
 		self.assertEqual(send_email.call_args.args[1], "carTOGO.mnl | Owner PIN: Update site settings and page content")
 		handler.send_json.assert_called_once_with(200, {
 			"challengeId": "owner-change-challenge",
-			"ownerEmail": "owner@example.com",
+			"ownerEmail": "owner@example.com, owner2@example.com",
 			"expiresIn": 300,
 		})
 		self.assertEqual(challenge["requester_email"], "staff@example.com")
+		self.assertEqual(challenge["owner_emails"], ["owner@example.com", "owner2@example.com"])
 		self.assertEqual(challenge["resource"], "site_content")
 		self.assertEqual(challenge["data"], {"settings": {"companyName": "carTOGO"}})
 
@@ -938,7 +1004,7 @@ class OwnerApprovalTests(unittest.TestCase):
 		code = "012345"
 		challenge = {
 			"resource": "site_content",
-			"owner_email": "owner@example.com",
+			"owner_emails": ["owner@example.com"],
 			"action": "update",
 			"data": {"labels": {"about": {"title": "Updated"}}},
 			"code_hash": hashlib.sha256(f"{challenge_id}:{code}".encode()).hexdigest(),
@@ -946,6 +1012,7 @@ class OwnerApprovalTests(unittest.TestCase):
 			"attempts": 0,
 		}
 		handler = self.make_handler({"challengeId": challenge_id, "code": code})
+		handler.get_authorized_admin.return_value["email"] = "owner@example.com"
 		handler.execute_owner_change = Mock(return_value={"labels": {"about": {"title": "Updated"}}})
 		with patch.dict("server.UNIT_APPROVALS", {challenge_id: challenge}, clear=True):
 			handler.approve_owner_change()
@@ -965,7 +1032,7 @@ class OwnerApprovalTests(unittest.TestCase):
 		code = "123456"
 		challenge = {
 			"resource": "site_content",
-			"owner_email": "former-owner@example.com",
+			"owner_emails": ["former-owner@example.com"],
 			"action": "update",
 			"data": {"settings": {"companyName": "Should not apply"}},
 			"code_hash": hashlib.sha256(f"{challenge_id}:{code}".encode()).hexdigest(),
@@ -973,6 +1040,7 @@ class OwnerApprovalTests(unittest.TestCase):
 			"attempts": 0,
 		}
 		handler = self.make_handler({"challengeId": challenge_id, "code": code})
+		handler.get_authorized_admin.return_value["email"] = "owner@example.com"
 		handler.execute_owner_change = Mock()
 		with patch.dict("server.UNIT_APPROVALS", {challenge_id: challenge}, clear=True):
 			handler.approve_owner_change()
@@ -980,22 +1048,8 @@ class OwnerApprovalTests(unittest.TestCase):
 		handler.execute_owner_change.assert_not_called()
 		handler.send_json.assert_called_once_with(
 			403,
-			{"error": "The owner account changed. Request a new approval PIN."},
+			{"error": "This PIN was not issued to your Owner account."},
 		)
-
-	def test_approved_chat_delete_reports_when_session_no_longer_exists(self):
-		handler = object.__new__(WebsiteHandler)
-		response = MagicMock()
-		response.__enter__.return_value = response
-		response.read.return_value = b"[]"
-
-		with patch.dict("os.environ", {
-			"SUPABASE_URL": "https://example.supabase.co",
-			"SUPABASE_SERVICE_ROLE_KEY": "service-role-key",
-		}), patch("server.urlopen", return_value=response):
-			with self.assertRaisesRegex(RuntimeError, "session no longer exists"):
-				handler.delete_chat_session_with_service_role("session-1")
-
 
 if __name__ == "__main__":
 	unittest.main()

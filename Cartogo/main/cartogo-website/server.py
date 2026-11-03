@@ -30,6 +30,8 @@ ENV_KEYS = {
 	"MONGODB_URI", "MONGODB_DATABASE", "MONGODB_SITE_DATABASE", "MONGODB_UNITS_COLLECTION",
 	"MONGODB_SITE_ASSETS_COLLECTION", "MONGODB_SITE_CONTENT_COLLECTION",
 	"MONGODB_INQUIRIES_COLLECTION", "MONGODB_SEQUENCES_COLLECTION",
+	"MONGODB_ADMIN_ROLES_COLLECTION", "MONGODB_CHAT_SESSIONS_COLLECTION",
+	"CARTOGO_INITIAL_OWNER_EMAIL",
 	"SMTP_USER", "SMTP_APP_PASSWORD", "SMTP_HOST", "SMTP_PORT", "SMTP_FROM",
 	"GEOCODING_CONTACT_EMAIL",
 	"HOST", "PORT",
@@ -45,6 +47,7 @@ GUEST_EMAIL_LOCK = Lock()
 UNIT_STATUSES = {"Available", "Rented", "Maintenance", "Inactive"}
 UNIT_RATE_FIELDS = ("in12_rate", "in24_rate", "out12_rate", "out24_rate", "luzon_rate")
 MAX_API_BODY_BYTES = 16 * 1024
+MAX_CHAT_API_BODY_BYTES = 256 * 1024
 MONGO_STORE = None
 MONGO_STORE_LOCK = Lock()
 TARGET_LOCATION_CACHE = {}
@@ -487,6 +490,15 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 		if request_path == "/api/admin/inquiries":
 			self.get_admin_inquiries()
 			return
+		if request_path == "/api/admin/roles":
+			self.get_admin_roles()
+			return
+		if request_path == "/api/admin/me":
+			self.get_admin_identity()
+			return
+		if request_path == "/api/admin/chat-sessions":
+			self.get_admin_chat_sessions()
+			return
 		if request_path in {
 			"/api/public/units",
 			"/api/admin/units",
@@ -527,6 +539,8 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			self.verify_guest_email()
 		elif request_path == "/api/admin/inquiries":
 			self.manage_inquiries()
+		elif request_path == "/api/chat-sessions":
+			self.save_chat_session()
 		else:
 			self.send_json(404, {"error": "Not found."})
 
@@ -535,12 +549,12 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			if request_path == "/api/public/units":
 				result = get_mongo_store().list_units()
 			elif request_path == "/api/admin/units":
-				self.get_authorized_admin()
+				self.get_authorized_admin(permission="fleet")
 				result = get_mongo_store().list_units(include_inactive=True)
 			elif request_path == "/api/site-assets":
 				result = get_mongo_store().list_site_assets()
 			elif request_path == "/api/admin/site-assets":
-				self.get_authorized_admin()
+				self.get_authorized_admin(permission="site_assets")
 				result = get_mongo_store().list_site_assets()
 			elif request_path == "/api/site-content":
 				result = get_mongo_store().get_site_content()
@@ -554,12 +568,88 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			message = str(error) if isinstance(error, RuntimeError) else "MongoDB site data is unavailable."
 			self.send_json(503, {"error": message})
 
+	def get_admin_roles(self):
+		try:
+			admin = self.get_authorized_admin(required_title="Owner")
+			admin_emails = self.get_cartogo_admin_emails(admin)
+			store = get_mongo_store()
+			initial_owner = os.environ.get(
+				"CARTOGO_INITIAL_OWNER_EMAIL", "remuelfernan07@gmail.com"
+			).strip().lower()
+			for email in admin_emails:
+				store.ensure_admin_role(email, ("Owner",) if email == initial_owner else ("Moderator",))
+			self.send_json(200, store.list_admin_roles(admin_emails))
+		except PermissionError as error:
+			self.send_json(403, {"error": str(error)})
+		except (RuntimeError, PyMongoError, ValueError) as error:
+			message = str(error) if isinstance(error, RuntimeError) else "MongoDB administrator roles are unavailable."
+			self.send_json(503, {"error": message})
+
+	def get_admin_identity(self):
+		try:
+			admin = self.get_authorized_admin()
+			self.send_json(200, {"email": admin["email"], "titles": admin["titles"]})
+		except PermissionError as error:
+			self.send_json(403, {"error": str(error)})
+		except (RuntimeError, PyMongoError):
+			self.send_json(503, {"error": "MongoDB administrator roles are unavailable."})
+
+	def get_admin_chat_sessions(self):
+		try:
+			self.get_authorized_admin(permission="chat")
+			self.send_json(200, get_mongo_store().list_chat_sessions())
+		except PermissionError as error:
+			self.send_json(403, {"error": str(error)})
+		except (RuntimeError, PyMongoError):
+			self.send_json(503, {"error": "MongoDB chat sessions are unavailable."})
+
+	def save_chat_session(self):
+		try:
+			payload = self.read_json(MAX_CHAT_API_BODY_BYTES)
+			if not isinstance(payload, dict):
+				raise ValueError("Provide a chat session.")
+			session_id = payload.get("id")
+			username = payload.get("username", "Guest")
+			messages = payload.get("messages")
+			started_at = payload.get("startedAt")
+			last_message_at = payload.get("lastMessageAt")
+			user_id = payload.get("userId")
+			if not isinstance(session_id, str) or not session_id or len(session_id) > 200:
+				raise ValueError("Choose a valid chat session.")
+			if not isinstance(username, str) or len(username) > 160:
+				raise ValueError("Chat usernames must be 160 characters or fewer.")
+			if not isinstance(messages, list) or len(messages) > 1000:
+				raise ValueError("Chat messages must be a list of no more than 1,000 messages.")
+			if not isinstance(started_at, str) or not isinstance(last_message_at, str):
+				raise ValueError("Chat session timestamps are required.")
+			if user_id is not None:
+				if not self.headers.get("Authorization"):
+					raise PermissionError("Sign in before linking a chat session to your account.")
+				user = self.get_verified_google_user()
+				if user_id != user["id"]:
+					raise PermissionError("A chat session can only be linked to the signed-in account.")
+			session = {
+				"id": session_id,
+				"username": username or "Guest",
+				"user_id": user_id,
+				"started_at": started_at,
+				"last_message_at": last_message_at,
+				"messages": messages,
+			}
+			self.send_json(200, get_mongo_store().save_chat_session(session))
+		except ValueError as error:
+			self.send_json(400, {"error": str(error)})
+		except PermissionError as error:
+			self.send_json(403, {"error": str(error)})
+		except (RuntimeError, PyMongoError):
+			self.send_json(503, {"error": "MongoDB could not save the chat session."})
+
 	def update_site_content(self):
 		self.send_json(403, {"error": "Owner approval is required. Request a PIN before changing site content."})
 
 	def get_admin_inquiries(self):
 		try:
-			self.get_authorized_admin()
+			self.get_authorized_admin(permission="inquiries")
 			self.send_json(200, get_mongo_store().list_inquiries())
 		except PermissionError as error:
 			self.send_json(403, {"error": str(error)})
@@ -759,7 +849,7 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 
 	def manage_inquiries(self):
 		try:
-			self.get_authorized_admin()
+			self.get_authorized_admin(permission="inquiries")
 			payload = self.read_json()
 			action = payload.get("action")
 			inquiry_id = self.normalize_inquiry_id(payload.get("id"))
@@ -824,12 +914,12 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			)
 			return False
 
-	def read_json(self):
+	def read_json(self, max_bytes=MAX_API_BODY_BYTES):
 		try:
 			content_length = int(self.headers.get("Content-Length", "0"))
 		except ValueError:
 			raise ValueError("Invalid request body.") from None
-		if content_length <= 0 or content_length > MAX_API_BODY_BYTES:
+		if content_length <= 0 or content_length > max_bytes:
 			raise ValueError("The request body is too large or empty.")
 		try:
 			payload = json.loads(self.rfile.read(content_length))
@@ -990,7 +1080,7 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			"verification_method": "google_oauth" if user else "guest_form",
 		}
 
-	def get_authorized_admin(self):
+	def get_authorized_admin(self, permission=None, required_title=None):
 		token = self.headers.get("Authorization", "")
 		if not token.startswith("Bearer "):
 			raise PermissionError("Sign in again to continue.")
@@ -1016,27 +1106,58 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 		)
 		if is_admin is not True:
 			raise PermissionError("This account is not an authorized administrator.")
+		email = str(user["email"]).strip().lower()
+		try:
+			store = get_mongo_store()
+			initial_owner = os.environ.get(
+				"CARTOGO_INITIAL_OWNER_EMAIL", "remuelfernan07@gmail.com"
+			).strip().lower()
+			role = store.get_admin_role(email)
+			if role is None:
+				role = store.ensure_admin_role(
+					email,
+					("Owner",) if email == initial_owner else ("Moderator",),
+				)
+		except PyMongoError as error:
+			raise RuntimeError("MongoDB administrator roles are unavailable.") from error
+		if permission:
+			if not store.has_admin_permission(email, permission):
+				raise PermissionError("Your administrator title does not allow this action.")
+		if required_title == "Owner" and "Owner" not in role["titles"]:
+			raise PermissionError("Only an Owner can approve this change.")
 		return {
 			"id": str(user["id"]),
-			"email": str(user["email"]).strip().lower(),
+			"email": email,
+			"titles": role["titles"],
 			"access_token": access_token,
 		}
 
-	def get_cartogo_owner_email(self, admin):
+	def get_cartogo_admin_emails(self, admin):
 		base_url = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
 		anon_key = os.environ.get("SUPABASE_ANON_KEY", "").strip()
-		owner_email = self.supabase_request(
-			f"{base_url}/rest/v1/rpc/get_cartogo_owner_email",
+		admin_emails = self.supabase_request(
+			f"{base_url}/rest/v1/rpc/get_cartogo_admin_emails",
 			anon_key,
 			admin["access_token"],
 			method="POST",
 			body=b"{}",
 		)
-		if not isinstance(owner_email, str) or not re.fullmatch(
-			r"[^@\s]+@[^@\s]+\.[^@\s]+", owner_email
-		):
-			raise RuntimeError("The database did not return a valid owner email. Run the owner-approval migration.")
-		return owner_email.strip().lower()
+		if not isinstance(admin_emails, list):
+			raise RuntimeError("The database did not return a valid administrator list.")
+		normalized_emails = []
+		for admin_email in admin_emails:
+			if not isinstance(admin_email, str) or not re.fullmatch(
+				r"[^@\s]+@[^@\s]+\.[^@\s]+", admin_email
+			):
+				raise RuntimeError("The database returned an invalid administrator email.")
+			normalized_emails.append(admin_email.strip().lower())
+		return sorted(set(normalized_emails))
+
+	def get_cartogo_owner_emails(self, admin):
+		owner_emails = get_mongo_store().list_admin_emails_with_title("Owner")
+		if not owner_emails:
+			raise RuntimeError("No Owner title is assigned to an administrator in MongoDB.")
+		return owner_emails
 
 	def get_verified_google_user(self):
 		token = self.headers.get("Authorization", "")
@@ -1235,7 +1356,7 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 
 	def request_unit_change(self):
 		try:
-			admin = self.get_authorized_admin()
+			admin = self.get_authorized_admin(permission="fleet")
 			payload = self.read_json()
 			action, unit = self.normalize_unit_change(payload)
 			self.send_json(200, self.create_owner_approval(admin, "unit", action, unit))
@@ -1248,7 +1369,7 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 
 	def request_site_asset_change(self):
 		try:
-			admin = self.get_authorized_admin()
+			admin = self.get_authorized_admin(permission="site_assets")
 			payload = self.read_json()
 			action, asset = self.normalize_site_asset_change(payload)
 			self.send_json(200, self.create_owner_approval(admin, "site_assets", action, asset))
@@ -1261,11 +1382,25 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 
 	def request_owner_change(self):
 		try:
-			admin = self.get_authorized_admin()
 			payload = self.read_json()
 			resource = payload.get("resource")
 			action = payload.get("action")
 			data = payload.get("data")
+			resource_permissions = {
+				"unit": "fleet",
+				"site_assets": "site_assets",
+				"site_content": "site_content",
+				"admin_accounts": "admin_accounts",
+				"admin_roles": "admin_accounts",
+				"chat_sessions": "chat",
+			}
+			permission = resource_permissions.get(resource)
+			if not permission:
+				raise ValueError("Choose a supported owner-approved change.")
+			admin = self.get_authorized_admin(
+				permission=permission,
+				required_title="Owner" if resource in {"admin_accounts", "admin_roles"} else None,
+			)
 			if resource == "unit":
 				action, data = self.normalize_unit_change({"action": action, "unit": data})
 			elif resource == "site_assets":
@@ -1282,6 +1417,18 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 				if not isinstance(email, str) or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email.strip()):
 					raise ValueError("Enter a valid administrator email.")
 				data = {"email": email.strip().lower()}
+			elif resource == "admin_roles":
+				if action != "update" or not isinstance(data, dict):
+					raise ValueError("Choose a valid administrator-title change.")
+				email = data.get("email")
+				titles = data.get("titles")
+				if not isinstance(email, str) or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email.strip()):
+					raise ValueError("Enter a valid administrator email.")
+				if not isinstance(titles, list) or not titles or any(
+					title not in {"Owner", "Moderator"} for title in titles
+				):
+					raise ValueError("Select at least one valid administrator title.")
+				data = {"email": email.strip().lower(), "titles": sorted(set(titles))}
 			elif resource == "chat_sessions":
 				if action != "delete" or not isinstance(data, dict):
 					raise ValueError("Choose a valid chat-session change.")
@@ -1303,12 +1450,13 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 	def create_owner_approval(self, admin, resource, action, data):
 		if not os.environ.get("SMTP_USER", "").strip() or not os.environ.get("SMTP_APP_PASSWORD", "").strip():
 			raise RuntimeError("Configure Gmail SMTP credentials in the website server environment first.")
-		owner_email = self.get_cartogo_owner_email(admin)
+		owner_emails = self.get_cartogo_owner_emails(admin)
+		owner_email_label = ", ".join(owner_emails)
 		with OTP_REQUESTS_LOCK:
-			last_request = OTP_REQUESTS.get(owner_email, 0)
+			last_request = OTP_REQUESTS.get(owner_email_label, 0)
 			if time.time() - last_request < 60:
 				raise RuntimeError("Wait one minute before requesting another owner approval PIN.")
-			OTP_REQUESTS[owner_email] = time.time()
+			OTP_REQUESTS[owner_email_label] = time.time()
 
 		challenge_id = secrets.token_urlsafe(24)
 		code = f"{secrets.randbelow(1000000):06d}"
@@ -1318,6 +1466,7 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			"site_assets": "site asset",
 			"site_content": "site settings and page content",
 			"admin_accounts": "administrator account",
+			"admin_roles": "administrator titles",
 			"chat_sessions": "chat session",
 		}[resource]
 		requested_values = json.dumps(data, ensure_ascii=False, indent=2)
@@ -1339,7 +1488,7 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 				"resource": resource,
 				"requester_id": admin["id"],
 				"requester_email": admin["email"],
-				"owner_email": owner_email,
+				"owner_emails": owner_emails,
 				"action": action,
 				"data": data,
 				"code_hash": hashlib.sha256(f"{challenge_id}:{code}".encode()).hexdigest(),
@@ -1347,22 +1496,23 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 				"attempts": 0,
 			}
 		try:
-			send_branded_email(
-				owner_email,
-				f"carTOGO.mnl | Owner PIN: {operation} {pretty_resource}",
-				"An admin change is awaiting your approval.",
-				"Owner approval required",
-				f"{admin['email']} requested to {action} {pretty_resource}. Review the request before sharing your one-time PIN.",
-				content_html,
-				f"Requested by {admin['email']}: {operation} {pretty_resource}.\n\n"
-				f"Requested values:\n{requested_values}\n\nOwner PIN: {code}\n"
-				"This PIN expires in 5 minutes and authorizes only this change.",
-			)
+			for owner_email in owner_emails:
+				send_branded_email(
+					owner_email,
+					f"carTOGO.mnl | Owner PIN: {operation} {pretty_resource}",
+					"An admin change is awaiting your approval.",
+					"Owner approval required",
+					f"{admin['email']} requested to {action} {pretty_resource}. Review the request before sharing your one-time PIN.",
+					content_html,
+					f"Requested by {admin['email']}: {operation} {pretty_resource}.\n\n"
+					f"Requested values:\n{requested_values}\n\nOwner PIN: {code}\n"
+					"This PIN expires in 5 minutes and authorizes only this change.",
+				)
 		except (OSError, smtplib.SMTPException, ValueError):
 			with UNIT_APPROVALS_LOCK:
 				UNIT_APPROVALS.pop(challenge_id, None)
 			raise RuntimeError("Gmail could not send the owner approval PIN. Check the SMTP settings.") from None
-		return {"challengeId": challenge_id, "ownerEmail": owner_email, "expiresIn": 300}
+		return {"challengeId": challenge_id, "ownerEmail": owner_email_label, "expiresIn": 300}
 
 	def approve_unit_change(self):
 		self.process_owner_approval("unit")
@@ -1380,17 +1530,16 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			code = payload.get("code")
 			if not isinstance(challenge_id, str) or not isinstance(code, str) or not code.isdigit() or len(code) != 6:
 				raise ValueError("Enter the six-digit approval code.")
-			admin = self.get_authorized_admin()
-			owner_email = self.get_cartogo_owner_email(admin)
+			admin = self.get_authorized_admin(required_title="Owner")
 			with UNIT_APPROVALS_LOCK:
 				challenge = UNIT_APPROVALS.get(challenge_id)
 				if (not challenge or challenge.get("expires_at", 0) < time.time()
 						or (expected_resource and challenge.get("resource") != expected_resource)):
 					UNIT_APPROVALS.pop(challenge_id, None)
 					raise PermissionError("That approval code expired. Request a new one.")
-				if challenge.get("owner_email") != owner_email:
+				if admin["email"] not in challenge.get("owner_emails", []):
 					UNIT_APPROVALS.pop(challenge_id, None)
-					raise PermissionError("The owner account changed. Request a new approval PIN.")
+					raise PermissionError("This PIN was not issued to your Owner account.")
 				challenge["attempts"] += 1
 				expected_hash = challenge["code_hash"]
 				provided_hash = hashlib.sha256(f"{challenge_id}:{code}".encode()).hexdigest()
@@ -1427,13 +1576,28 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 		if resource == "site_content":
 			return get_mongo_store().update_site_content(data)
 		if resource == "admin_accounts":
+			store = get_mongo_store()
+			if action == "remove":
+				store.validate_admin_removal(data["email"])
 			function = "add_cartogo_admin_email" if action == "add" else "remove_cartogo_admin_email"
-			return self.call_supabase_service_rpc(function, {"p_email": data["email"]})
+			result = self.call_supabase_service_rpc(function, {"p_email": data["email"]})
+			if action == "add":
+				initial_owner = os.environ.get(
+					"CARTOGO_INITIAL_OWNER_EMAIL", "remuelfernan07@gmail.com"
+				).strip().lower()
+				store.ensure_admin_role(
+					data["email"],
+					("Owner",) if data["email"] == initial_owner else ("Moderator",),
+				)
+			else:
+				store.remove_admin_role(data["email"])
+			return result
+		if resource == "admin_roles":
+			return get_mongo_store().set_admin_titles(data["email"], data["titles"])
 		if resource == "chat_sessions":
 			if action != "delete":
 				raise ValueError("Choose a valid chat-session change.")
-			self.delete_chat_session_with_service_role(data["id"])
-			return {"id": data["id"]}
+			return get_mongo_store().delete_chat_session(data["id"])
 		raise ValueError("Choose a supported owner-approved change.")
 
 	def call_supabase_service_rpc(self, function, parameters):
@@ -1470,33 +1634,6 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			return json.loads(content) if content else None
 		except json.JSONDecodeError:
 			raise RuntimeError("Supabase returned an invalid administrator account response.") from None
-
-	def delete_chat_session_with_service_role(self, session_id):
-		service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
-		base_url = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
-		if not base_url:
-			raise RuntimeError("Supabase URL is not configured on the website server.")
-		if not service_key:
-			raise RuntimeError("Set SUPABASE_SERVICE_ROLE_KEY on the website server to delete owner-approved chat sessions.")
-		query = urlencode({"id": f"eq.{session_id}"})
-		request = Request(
-			f"{base_url}/rest/v1/chat_sessions?{query}",
-			headers={
-				"apikey": service_key,
-				"Authorization": f"Bearer {service_key}",
-				"Prefer": "return=representation",
-			},
-			method="DELETE",
-		)
-		try:
-			with urlopen(request, timeout=10) as response:
-				deleted = json.loads(response.read())
-			if not isinstance(deleted, list) or not deleted:
-				raise RuntimeError("That chat session no longer exists. Refresh the list and try again.")
-		except HTTPError:
-			raise RuntimeError("Supabase could not delete the approved chat session.") from None
-		except (URLError, TimeoutError):
-			raise RuntimeError("Could not connect to Supabase to delete the chat session.") from None
 
 	def send_json(self, status, payload):
 		body = json.dumps(payload).encode("utf-8")

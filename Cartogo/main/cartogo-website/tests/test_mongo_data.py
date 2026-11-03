@@ -45,6 +45,8 @@ class MongoDataStoreTests(unittest.TestCase):
 		self.content = self.store.site_content
 		self.inquiries = self.store.inquiries
 		self.sequences = self.store.sequences
+		self.admin_roles = self.store.admin_roles
+		self.chat_sessions = self.store.chat_sessions
 
 	def test_site_collections_and_sequences_use_site_database(self):
 		self.assertIs(self.store.units, self.site_database["vehicles"])
@@ -101,6 +103,72 @@ class MongoDataStoreTests(unittest.TestCase):
 		self.inquiries.find.assert_called_once_with({})
 		self.inquiries.find.return_value.sort.assert_called_once_with("created_at", -1)
 		self.assertEqual(result, [{"id": 3, "created_at": "2026-01-02T00:00:00+00:00"}])
+
+	def test_admin_roles_are_stored_in_site_database(self):
+		self.assertIs(self.store.admin_roles, self.site_database["admin_roles"])
+
+	def test_ensuring_new_admin_role_uses_set_on_insert(self):
+		self.admin_roles.find_one.return_value = {
+			"_id": "account:moderator@example.com",
+			"email": "moderator@example.com",
+			"titles": ["Moderator"],
+		}
+
+		role = self.store.ensure_admin_role("Moderator@Example.com")
+
+		self.assertEqual(role, {"email": "moderator@example.com", "titles": ["Moderator"]})
+		self.assertEqual(
+			self.admin_roles.update_one.call_args_list[-1].args,
+			(
+				{"_id": "account:moderator@example.com"},
+				{"$setOnInsert": {
+					"email": "moderator@example.com",
+					"titles": ["Moderator"],
+				}},
+			),
+		)
+
+	def test_chat_session_save_preserves_the_public_session_shape(self):
+		self.chat_sessions.find_one.return_value = None
+		session = {
+			"id": "session-1",
+			"username": "Guest",
+			"user_id": None,
+			"started_at": "2026-11-03T10:00:00Z",
+			"last_message_at": "2026-11-03T10:01:00Z",
+			"messages": [{"role": "user", "content": "Hello"}],
+		}
+
+		result = self.store.save_chat_session(session)
+
+		self.assertEqual(result, session)
+		self.chat_sessions.update_one.assert_called_once_with(
+			{"_id": "session-1"},
+			{"$set": session},
+			upsert=True,
+		)
+
+	def test_chat_session_cannot_be_rebound_to_another_account(self):
+		self.chat_sessions.find_one.return_value = {"user_id": "original-user"}
+		session = {
+			"id": "session-1",
+			"username": "Guest",
+			"user_id": "different-user",
+			"started_at": "2026-11-03T10:00:00Z",
+			"last_message_at": "2026-11-03T10:01:00Z",
+			"messages": [],
+		}
+
+		with self.assertRaisesRegex(PermissionError, "different account"):
+			self.store.save_chat_session(session)
+
+		self.chat_sessions.update_one.assert_not_called()
+
+	def test_chat_session_delete_reports_missing_record(self):
+		self.chat_sessions.delete_one.return_value.deleted_count = 0
+
+		with self.assertRaisesRegex(RuntimeError, "no longer exists"):
+			self.store.delete_chat_session("session-1")
 
 	def test_adding_inquiry_uses_monotonic_id_and_sets_verification_timestamps(self):
 		self.inquiries.find_one.return_value = {"id": 7}

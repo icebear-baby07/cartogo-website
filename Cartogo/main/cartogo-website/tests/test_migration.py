@@ -1,10 +1,34 @@
 import unittest
+from urllib.error import HTTPError
 from unittest.mock import MagicMock, call, patch
 
+import migrate_supabase_admin_roles_to_mongodb
 import migrate_supabase_to_mongodb
 
 
 class MigrationTests(unittest.TestCase):
+	@patch.dict("os.environ", {
+		"SUPABASE_URL": "https://example.supabase.co",
+		"SUPABASE_SERVICE_ROLE_KEY": "service-key",
+	})
+	@patch("migrate_supabase_admin_roles_to_mongodb.urlopen")
+	def test_admin_role_migration_supports_allowlist_without_legacy_owner_column(self, open_url):
+		response = MagicMock()
+		response.__enter__.return_value = response
+		response.read.return_value = b'[{"admin_email":"owner@example.com"}]'
+		open_url.side_effect = [
+			HTTPError("https://example.supabase.co", 400, "Bad Request", None, None),
+			response,
+		]
+
+		rows = migrate_supabase_admin_roles_to_mongodb.fetch_supabase_rows(
+			"cartogo_admin_accounts",
+			"admin_email,is_owner",
+		)
+
+		self.assertEqual(rows, [{"admin_email": "owner@example.com"}])
+		self.assertIn("select=admin_email", open_url.call_args_list[1].args[0].full_url)
+
 	@patch("migrate_supabase_to_mongodb.fetch_supabase_table")
 	def test_fetches_all_pages_in_order(self, fetch_page):
 		fetch_page.side_effect = [[{"id": 1}, {"id": 2}], [{"id": 3}]]

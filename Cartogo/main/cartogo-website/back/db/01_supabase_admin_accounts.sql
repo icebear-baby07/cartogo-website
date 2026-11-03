@@ -1,48 +1,41 @@
-alter table public.cartogo_admin_accounts
-  add column if not exists is_owner boolean not null default false;
+-- Supabase stores only the administrator sign-in allowlist.
+-- Website data, chat sessions, and administrator titles/permissions live in MongoDB.
+begin;
 
-do $$
-begin
-  if not exists (
-    select 1
-    from public.cartogo_admin_accounts
-    where admin_email = 'remuelfernan07@gmail.com'
-  ) then
-    raise exception 'The designated owner must already exist in cartogo_admin_accounts.';
-  end if;
+create table if not exists public.cartogo_admin_accounts (
+  admin_email text primary key check (admin_email = lower(trim(admin_email))),
+  added_at timestamptz not null default now()
+);
 
-  update public.cartogo_admin_accounts
-  set is_owner = (admin_email = 'remuelfernan07@gmail.com');
-end;
-$$;
+alter table public.cartogo_admin_accounts enable row level security;
+revoke all on public.cartogo_admin_accounts from public, anon, authenticated;
 
-create unique index if not exists cartogo_admin_accounts_single_owner
-  on public.cartogo_admin_accounts (is_owner)
-  where is_owner;
-
-create or replace function public.get_cartogo_owner_email()
-returns text
-language plpgsql
+create or replace function public.is_cartogo_admin()
+returns boolean
+language sql
 stable
 security definer
 set search_path = ''
 as $$
-declare
-  owner_email text;
-begin
-  if not public.is_cartogo_admin() then
-    raise exception 'Not authorized' using errcode = '42501';
-  end if;
+  select exists (
+    select 1
+    from public.cartogo_admin_accounts
+    where admin_email = lower(coalesce(auth.jwt() ->> 'email', ''))
+      and auth.jwt() -> 'app_metadata' ->> 'provider' = 'google'
+      and auth.jwt() -> 'user_metadata' ->> 'email_verified' = 'true'
+  );
+$$;
 
-  select admin_email into owner_email
+create or replace function public.get_cartogo_admin_emails()
+returns text[]
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select coalesce(array_agg(admin_email order by admin_email), array[]::text[])
   from public.cartogo_admin_accounts
-  where is_owner;
-
-  if owner_email is null then
-    raise exception 'No owner account is configured.';
-  end if;
-  return owner_email;
-end;
+  where public.is_cartogo_admin();
 $$;
 
 create or replace function public.add_cartogo_admin_email(p_email text)
@@ -88,12 +81,6 @@ begin
   if coalesce(auth.role(), '') <> 'service_role' then
     raise exception 'Owner approval is required.' using errcode = '42501';
   end if;
-  if exists (
-    select 1 from public.cartogo_admin_accounts
-    where admin_email = normalized_email and is_owner
-  ) then
-    raise exception 'The owner account cannot be removed.' using errcode = '22023';
-  end if;
   lock table public.cartogo_admin_accounts in exclusive mode;
   select count(*) into admin_count from public.cartogo_admin_accounts;
   if admin_count <= 1 then
@@ -107,18 +94,13 @@ begin
 end;
 $$;
 
-revoke all on function public.get_cartogo_owner_email() from public, anon;
-grant execute on function public.get_cartogo_owner_email() to authenticated;
+revoke all on function public.is_cartogo_admin() from public;
+revoke all on function public.get_cartogo_admin_emails() from public;
 revoke all on function public.add_cartogo_admin_email(text) from public, anon, authenticated;
 revoke all on function public.remove_cartogo_admin_email(text) from public, anon, authenticated;
+grant execute on function public.is_cartogo_admin() to authenticated;
+grant execute on function public.get_cartogo_admin_emails() to authenticated;
 grant execute on function public.add_cartogo_admin_email(text) to service_role;
 grant execute on function public.remove_cartogo_admin_email(text) to service_role;
 
-do $$
-begin
-  if to_regclass('public.chat_sessions') is not null then
-    execute 'drop policy if exists "Public can delete chat sessions" on public.chat_sessions';
-    execute 'revoke delete on public.chat_sessions from anon, authenticated';
-  end if;
-end;
-$$;
+commit;

@@ -18,11 +18,17 @@ INQUIRY_LOCATION_FIELDS = (
 	"nearestPickupDistanceKm",
 )
 
+ADMIN_ROLE_PERMISSIONS = {
+	"Owner": ("inquiries", "fleet", "site_assets", "site_content", "chat", "admin_accounts"),
+	"Moderator": ("inquiries", "fleet", "site_assets", "site_content", "chat"),
+}
+
 
 class MongoDataStore:
 	def __init__(self, client, database_name, units_collection, site_assets_collection,
 			site_content_collection, inquiries_collection, sequences_collection,
-			site_database_name=None):
+			site_database_name=None, admin_roles_collection="admin_roles",
+			chat_sessions_collection="chat_sessions"):
 		self.client = client
 		self.database = client[database_name]
 		self.site_database = client[site_database_name or database_name]
@@ -31,6 +37,8 @@ class MongoDataStore:
 		self.site_content = self.site_database[site_content_collection]
 		self.inquiries = self.database[inquiries_collection]
 		self.sequences = self.site_database[sequences_collection]
+		self.admin_roles = self.site_database[admin_roles_collection]
+		self.chat_sessions = self.site_database[chat_sessions_collection]
 
 	@classmethod
 	def from_environment(cls):
@@ -51,6 +59,8 @@ class MongoDataStore:
 			os.environ.get("MONGODB_INQUIRIES_COLLECTION", "inquiries").strip() or "inquiries",
 			os.environ.get("MONGODB_SEQUENCES_COLLECTION", "site_sequences").strip() or "site_sequences",
 			os.environ.get("MONGODB_SITE_DATABASE", "Site").strip() or "Site",
+			os.environ.get("MONGODB_ADMIN_ROLES_COLLECTION", "admin_roles").strip() or "admin_roles",
+			os.environ.get("MONGODB_CHAT_SESSIONS_COLLECTION", "chat_sessions").strip() or "chat_sessions",
 		)
 
 	@staticmethod
@@ -60,6 +70,132 @@ class MongoDataStore:
 		document = dict(document)
 		document.pop("_id", None)
 		return document
+
+	def ensure_admin_role_definitions(self):
+		for title, permissions in ADMIN_ROLE_PERMISSIONS.items():
+			self.admin_roles.update_one(
+				{"_id": f"title:{title}"},
+				{"$set": {"title": title, "permissions": list(permissions)}},
+				upsert=True,
+			)
+
+	def ensure_admin_role(self, email, default_titles=("Moderator",)):
+		normalized_email = str(email or "").strip().lower()
+		if not normalized_email:
+			raise ValueError("Administrator email is required.")
+		self.ensure_admin_role_definitions()
+		self.admin_roles.update_one(
+			{"_id": f"account:{normalized_email}"},
+			{"$setOnInsert": {
+				"email": normalized_email,
+				"titles": list(default_titles),
+			}},
+			upsert=True,
+		)
+		return self.get_admin_role(normalized_email)
+
+	def get_admin_role(self, email):
+		normalized_email = str(email or "").strip().lower()
+		document = self.admin_roles.find_one({"_id": f"account:{normalized_email}"})
+		if document is None:
+			return None
+		return {
+			"email": normalized_email,
+			"titles": list(document.get("titles") or []),
+		}
+
+	def has_admin_permission(self, email, permission):
+		role = self.get_admin_role(email)
+		if role is None:
+			return False
+		for title in role["titles"]:
+			definition = self.admin_roles.find_one({"_id": f"title:{title}"})
+			if definition and permission in definition.get("permissions", []):
+				return True
+		return False
+
+	def list_admin_roles(self, emails):
+		self.ensure_admin_role_definitions()
+		return [
+			self.ensure_admin_role(email)
+			for email in sorted({str(email).strip().lower() for email in emails if email})
+		]
+
+	def set_admin_titles(self, email, titles):
+		normalized_email = str(email or "").strip().lower()
+		if not normalized_email or not isinstance(titles, list):
+			raise ValueError("Provide an administrator email and title list.")
+		normalized_titles = sorted(set(titles))
+		if not normalized_titles or any(title not in ADMIN_ROLE_PERMISSIONS for title in normalized_titles):
+			raise ValueError("An administrator must have at least one valid title.")
+		self.ensure_admin_role_definitions()
+		if self.admin_roles.find_one({"_id": f"account:{normalized_email}"}) is None:
+			raise ValueError("That administrator account was not found.")
+		if "Owner" not in normalized_titles and self.admin_roles.count_documents({
+			"_id": {"$regex": "^account:"},
+			"titles": "Owner",
+		}) <= 1:
+			raise ValueError("At least one Owner account must remain.")
+		self.admin_roles.update_one(
+			{"_id": f"account:{normalized_email}"},
+			{"$set": {"titles": normalized_titles}},
+		)
+		return self.get_admin_role(normalized_email)
+
+	def validate_admin_removal(self, email):
+		role = self.get_admin_role(email)
+		if role and "Owner" in role["titles"] and len(self.list_admin_emails_with_title("Owner")) <= 1:
+			raise ValueError("At least one Owner account must remain.")
+
+	def remove_admin_role(self, email):
+		normalized_email = str(email or "").strip().lower()
+		self.validate_admin_removal(normalized_email)
+		self.admin_roles.delete_one({"_id": f"account:{normalized_email}"})
+
+	def list_admin_emails_with_title(self, title):
+		return sorted(
+			document["email"]
+			for document in self.admin_roles.find(
+				{"_id": {"$regex": "^account:"}, "titles": title},
+				{"email": 1},
+			)
+			if document.get("email")
+		)
+
+	def list_chat_sessions(self):
+		return [
+			self._public_document(document)
+			for document in self.chat_sessions.find({}).sort("last_message_at", -1)
+		]
+
+	def save_chat_session(self, session):
+		session_id = session.get("id")
+		if not isinstance(session_id, str) or not session_id or len(session_id) > 200:
+			raise ValueError("Choose a valid chat session.")
+		existing = self.chat_sessions.find_one({"_id": session_id})
+		if existing and existing.get("user_id") and existing.get("user_id") != session.get("user_id"):
+			raise PermissionError("This chat session is linked to a different account.")
+		document = {
+			"_id": session_id,
+			"id": session_id,
+			"username": session["username"],
+			"user_id": session.get("user_id"),
+			"started_at": session["started_at"],
+			"last_message_at": session["last_message_at"],
+			"messages": session["messages"],
+		}
+		self.chat_sessions.update_one(
+			{"_id": session_id},
+			{"$set": {key: value for key, value in document.items() if key != "_id"}},
+			upsert=True,
+		)
+		return self._public_document(document)
+
+	def delete_chat_session(self, session_id):
+		result = self.chat_sessions.delete_one({"_id": session_id})
+		if result.deleted_count == 0:
+			raise RuntimeError("That chat session no longer exists. Refresh the list and try again.")
+		return {"id": session_id}
 
 	def list_units(self, include_inactive=False):
 		query = {} if include_inactive else {"status": {"$ne": "Inactive"}}
