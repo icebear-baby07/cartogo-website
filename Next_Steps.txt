@@ -30,3 +30,6 @@ group c = "Ready to reserve?", "Continue with Google to prefill your details and
 - group c should be under group b.
 
 Additional note: Ask for clarification if confusion ensues.
+
+[TEMP]
+have an interactive price calculation at the top of "SEND INQUIRY" button, have the "SEND INQUIRY" button part of group c

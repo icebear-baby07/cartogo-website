@@ -876,6 +876,13 @@ body.has-map-fullscreen .site-header,body.has-contact-map-fullscreen .site-heade
 .recap-row dd{ min-width:0; margin:0; color:var(--asphalt); font-size:0.9rem; font-weight:600; overflow-wrap:anywhere; }
 .recap-row[hidden]{ display:none; }
 .recap-price-row dd{ font-family:var(--font-mono); }
+.recap-loading{ display:flex; align-items:center; gap:0.85rem; margin:0 0 1rem; padding:0.9rem 1rem; border:1px solid rgba(214,40,40,0.2); border-radius:var(--radius-sm); background:rgba(214,40,40,0.06); }
+.recap-loading[hidden]{ display:none; }
+.recap-loading-spinner{ width:1.35rem; height:1.35rem; flex:none; border:3px solid rgba(214,40,40,0.2); border-top-color:var(--signal); border-radius:50%; animation:recap-loading-spin 0.8s linear infinite; }
+.recap-loading-title{ margin:0; color:var(--asphalt); font-size:0.9rem; font-weight:700; }
+.recap-loading-copy{ margin:0.15rem 0 0; color:var(--slate); font-size:0.8rem; }
+@keyframes recap-loading-spin{ to{ transform:rotate(360deg); } }
+@media (prefers-reduced-motion:reduce){ .recap-loading-spinner{ animation:none; border-top-color:var(--signal); border-right-color:var(--signal); } }
 .recap-error{ margin:0 0 1rem; padding:0.75rem; border-left:3px solid var(--danger); background:rgba(122,31,31,0.08); color:var(--danger); font-size:0.88rem; }
 .recap-error[hidden]{ display:none; }
 .recap-actions{ display:flex; justify-content:flex-end; gap:0.75rem; flex-wrap:wrap; }

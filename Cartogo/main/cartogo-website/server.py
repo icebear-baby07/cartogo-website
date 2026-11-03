@@ -113,6 +113,11 @@ def send_branded_email(recipient, subject, preheader, heading, intro, content_ht
 
 def send_inquiry_confirmation(inquiry):
 	name = inquiry["name"]
+	rate_area_names = {
+		"in": "Metro Manila",
+		"out": "Nearby areas",
+		"luzon": "Other Luzon destinations",
+	}
 	rental_description = (
 		f'{inquiry["rental_period_hours"]}-hour rental'
 		if inquiry["rental_mode"] == "hourly"
@@ -125,7 +130,7 @@ def send_inquiry_confirmation(inquiry):
 		("Rental", rental_description),
 		("Pickup", f'{inquiry["pickup_date"]} at {inquiry["pickup_time"]}'),
 		("Return", inquiry["return_date"]),
-		("Destination", inquiry["location"]),
+		("Destination", inquiry.get("location") or rate_area_names.get(inquiry.get("rate_region"), "To be confirmed")),
 		("Estimated rental", quote_text),
 	]
 	details_html = "".join(
@@ -566,11 +571,12 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			payload = self.read_json()
 			user = self.get_verified_google_user() if self.headers.get("Authorization") else None
 			inquiry = self.normalize_public_inquiry(payload, user)
-			location_result = lookup_target_location(
-				inquiry["target_latitude"], inquiry["target_longitude"]
-			)
-			if not location_result["valid"]:
-				raise ValueError(location_result["reason"])
+			if inquiry["target_latitude"] is not None:
+				location_result = lookup_target_location(
+					inquiry["target_latitude"], inquiry["target_longitude"]
+				)
+				if not location_result["valid"]:
+					raise ValueError(location_result["reason"])
 			email_verification_token = None
 			if not user:
 				email_verification_token = payload.get("emailVerificationToken")
@@ -960,8 +966,10 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 				raise ValueError("The return date must match the selected hourly rental period.")
 		if rental_mode == "custom_days" and (return_day - pickup_day).days != rental_days:
 			raise ValueError("The custom rental duration must match the pickup and return dates.")
-		latitude = number_value("targetLatitude", "Target latitude", required=True, minimum=-90, maximum=90)
-		longitude = number_value("targetLongitude", "Target longitude", required=True, minimum=-180, maximum=180)
+		latitude = number_value("targetLatitude", "Target latitude", minimum=-90, maximum=90)
+		longitude = number_value("targetLongitude", "Target longitude", minimum=-180, maximum=180)
+		if (latitude is None) != (longitude is None):
+			raise ValueError("Target latitude and longitude must both be provided.")
 
 		return {
 			"name": name,
@@ -974,12 +982,12 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			"pickup_date": pickup_date,
 			"pickup_time": pickup_time,
 			"return_date": return_date,
-			"location": text_value("location", "Target location", 500),
+			"location": text_value("location", "Target location", 500, required=False),
 			"target_latitude": latitude,
 			"target_longitude": longitude,
-			"nearest_pickup_name": text_value("nearestPickupName", "Nearest pickup location", 160),
+			"nearest_pickup_name": text_value("nearestPickupName", "Nearest pickup location", 160, required=False),
 			"nearest_pickup_distance_km": number_value(
-				"nearestPickupDistanceKm", "Nearest pickup distance", required=True, maximum=99999.999
+				"nearestPickupDistanceKm", "Nearest pickup distance", maximum=99999.999
 			),
 			"rate_region": rate_region,
 			"rental_period_hours": rental_period_hours,

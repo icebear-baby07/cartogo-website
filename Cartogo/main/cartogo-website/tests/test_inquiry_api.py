@@ -91,6 +91,27 @@ class InquiryNormalizationTests(unittest.TestCase):
 		with self.assertRaisesRegex(ValueError, "accepted range"):
 			WebsiteHandler.normalize_public_inquiry(self.payload, self.user)
 
+	def test_accepts_inquiry_without_map_coordinates(self):
+		self.payload.pop("targetLatitude")
+		self.payload.pop("targetLongitude")
+		self.payload.pop("location")
+		self.payload.pop("nearestPickupName")
+		self.payload.pop("nearestPickupDistanceKm")
+
+		result = WebsiteHandler.normalize_public_inquiry(self.payload, self.user)
+
+		self.assertIsNone(result["target_latitude"])
+		self.assertIsNone(result["target_longitude"])
+		self.assertIsNone(result["location"])
+		self.assertIsNone(result["nearest_pickup_name"])
+		self.assertIsNone(result["nearest_pickup_distance_km"])
+
+	def test_rejects_partial_map_coordinates(self):
+		self.payload.pop("targetLongitude")
+
+		with self.assertRaisesRegex(ValueError, "both be provided"):
+			WebsiteHandler.normalize_public_inquiry(self.payload, self.user)
+
 
 	def test_rejects_return_date_before_pickup_date(self):
 		self.payload["returnDate"] = "2026-10-20"
@@ -438,6 +459,29 @@ class TargetLocationValidationTests(unittest.TestCase):
 
 
 class InquiryLocationEnforcementTests(unittest.TestCase):
+	def test_map_free_inquiry_saves_without_location_lookup(self):
+		handler = object.__new__(WebsiteHandler)
+		handler.headers = {"Authorization": "Bearer verified-user"}
+		handler.read_json = Mock(return_value={})
+		handler.send_json = Mock()
+		handler.log_message = Mock()
+		inquiry = {"target_latitude": None, "target_longitude": None, "email": "customer@example.com"}
+		store = Mock()
+		store.add_inquiry.return_value = {"id": 42}
+		with patch.object(WebsiteHandler, "get_verified_google_user", return_value={"id": "user-123"}), \
+			patch.object(WebsiteHandler, "normalize_public_inquiry", return_value=inquiry), \
+			patch("server.get_mongo_store", return_value=store), \
+			patch("server.lookup_target_location") as lookup_location, \
+			patch("server.send_inquiry_confirmation"):
+			handler.create_inquiry()
+
+		lookup_location.assert_not_called()
+		store.add_inquiry.assert_called_once_with(inquiry)
+		handler.send_json.assert_called_once_with(
+			201,
+			{"data": {"id": 42}, "emailNotificationSent": True},
+		)
+
 	def test_unverified_destination_is_rejected_before_saving(self):
 		handler = object.__new__(WebsiteHandler)
 		handler.headers = {}

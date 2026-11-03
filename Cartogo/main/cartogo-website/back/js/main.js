@@ -101,7 +101,6 @@ async function init() {
   renderContact();
   renderFooter();
   populateCarSelect();
-  bindBookingMap();
   bindContactMap();
   bindNav();
   bindBookingForm();
@@ -1105,7 +1104,7 @@ function classifyTargetRegion(address) {
 }
 
 function regionDisplayName(region) {
-  return ({ in: "Metro Manila", out: "Nearby areas", luzon: "Luzon" })[region] || "Unclassified destination";
+  return ({ in: "Metro Manila", out: "Nearby areas", luzon: "Other Luzon destinations" })[region] || "Unclassified destination";
 }
 
 const BOOKING_OUT_OF_BOUNDS_MESSAGES = [
@@ -1424,7 +1423,7 @@ function updateBookingPeriodOptions(region) {
     document.getElementById("bookingModeHourly").checked = false;
     document.getElementById("bookingModeHourly").disabled = true;
     BOOKING_RENTAL_MODE = "custom_days";
-    note.textContent = "Luzon rates use 24-hour blocks. Select a custom day arrangement.";
+    note.textContent = "Other Luzon destination rates use 24-hour blocks. Select a custom day arrangement.";
     note.hidden = false;
   } else {
     document.getElementById("bookingModeHourly").disabled = false;
@@ -1747,7 +1746,7 @@ function renderBookingEstimate() {
   const car = CARS.find(item => item.id === document.getElementById("bookingCar").value);
   const pickup = document.getElementById("bookingPickup").value;
   const returnDate = document.getElementById("bookingReturn").value;
-  const region = BOOKING_TARGET?.rateRegion;
+  const region = document.getElementById("bookingRateArea").value;
   estimate.hidden = !(car && pickup && returnDate && region);
   BOOKING_RATE_QUOTE = null;
   if (!car || !pickup || !returnDate || !region) return;
@@ -1851,6 +1850,7 @@ function bindBookingEstimate() {
   const capacityInput = document.getElementById("bookingCapacity");
   const carSelect = document.getElementById("bookingCar");
   const pickupInput = document.getElementById("bookingPickup");
+  const rateAreaSelect = document.getElementById("bookingRateArea");
   const returnInput = document.getElementById("bookingReturn");
   const daysInput = document.getElementById("bookingRentalDays");
   const daysOutput = document.getElementById("bookingRentalDaysValue");
@@ -1984,6 +1984,10 @@ function bindBookingEstimate() {
     }
     renderBookingEstimate();
   };
+  rateAreaSelect.addEventListener("change", () => {
+    updateBookingPeriodOptions(rateAreaSelect.value);
+    syncReturnDate();
+  });
   const applyRentalMode = mode => {
     BOOKING_RENTAL_MODE = mode;
     const periodField = document.getElementById("bookingPeriodField");
@@ -2109,10 +2113,10 @@ function bindBookingForm() {
   const recapEditButton = document.getElementById("recapEditButton");
   const recapConfirmButton = document.getElementById("recapConfirmButton");
   const recapError = document.getElementById("recapError");
+  const recapLoading = document.getElementById("recapLoading");
   let currentUser = null;
   let pendingInquiry = null;
   let isSendingInquiry = false;
-  let isResolvingDestination = false;
   let guestEmailChallengeId = null;
   let guestEmailChallengeAddress = null;
   let guestEmailVerificationToken = null;
@@ -2233,7 +2237,7 @@ function bindBookingForm() {
       BOOKING_RENTAL_MODE = document.querySelector('input[name="bookingMode"]:checked')?.value || null;
       populateCarSelect();
       renderRates();
-      restoreBookingTargetFromDraft();
+      updateBookingPeriodOptions(document.getElementById("bookingRateArea").value);
       renderBookingEstimate();
     } catch {
       sessionStorage.removeItem(draftKey);
@@ -2285,12 +2289,7 @@ function bindBookingForm() {
       pickupDate: document.getElementById("bookingPickup").value,
       returnDate: document.getElementById("bookingReturn").value,
       pickupTime: document.getElementById("bookingPickupTime").value,
-      location: BOOKING_TARGET?.label || "",
-      targetLatitude: BOOKING_TARGET?.lat ?? null,
-      targetLongitude: BOOKING_TARGET?.lng ?? null,
-      nearestPickupName: BOOKING_TARGET?.nearestPickupName || "",
-      nearestPickupDistanceKm: BOOKING_TARGET?.nearestPickupDistanceKm ?? null,
-      rateRegion: BOOKING_RATE_QUOTE?.rateRegion || "",
+      rateRegion: document.getElementById("bookingRateArea").value,
       rentalPeriodHours: BOOKING_RATE_QUOTE?.periodHours ?? null,
       estimatedRentalHours: BOOKING_RATE_QUOTE?.rentalHours ?? null,
       ratePerPeriod: BOOKING_RATE_QUOTE?.unitRate ?? null,
@@ -2327,9 +2326,8 @@ function bindBookingForm() {
     document.getElementById("recapPickupDate").textContent = formatRecapDate(inquiry.pickupDate);
     document.getElementById("recapPickupTime").textContent = inquiry.pickupTime;
     document.getElementById("recapReturnDate").textContent = formatRecapDate(inquiry.returnDate);
-    document.getElementById("recapTargetLocation").textContent = inquiry.location;
-    document.getElementById("recapNearestPickup").textContent = `${inquiry.nearestPickupDistanceKm.toFixed(2)} km from ${inquiry.nearestPickupName}`;
-    document.getElementById("recapRateBasis").textContent = `${regionDisplayName(inquiry.rateRegion)} · ${inquiry.rentalMode === "hourly" ? "one" : `${inquiry.rentalDays}`} ${inquiry.rentalMode === "hourly" ? `${inquiry.rentalPeriodHours}-hour block` : `days at 24-hour rates`} at ${formatCurrency(inquiry.ratePerPeriod, SETTINGS.currency)}`;
+    document.getElementById("recapRateArea").textContent = regionDisplayName(inquiry.rateRegion);
+    document.getElementById("recapRateBasis").textContent = `${inquiry.rentalMode === "hourly" ? `One ${inquiry.rentalPeriodHours}-hour block` : `${inquiry.rentalDays} days at 24-hour rates`} at ${formatCurrency(inquiry.ratePerPeriod, SETTINGS.currency)}`;
     document.getElementById("recapRentalDays").textContent = inquiry.rentalMode === "hourly"
       ? `${inquiry.rentalPeriodHours} hours`
       : `${inquiry.rentalDays} days`;
@@ -2341,6 +2339,8 @@ function bindBookingForm() {
     document.getElementById("recapDeposit").textContent = document.getElementById("bookingDepositEstimate").textContent;
     document.getElementById("recapNotes").textContent = inquiry.notes;
     document.getElementById("recapNotesRow").hidden = !inquiry.notes;
+    recapLoading.hidden = true;
+    recapDialog.setAttribute("aria-busy", "false");
     recapError.hidden = true;
     recapError.textContent = "";
     pendingInquiry = { ...inquiry, email: inquiry.email || currentUser?.email || "" };
@@ -2371,6 +2371,8 @@ function bindBookingForm() {
     }
 
     isSendingInquiry = true;
+    recapLoading.hidden = false;
+    recapDialog.setAttribute("aria-busy", "true");
     recapConfirmButton.disabled = true;
     recapCloseButton.disabled = true;
     recapEditButton.disabled = true;
@@ -2390,6 +2392,8 @@ function bindBookingForm() {
       recapError.hidden = false;
     } finally {
       isSendingInquiry = false;
+      recapLoading.hidden = true;
+      recapDialog.setAttribute("aria-busy", "false");
       recapConfirmButton.disabled = false;
       recapCloseButton.disabled = false;
       recapEditButton.disabled = false;
@@ -2582,27 +2586,6 @@ function bindBookingForm() {
     e.preventDefault();
     msg.className = "form-msg";
     msg.textContent = "";
-    if (isResolvingDestination) return;
-    const selectedTarget = BOOKING_TARGET;
-    if (selectedTarget && !selectedTarget.verified && BOOKING_TARGET_REGION_LOOKUP) {
-      isResolvingDestination = true;
-      const submitLabel = submitButton.textContent;
-      submitButton.disabled = true;
-      submitButton.textContent = "Checking destination…";
-      msg.textContent = "Checking the selected destination and its rate…";
-      try {
-        await BOOKING_TARGET_REGION_LOOKUP;
-      } finally {
-        isResolvingDestination = false;
-        submitButton.disabled = false;
-        submitButton.textContent = submitLabel;
-      }
-      if (BOOKING_TARGET !== selectedTarget) {
-        msg.className = "form-msg error";
-        msg.textContent = "The selected destination changed while it was being checked. Submit again to continue.";
-        return;
-      }
-    }
     const inquiry = collectInquiry();
     const lastName = document.getElementById("bookingLastName").value.trim();
     const firstName = document.getElementById("bookingFirstName").value.trim();
@@ -2642,13 +2625,19 @@ function bindBookingForm() {
       emailInput.focus();
       return;
     }
+    if (!inquiry.rateRegion) {
+      msg.className = "form-msg error";
+      msg.textContent = "Select a rate area to calculate your estimate.";
+      document.getElementById("bookingRateArea").focus();
+      return;
+    }
     if (!BOOKING_RENTAL_MODE) {
       msg.className = "form-msg error";
       msg.textContent = "Choose either a 12/24-hour rental or a custom day arrangement.";
       document.getElementById("bookingPeriodField").scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
-    if (BOOKING_RENTAL_MODE === "hourly" && BOOKING_TARGET?.rateRegion !== "luzon"
+    if (BOOKING_RENTAL_MODE === "hourly" && inquiry.rateRegion !== "luzon"
       && !document.querySelector('input[name="bookingPeriod"]:checked')) {
       msg.className = "form-msg error";
       msg.textContent = "Choose either the 12-hour or 24-hour rental period.";
@@ -2666,27 +2655,6 @@ function bindBookingForm() {
       msg.textContent = BOOKING_RENTAL_MODE === "hourly"
         ? "Choose a pickup time to calculate the return date."
         : "Choose a pickup date to calculate your custom rental dates.";
-      return;
-    }
-    if (!BOOKING_TARGET) {
-      msg.className = "form-msg error";
-      msg.textContent = "Choose your target location on the map before continuing.";
-      const bookingMap = document.getElementById("bookingMap");
-      if (bookingMap) {
-        bookingMap.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-      return;
-    }
-    if (!BOOKING_TARGET.verified) {
-      msg.className = "form-msg error";
-      msg.textContent = "Wait for the map to verify your destination, or choose another location.";
-      return;
-    }
-    if (!BOOKING_TARGET.rateRegion) {
-      msg.className = "form-msg error";
-      msg.textContent = document.getElementById("bookingTargetStatus").textContent.includes("Could not identify")
-        ? "We couldn't identify this destination. Click a clearer location on the map and try again."
-        : "This destination isn't within the supported Luzon pricing area. Choose another location on the map.";
       return;
     }
     if (new Date(inquiry.returnDate) < new Date(inquiry.pickupDate)) {
