@@ -149,7 +149,10 @@ function renderHeroShortcuts() {
   wrap.querySelectorAll('[data-shortcut-action="pickup"]').forEach(link => {
     link.addEventListener("click", event => {
       event.preventDefault();
-      document.getElementById("bookingMap").scrollIntoView({ behavior: "smooth", block: "center" });
+      const bookingMap = document.getElementById("bookingMap");
+      if (bookingMap) {
+        bookingMap.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
     });
   });
   finishLoading(wrap);
@@ -2668,7 +2671,10 @@ function bindBookingForm() {
     if (!BOOKING_TARGET) {
       msg.className = "form-msg error";
       msg.textContent = "Choose your target location on the map before continuing.";
-      document.getElementById("bookingMap").scrollIntoView({ behavior: "smooth", block: "center" });
+      const bookingMap = document.getElementById("bookingMap");
+      if (bookingMap) {
+        bookingMap.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
       return;
     }
     if (!BOOKING_TARGET.verified) {

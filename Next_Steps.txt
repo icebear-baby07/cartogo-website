@@ -1,0 +1,32 @@
+1. (At the "TELL US ABOUT YOUR TRIP" part)
+(Desktop mode)
+1.1. I want the "Ready To Reserve?" part to be levelled with "Booking details"
+1.2. Have the "Reserve" and "TELL US ABOUT YOUR TRIP" part to be their header. Place it at the leftmost part of the section with nothing on its opposite side.
+1.3. Swap the "Ready To Reserve?" part with "Booking Details". Have it like this: Booking details (left) then "Ready To Reserve?" (right)
+
+(Smaller Devices Mode)
+1.1. Let it flow like this:
+- "TELL US ABOUT YOUR TRIP" section at the top
+- Followed by "Booking Details" part in the middle
+- Then followed at the bottom with "Ready To Reserve?" section
+
+2. Remove the map entirely from the Booking section, keep it to "Pickup Locations" part instead.
+2.1. Run a playwright code and examine the whole design. It looked ugly as fuck. Don't mix different screen modes.
+2.2. Fix the header with its components under it, separate it from the booking part.
+
+3. Memorize this part segregation;
+group a = "Reserve", "TELL US ABOUT YOUR TRIP", "Submit your details and our team will confirm availability and the final rental details. No payment is taken online.", "01 We confirm your car and dates by phone or email.", "02   You pay the refundable deposit at pickup, not before.", "03 Bring your license, ID, and the confirmation reference."
+group b = Booking Details (Capacity text field, unit spinner, pickup date selection, pickup time selection, rental arrangement selection)
+group c = "Ready to reserve?", "Continue with Google to prefill your details and save time.", "CONTINUE WITH GOOGLE", "Or verify your email below to send your inquiry as a guest.", "Don't have a Google account? You can still book a vehicle by providing your information below.", FIRST NAME textbox, LAST NAME textbox, MIDDLE NAME textbox, SUFFIX textbox, PHONE NUMBER textbox, EMAIL textbox, SEND VERIFICATION CODE Button, NOTES Textfield
+
+3.1. Now, apply this changes in desktop mode
+- group a should be at the top, leftmost part of the whole section
+- group b should be at the bottom of group a.
+- group c should be next to group b, both levelled
+
+3.2. Consider this for smaller devices (phones, small tablets, etc.)
+- group a should be at the top-most of the section
+- group b should be under group a 
+- group c should be under group b.
+
+Additional note: Ask for clarification if confusion ensues.

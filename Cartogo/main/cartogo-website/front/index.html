@@ -176,23 +176,95 @@
   <section class="section bg-paper" id="booking">
     <div class="wrap">
       <div class="booking-panel">
-        <div class="booking-info">
-          <p class="eyebrow">Reserve</p>
-          <h2>Tell us about your trip</h2>
-          <p>Submit your details and our team will confirm availability and the final rental details. No payment is taken online.</p>
-          <ul class="booking-list">
-            <li><b>01</b>&nbsp; We confirm your car and dates by phone or email.</li>
-            <li><b>02</b>&nbsp; You pay the refundable deposit at pickup, not before.</li>
-            <li><b>03</b>&nbsp; Bring your license, ID, and the confirmation reference.</li>
-          </ul>
-          <div class="booking-auth-cta">
-            <p class="booking-auth-kicker">READY TO RESERVE?</p>
-            <p class="booking-auth-copy" id="bookingAuthCopy">Sign in with Google or provide your details below to send an inquiry.</p>
-            <button type="button" class="btn btn-ghost" id="googleOrderButton"><i class="fa-brands fa-google" aria-hidden="true"></i> Continue with Google</button>
-            <p id="bookingAuthStatus" role="status" aria-live="polite"></p>
+        <div class="booking-overview">
+          <div class="booking-header">
+            <p class="eyebrow">Reserve</p>
+            <h2>Tell us about your trip</h2>
           </div>
-          <p class="booking-guest-note" id="bookingGuestNote">Don't have a Google account? You can still book a vehicle by providing your information below.</p>
-          <div class="form-grid booking-contact-fields" id="bookingNameFields">
+          <div class="booking-intro">
+            <p>Submit your details and our team will confirm availability and the final rental details. No payment is taken online.</p>
+            <ul class="booking-list">
+              <li><b>01</b>&nbsp; We confirm your car and dates by phone or email.</li>
+              <li><b>02</b>&nbsp; You pay the refundable deposit at pickup, not before.</li>
+              <li><b>03</b>&nbsp; Bring your license, ID, and the confirmation reference.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="booking-workspace">
+          <form id="bookingForm" novalidate>
+            <div class="form-grid">
+              <details class="booking-details span-2" open>
+                <summary>Booking Details</summary>
+                <div class="form-grid">
+                  <div class="field">
+                    <label for="bookingCapacity">Capacity</label>
+                    <input type="number" id="bookingCapacity" min="1" step="1" inputmode="numeric">
+                  </div>
+                  <div class="field">
+                    <label for="bookingCar">Unit</label>
+                    <select id="bookingCar" class="skeleton-select" aria-busy="true" required disabled><option value="">Loading units...</option></select>
+                  </div>
+                  <div class="field">
+                    <label for="bookingPickup">Pickup date</label>
+                    <input type="date" id="bookingPickup" required>
+                  </div>
+                  <div class="field">
+                    <label for="bookingPickupTime">Pickup time</label>
+                    <input type="time" id="bookingPickupTime" required>
+                    <input type="hidden" id="bookingReturn">
+                  </div>
+                  <fieldset class="field span-2 booking-period-field" id="bookingPeriodField">
+                    <legend>Choose your rental arrangement</legend>
+                    <div class="booking-mode-toggle">
+                      <label id="bookingHourlyModeLabel"><input type="radio" id="bookingModeHourly" name="bookingMode" value="hourly"><span><i class="fa-regular fa-clock" aria-hidden="true"></i> 12 / 24-hour rental</span></label>
+                      <label id="bookingCustomModeLabel"><input type="radio" id="bookingModeCustom" name="bookingMode" value="custom_days"><span><i class="fa-solid fa-calendar-days" aria-hidden="true"></i> Custom day arrangement</span></label>
+                    </div>
+                    <div class="booking-period-toggle">
+                      <label><input type="radio" id="bookingPeriod12" name="bookingPeriod" value="12"><span><i class="fa-regular fa-clock" aria-hidden="true"></i> 12 hours</span></label>
+                      <label><input type="radio" id="bookingPeriod24" name="bookingPeriod" value="24"><span><i class="fa-solid fa-calendar-day" aria-hidden="true"></i> 24 hours</span></label>
+                    </div>
+                    <p class="booking-period-note" id="bookingPeriodNote" hidden></p>
+                    <details class="booking-duration-details" id="bookingDurationDetails">
+                      <summary id="bookingDurationSummary">Custom rental length <output id="bookingRentalDaysValue" for="bookingRentalDays">--</output></summary>
+                      <div class="booking-duration-content">
+                        <input type="range" id="bookingRentalDays" min="4" max="15" step="1" value="4" aria-label="Rental contract length in days" aria-describedby="bookingPromoMessage">
+                        <div class="booking-duration-scale" aria-hidden="true"><span>4 days</span><span>15 days</span></div>
+                        <p class="booking-promo" id="bookingPromoMessage" role="status" aria-live="polite">Choose 4–7 days for 5% off or 8–15 days for 10% off.</p>
+                      </div>
+                    </details>
+                  </fieldset>
+                  <section class="booking-estimate span-2" aria-label="Estimated rental pricing" aria-live="polite" hidden>
+                    <dl>
+                      <div class="booking-estimate-row">
+                        <dt>Estimated rental subtotal <span class="booking-estimate-context" id="bookingEstimateSummary">Choose a unit, destination, and dates.</span></dt>
+                        <dd id="bookingRentalSubtotal">—</dd>
+                      </div>
+                      <div class="booking-estimate-row booking-discount-row" id="bookingDiscountRow" hidden>
+                        <dt>Long-rental discount</dt>
+                        <dd id="bookingDiscountAmount">—</dd>
+                      </div>
+                      <div class="booking-estimate-row deposit-row">
+                        <dt>Refundable deposit estimate (<span id="bookingDepositPercent">20</span>% of subtotal)</dt>
+                        <dd id="bookingDepositEstimate">—</dd>
+                      </div>
+                    </dl>
+                    <p class="booking-estimate-note">The refundable deposit is separate from the rental subtotal. Final pricing is confirmed by our team.</p>
+                  </section>
+                </div>
+              </details>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block" style="margin-top:1.25rem;">Send Inquiry</button>
+            <div class="form-msg" id="formMsg"></div>
+          </form>
+          <div class="booking-info">
+            <div class="booking-auth-cta">
+              <p class="booking-auth-kicker">READY TO RESERVE?</p>
+              <p class="booking-auth-copy" id="bookingAuthCopy">Sign in with Google or provide your details below to send an inquiry.</p>
+              <button type="button" class="btn btn-ghost" id="googleOrderButton"><i class="fa-brands fa-google" aria-hidden="true"></i> Continue with Google</button>
+              <p id="bookingAuthStatus" role="status" aria-live="polite"></p>
+            </div>
+            <p class="booking-guest-note" id="bookingGuestNote">Don't have a Google account? You can still book a vehicle by providing your information below.</p>
+            <div class="form-grid booking-contact-fields" id="bookingNameFields">
             <div class="field booking-profile-field" id="bookingFirstNameField">
               <label for="bookingFirstName">First name</label>
               <input type="text" id="bookingFirstName" form="bookingForm" autocomplete="given-name" required>
@@ -240,97 +312,6 @@
           </div>
         </div>
 
-        <form id="bookingForm" novalidate>
-          <div class="form-grid">
-            <details class="booking-details span-2" open>
-              <summary>Booking Details</summary>
-              <div class="form-grid">
-                <div class="field">
-                  <label for="bookingCapacity">Capacity</label>
-                  <input type="number" id="bookingCapacity" min="1" step="1" inputmode="numeric">
-                </div>
-                <div class="field">
-                  <label for="bookingCar">Unit</label>
-                  <select id="bookingCar" class="skeleton-select" aria-busy="true" required disabled><option value="">Loading units...</option></select>
-                </div>
-                <div class="field">
-                  <label for="bookingPickup">Pickup date</label>
-                  <input type="date" id="bookingPickup" required>
-                </div>
-                <div class="field">
-                  <label for="bookingPickupTime">Pickup time</label>
-                  <input type="time" id="bookingPickupTime" required>
-                  <input type="hidden" id="bookingReturn">
-                </div>
-                <fieldset class="field span-2 booking-period-field" id="bookingPeriodField">
-                  <legend>Choose your rental arrangement</legend>
-                  <div class="booking-mode-toggle">
-                    <label id="bookingHourlyModeLabel"><input type="radio" id="bookingModeHourly" name="bookingMode" value="hourly"><span><i class="fa-regular fa-clock" aria-hidden="true"></i> 12 / 24-hour rental</span></label>
-                    <label id="bookingCustomModeLabel"><input type="radio" id="bookingModeCustom" name="bookingMode" value="custom_days"><span><i class="fa-solid fa-calendar-days" aria-hidden="true"></i> Custom day arrangement</span></label>
-                  </div>
-                  <div class="booking-period-toggle">
-                    <label><input type="radio" id="bookingPeriod12" name="bookingPeriod" value="12"><span><i class="fa-regular fa-clock" aria-hidden="true"></i> 12 hours</span></label>
-                    <label><input type="radio" id="bookingPeriod24" name="bookingPeriod" value="24"><span><i class="fa-solid fa-calendar-day" aria-hidden="true"></i> 24 hours</span></label>
-                  </div>
-                  <p class="booking-period-note" id="bookingPeriodNote" hidden></p>
-                  <details class="booking-duration-details" id="bookingDurationDetails">
-                    <summary id="bookingDurationSummary">Custom rental length <output id="bookingRentalDaysValue" for="bookingRentalDays">--</output></summary>
-                    <div class="booking-duration-content">
-                      <input type="range" id="bookingRentalDays" min="4" max="15" step="1" value="4" aria-label="Rental contract length in days" aria-describedby="bookingPromoMessage">
-                      <div class="booking-duration-scale" aria-hidden="true"><span>4 days</span><span>15 days</span></div>
-                      <p class="booking-promo" id="bookingPromoMessage" role="status" aria-live="polite">Choose 4–7 days for 5% off or 8–15 days for 10% off.</p>
-                    </div>
-                  </details>
-                </fieldset>
-                <div class="field span-2 booking-map-field">
-                  <label for="bookingTargetLocation">Target location</label>
-                  <input type="text" id="bookingTargetLocation" form="bookingForm" placeholder="Enter your desired destination" autocomplete="street-address">
-                  <p class="booking-map-target" id="bookingTargetStatus" role="status" aria-live="polite">Enter your target location.</p>
-                  <p class="booking-map-distance" id="bookingMapDistance" role="status" aria-live="polite">
-                    <span id="bookingMapDistancePrompt">Target location is entered manually; distance is not calculated without the map.</span>
-                    <span id="bookingMapDistanceResult" hidden><span id="bookingMapDistancePrefix"></span><strong id="bookingMapDistanceValue"></strong> km <span id="bookingMapDistanceKind">driving distance</span> from the nearest pickup location (<span id="bookingMapNearestPickup"></span>)</span>
-                  </p>
-                  <p class="booking-route-loading" id="bookingRouteLoading" role="status" aria-live="polite" hidden>
-                    <i class="fa-solid fa-spinner" aria-hidden="true"></i>
-                    <span id="bookingRouteLoadingText"></span>
-                  </p>
-                  <p class="booking-map-preview" id="bookingMapPreview" role="status" aria-live="polite" hidden>
-                    <span id="bookingMapPreviewPrefix">Hovered location: </span><strong id="bookingMapPreviewName"></strong>
-                  </p>
-                  <p class="booking-map-snap-status" id="bookingMapSnapStatus" role="status" aria-live="polite" hidden>
-                    <span class="booking-map-snap-indicator" aria-hidden="true"></span>
-                    <span id="bookingMapSnapStatusText"></span>
-                  </p>
-                  <input type="hidden" id="bookingTargetLat">
-                  <input type="hidden" id="bookingTargetLng">
-                  <input type="hidden" id="bookingTargetLabel">
-                  <input type="hidden" id="bookingTargetRegion">
-                  <input type="hidden" id="bookingNearestPickupName">
-                  <input type="hidden" id="bookingNearestPickupDistance">
-                </div>
-                <section class="booking-estimate span-2" aria-label="Estimated rental pricing" aria-live="polite" hidden>
-                  <dl>
-                    <div class="booking-estimate-row">
-                      <dt>Estimated rental subtotal <span class="booking-estimate-context" id="bookingEstimateSummary">Choose a unit, destination, and dates.</span></dt>
-                      <dd id="bookingRentalSubtotal">—</dd>
-                    </div>
-                    <div class="booking-estimate-row booking-discount-row" id="bookingDiscountRow" hidden>
-                      <dt>Long-rental discount</dt>
-                      <dd id="bookingDiscountAmount">—</dd>
-                    </div>
-                    <div class="booking-estimate-row deposit-row">
-                      <dt>Refundable deposit estimate (<span id="bookingDepositPercent">20</span>% of subtotal)</dt>
-                      <dd id="bookingDepositEstimate">—</dd>
-                    </div>
-                  </dl>
-                  <p class="booking-estimate-note">The refundable deposit is separate from the rental subtotal. Final pricing is confirmed by our team.</p>
-                </section>
-              </div>
-            </details>
-          </div>
-          <button type="submit" class="btn btn-primary btn-block" style="margin-top:1.25rem;">Send Inquiry</button>
-          <div class="form-msg" id="formMsg"></div>
-        </form>
         <dialog class="reservation-recap" id="reservationRecap" aria-labelledby="reservationRecapTitle">
           <div class="reservation-recap-inner">
             <header class="recap-header">
