@@ -571,12 +571,6 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			payload = self.read_json()
 			user = self.get_verified_google_user() if self.headers.get("Authorization") else None
 			inquiry = self.normalize_public_inquiry(payload, user)
-			if inquiry["target_latitude"] is not None:
-				location_result = lookup_target_location(
-					inquiry["target_latitude"], inquiry["target_longitude"]
-				)
-				if not location_result["valid"]:
-					raise ValueError(location_result["reason"])
 			email_verification_token = None
 			if not user:
 				email_verification_token = payload.get("emailVerificationToken")
@@ -966,11 +960,6 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 				raise ValueError("The return date must match the selected hourly rental period.")
 		if rental_mode == "custom_days" and (return_day - pickup_day).days != rental_days:
 			raise ValueError("The custom rental duration must match the pickup and return dates.")
-		latitude = number_value("targetLatitude", "Target latitude", minimum=-90, maximum=90)
-		longitude = number_value("targetLongitude", "Target longitude", minimum=-180, maximum=180)
-		if (latitude is None) != (longitude is None):
-			raise ValueError("Target latitude and longitude must both be provided.")
-
 		return {
 			"name": name,
 			"email": email,
@@ -982,13 +971,6 @@ class WebsiteHandler(SimpleHTTPRequestHandler):
 			"pickup_date": pickup_date,
 			"pickup_time": pickup_time,
 			"return_date": return_date,
-			"location": text_value("location", "Target location", 500, required=False),
-			"target_latitude": latitude,
-			"target_longitude": longitude,
-			"nearest_pickup_name": text_value("nearestPickupName", "Nearest pickup location", 160, required=False),
-			"nearest_pickup_distance_km": number_value(
-				"nearestPickupDistanceKm", "Nearest pickup distance", maximum=99999.999
-			),
 			"rate_region": rate_region,
 			"rental_period_hours": rental_period_hours,
 			"rental_mode": rental_mode,

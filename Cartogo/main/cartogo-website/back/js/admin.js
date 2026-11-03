@@ -896,7 +896,6 @@ async function renderInquiriesTab({ reload = true } = {}) {
           const rental = inq.rental_mode === "hourly"
             ? `${text(inq.rental_period_hours ?? "—")}-hour rental`
             : `${text(inq.rental_days ?? "—")} custom days`;
-          const coordinates = getInquiryCoordinates(inq);
           const isRejected = status === "rejected";
           return `
             <article class="inquiry-card inquiry-card-${status}${String(inq.id) === String(SELECTED_INQUIRY_CARD_ID) ? " is-selected" : ""}" data-id="${attr(inq.id)}" tabindex="0" aria-label="Inquiry from ${attr(inq.name || "Unnamed customer")}">
@@ -922,7 +921,8 @@ async function renderInquiriesTab({ reload = true } = {}) {
               <div class="inquiry-card-summary">
                 <div><span>Vehicle</span><strong>${text(inq.car_name || inq.carName || "—")}</strong></div>
                 <div><span>Dates</span><strong>${text(inq.pickup_date || inq.pickupDate || "—")} ${text(inq.pickup_time || inq.pickupTime || "")} → ${text(inq.return_date || inq.returnDate || "—")}</strong></div>
-                <div><span>Destination</span><strong>${text(inq.location || "—")}</strong></div>
+                <div><span>Rate area</span><strong>${text(inq.rate_region || "—")}</strong></div>
+                <div class="inquiry-card-summary-notes"><span>Notes</span><strong>${text(inq.notes || "—")}</strong></div>
               </div>
               <details class="inquiry-disclosure">
                 <summary><span>Read more</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
@@ -932,8 +932,6 @@ async function renderInquiriesTab({ reload = true } = {}) {
                   <div><dt>Rate region</dt><dd>${text(inq.rate_region || "—")}</dd></div>
                   <div><dt>Quoted rate</dt><dd>${text(inq.quoted_rate ?? "—")}</dd></div>
                   <div><dt>Discount</dt><dd>${text(inq.discount_percent ?? 0)}% · ${text(inq.discount_amount ?? 0)}</dd></div>
-                  <div><dt>Nearest pickup</dt><dd>${text(inq.nearest_pickup_name || "—")} · ${text(inq.nearest_pickup_distance_km ?? "—")} km</dd></div>
-                  <div class="inquiry-card-detail-wide"><dt>Target coordinates</dt><dd>${text(coordinates ? `${coordinates.latitude}, ${coordinates.longitude}` : "—")} ${coordinates ? `<a class="inquiry-map-link" href="${getGoogleMapsUrl(coordinates)}" target="_blank" rel="noopener noreferrer" title="Show coordinates in map" aria-label="Show coordinates in map"><i class="fa-solid fa-map-location-dot" aria-hidden="true"></i></a>` : ""}</dd></div>
                   ${inq.rejection_reason ? `<div class="inquiry-card-detail-wide"><dt>Rejection reason</dt><dd class="preserve-lines">${text(inq.rejection_reason)}</dd></div>` : ""}
                   ${inq.notes ? `<div class="inquiry-card-detail-wide"><dt>Notes</dt><dd class="preserve-lines">${text(inq.notes)}</dd></div>` : ""}
                 </dl>
@@ -970,22 +968,6 @@ function displayInquiryCount(count) {
   return count > 99 ? "99+" : String(count);
 }
 
-function getInquiryCoordinates(inquiry) {
-  const rawLatitude = inquiry.target_latitude ?? inquiry.targetLatitude;
-  const rawLongitude = inquiry.target_longitude ?? inquiry.targetLongitude;
-  if (rawLatitude === null || rawLatitude === undefined || rawLatitude === ""
-    || rawLongitude === null || rawLongitude === undefined || rawLongitude === "") return null;
-  const latitude = Number(rawLatitude);
-  const longitude = Number(rawLongitude);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)
-    || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
-  return { latitude, longitude };
-}
-
-function getGoogleMapsUrl(coordinates) {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${coordinates.latitude},${coordinates.longitude}`)}`;
-}
-
 function inquiryDisplayDate(value) {
   if (!value) return "Submission date unavailable";
   const date = new Date(value);
@@ -996,7 +978,7 @@ function inquiryDisplayDate(value) {
 
 function exportInquiryCsv(inquiry) {
   const row = [
-    ["Submitted", "Name", "Email", "Phone", "Secondary phone", "Unit", "Unit ID", "Capacity", "Pickup date", "Pickup time", "Return date", "Target location", "Target latitude", "Target longitude", "Nearest pickup", "Distance km", "Rate region", "Rental mode", "Rate period hours", "Estimated hours", "Rental days", "Rate per period", "Discount percent", "Discount amount", "Quoted rate", "Status", "Rejection reason", "Rejection email sent", "Notes"],
+    ["Submitted", "Name", "Email", "Phone", "Secondary phone", "Unit", "Unit ID", "Capacity", "Pickup date", "Pickup time", "Return date", "Rate region", "Rental mode", "Rate period hours", "Estimated hours", "Rental days", "Rate per period", "Discount percent", "Discount amount", "Quoted rate", "Status", "Rejection reason", "Rejection email sent", "Notes"],
     [
       inquiry.created_at || inquiry.submittedAt || "",
       inquiry.name || "",
@@ -1009,11 +991,6 @@ function exportInquiryCsv(inquiry) {
       inquiry.pickup_date || inquiry.pickupDate || "",
       inquiry.pickup_time || inquiry.pickupTime || "",
       inquiry.return_date || inquiry.returnDate || "",
-      inquiry.location || "",
-      inquiry.target_latitude ?? "",
-      inquiry.target_longitude ?? "",
-      inquiry.nearest_pickup_name || "",
-      inquiry.nearest_pickup_distance_km ?? "",
       inquiry.rate_region || "",
       inquiry.rental_mode || "",
       inquiry.rental_period_hours ?? "",
@@ -1063,9 +1040,6 @@ function showInquiryDetails(id) {
       <div><dt>Pickup date</dt><dd>${text(inquiry.pickup_date || inquiry.pickupDate || "—")}</dd></div>
       <div><dt>Pickup time</dt><dd>${text(inquiry.pickup_time || inquiry.pickupTime || "—")}</dd></div>
       <div><dt>Return date</dt><dd>${text(inquiry.return_date || inquiry.returnDate || "—")}</dd></div>
-      <div><dt>Target location</dt><dd>${text(inquiry.location || "—")}</dd></div>
-      <div><dt>Target coordinates</dt><dd>${text(coordinates ? `${coordinates.latitude}, ${coordinates.longitude}` : "—")} ${coordinates ? `<a class="inquiry-map-link" href="${getGoogleMapsUrl(coordinates)}" target="_blank" rel="noopener noreferrer" title="Show coordinates in map" aria-label="Show coordinates in map"><i class="fa-solid fa-map-location-dot" aria-hidden="true"></i></a>` : ""}</dd></div>
-      <div><dt>Nearest pickup</dt><dd>${text(inquiry.nearest_pickup_name || "—")} · ${text(inquiry.nearest_pickup_distance_km ?? "—")} km</dd></div>
       <div><dt>Quoted rate</dt><dd>${text(inquiry.rate_region || "—")} · ${inquiry.rental_mode === "hourly" ? `${text(inquiry.rental_period_hours ?? "—")}-hour rental` : `${text(inquiry.rental_days ?? "—")} custom days`} · ${text(inquiry.quoted_rate ?? "—")}</dd></div>
       <div><dt>Promo discount</dt><dd>${text(inquiry.discount_percent ?? 0)}% · ${text(inquiry.discount_amount ?? 0)}</dd></div>
       ${inquiry.rejection_reason ? `<div class="inquiry-detail-wide"><dt>Rejection reason</dt><dd class="preserve-lines">${text(inquiry.rejection_reason)}</dd></div>` : ""}
@@ -1371,10 +1345,10 @@ function bindInquiryTools() {
 
   document.getElementById("exportCsvBtn").addEventListener("click", () => {
     if (INQUIRIES.length === 0) { toast("No inquiries to export yet."); return; }
-    const headers = ["Submitted", "Name", "Email", "Phone", "Unit", "Capacity", "Pickup Date", "Pickup Time", "Return Date", "Location", "Rate Region", "Rental Mode", "Rental Days", "Rate Period Hours", "Discount Percent", "Discount Amount", "Quoted Rate", "Status", "Rejection Reason", "Rejection Email Sent", "Notes"];
+    const headers = ["Submitted", "Name", "Email", "Phone", "Unit", "Capacity", "Pickup Date", "Pickup Time", "Return Date", "Rate Region", "Rental Mode", "Rental Days", "Rate Period Hours", "Discount Percent", "Discount Amount", "Quoted Rate", "Status", "Rejection Reason", "Rejection Email Sent", "Notes"];
     const rows = INQUIRIES.map(i => [
       i.submittedAt || i.created_at || "", i.name, i.email, i.phone, i.carName || i.car_name, i.capacity ?? "",
-      i.pickupDate || i.pickup_date, i.pickup_time || i.pickupTime || "", i.returnDate || i.return_date, i.location || "", i.rate_region || "",
+      i.pickupDate || i.pickup_date, i.pickup_time || i.pickupTime || "", i.returnDate || i.return_date, i.rate_region || "",
       i.rental_mode || "", i.rental_days ?? "", i.rental_period_hours ?? "", i.discount_percent ?? "", i.discount_amount ?? "",
       i.quoted_rate ?? "", i.status, i.rejection_reason || "", i.rejection_email_sent ? "yes" : "no", (i.notes || "").replace(/\n/g, " ")
     ]);

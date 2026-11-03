@@ -6,6 +6,19 @@ from pymongo import MongoClient, ReturnDocument
 from pymongo.errors import PyMongoError
 
 
+INQUIRY_LOCATION_FIELDS = (
+	"location",
+	"target_latitude",
+	"target_longitude",
+	"nearest_pickup_name",
+	"nearest_pickup_distance_km",
+	"targetLatitude",
+	"targetLongitude",
+	"nearestPickupName",
+	"nearestPickupDistanceKm",
+)
+
+
 class MongoDataStore:
 	def __init__(self, client, database_name, units_collection, site_assets_collection,
 			site_content_collection, inquiries_collection, sequences_collection,
@@ -77,7 +90,10 @@ class MongoDataStore:
 		inquiry_id = self._next_id("inquiries", self.inquiries)
 		timestamp = datetime.now(timezone.utc).isoformat()
 		document = {
-			**inquiry,
+			**{
+				key: value for key, value in inquiry.items()
+				if key not in INQUIRY_LOCATION_FIELDS
+			},
 			"id": inquiry_id,
 			"_id": inquiry_id,
 			"created_at": timestamp,
@@ -85,6 +101,13 @@ class MongoDataStore:
 		}
 		self.inquiries.insert_one(document)
 		return self._public_document(document)
+
+	def remove_inquiry_location_data(self):
+		result = self.inquiries.update_many(
+			{},
+			{"$unset": {field: "" for field in INQUIRY_LOCATION_FIELDS}},
+		)
+		return result.modified_count
 
 	def update_inquiry_status(self, inquiry_id, status):
 		updated = self.inquiries.find_one_and_update(

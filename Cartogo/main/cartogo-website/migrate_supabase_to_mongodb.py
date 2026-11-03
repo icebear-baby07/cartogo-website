@@ -121,6 +121,7 @@ def main():
 		imported_units = import_rows(store.units, units)
 		imported_assets = import_rows(store.site_assets, site_assets)
 		imported_inquiries = import_rows(store.inquiries, inquiries)
+		cleared_inquiry_locations = store.remove_inquiry_location_data()
 		content_result = store.site_content.update_one(
 			{"_id": "public"},
 			{"$setOnInsert": {"_id": "public", **site_content}},
@@ -145,9 +146,10 @@ def main():
 		print(
 			"Migration complete. "
 			f"Imported {imported_units} vehicle(s), {imported_assets} site asset(s), "
-			f"{imported_inquiries} inquiry/inquiries, "
-			f"and {'1 site-content document' if content_result.upserted_id else 'kept existing site content'}. "
-			"Existing MongoDB data was preserved, and Supabase source records were not modified or deleted."
+			f"{imported_inquiries} inquiry/inquiries. "
+			f"Removed location details from {cleared_inquiry_locations} existing inquiry/inquiries. "
+			f"Site content: {'initialized' if content_result.upserted_id else 'existing content kept'}. "
+			"All other existing MongoDB data was preserved, and Supabase source records were not modified or deleted."
 		)
 	finally:
 		store.client.close()

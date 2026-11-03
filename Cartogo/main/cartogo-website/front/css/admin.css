@@ -220,6 +220,7 @@ table.admin-table input:focus, table.admin-table select:focus{ outline:none; bor
 .inquiry-card-summary div{ display:grid; grid-template-columns:5.25rem minmax(0, 1fr); gap:0.5rem; align-items:start; }
 .inquiry-card-summary span,.inquiry-card-details dt{ color:var(--slate); font-size:0.68rem; font-weight:600; }
 .inquiry-card-summary strong{ min-width:0; color:var(--ink); font-size:0.78rem; font-weight:600; overflow-wrap:anywhere; }
+.inquiry-card-summary-notes strong{ max-height:7em; overflow-y:auto; white-space:pre-wrap; }
 .inquiry-disclosure{ margin-top:0.75rem; border-top:1px solid var(--line); }
 .inquiry-disclosure summary{ display:flex; align-items:center; justify-content:space-between; gap:0.5rem; padding:0.7rem 0 0.2rem; color:var(--route-blue); font-size:0.78rem; font-weight:700; cursor:pointer; list-style:none; }
 .inquiry-disclosure summary::-webkit-details-marker{ display:none; }

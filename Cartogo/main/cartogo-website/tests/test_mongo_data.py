@@ -118,6 +118,52 @@ class MongoDataStoreTests(unittest.TestCase):
 		self.assertEqual(document["created_at"], document["verified_at"])
 		self.assertNotIn("_id", result)
 
+	def test_adding_inquiry_keeps_notes_and_omits_location_details(self):
+		self.sequences.find_one_and_update.return_value = {"value": 8}
+		inquiry = {
+			"name": "Test customer",
+			"notes": "Please include a child seat.",
+			"location": "Fairview",
+			"target_latitude": 14.75,
+			"target_longitude": 121.05,
+			"nearest_pickup_name": "Pickup point A",
+			"nearest_pickup_distance_km": 2.5,
+		}
+
+		result = self.store.add_inquiry(inquiry)
+		document = self.inquiries.insert_one.call_args.args[0]
+
+		self.assertEqual(result["notes"], "Please include a child seat.")
+		self.assertEqual(document["notes"], "Please include a child seat.")
+		self.assertFalse({
+			"location",
+			"target_latitude",
+			"target_longitude",
+			"nearest_pickup_name",
+			"nearest_pickup_distance_km",
+		} & document.keys())
+
+	def test_location_cleanup_unsets_only_requested_inquiry_fields(self):
+		self.inquiries.update_many.return_value.modified_count = 3
+
+		removed_documents = self.store.remove_inquiry_location_data()
+
+		self.assertEqual(removed_documents, 3)
+		self.inquiries.update_many.assert_called_once_with(
+			{},
+			{"$unset": {
+				"location": "",
+				"target_latitude": "",
+				"target_longitude": "",
+				"nearest_pickup_name": "",
+				"nearest_pickup_distance_km": "",
+				"targetLatitude": "",
+				"targetLongitude": "",
+				"nearestPickupName": "",
+				"nearestPickupDistanceKm": "",
+			}},
+		)
+
 	def test_inquiry_status_update_reports_missing_records(self):
 		self.inquiries.find_one_and_update.return_value = None
 

@@ -85,32 +85,17 @@ class InquiryNormalizationTests(unittest.TestCase):
 		with self.assertRaisesRegex(ValueError, "First name"):
 			WebsiteHandler.normalize_public_inquiry(self.payload, None)
 
-	def test_rejects_invalid_coordinates(self):
-		self.payload["targetLatitude"] = 91
-
-		with self.assertRaisesRegex(ValueError, "accepted range"):
-			WebsiteHandler.normalize_public_inquiry(self.payload, self.user)
-
-	def test_accepts_inquiry_without_map_coordinates(self):
-		self.payload.pop("targetLatitude")
-		self.payload.pop("targetLongitude")
-		self.payload.pop("location")
-		self.payload.pop("nearestPickupName")
-		self.payload.pop("nearestPickupDistanceKm")
-
+	def test_location_details_are_not_included_in_saved_inquiry(self):
 		result = WebsiteHandler.normalize_public_inquiry(self.payload, self.user)
 
-		self.assertIsNone(result["target_latitude"])
-		self.assertIsNone(result["target_longitude"])
-		self.assertIsNone(result["location"])
-		self.assertIsNone(result["nearest_pickup_name"])
-		self.assertIsNone(result["nearest_pickup_distance_km"])
-
-	def test_rejects_partial_map_coordinates(self):
-		self.payload.pop("targetLongitude")
-
-		with self.assertRaisesRegex(ValueError, "both be provided"):
-			WebsiteHandler.normalize_public_inquiry(self.payload, self.user)
+		self.assertEqual(result["notes"], "Test request")
+		self.assertFalse({
+			"location",
+			"target_latitude",
+			"target_longitude",
+			"nearest_pickup_name",
+			"nearest_pickup_distance_km",
+		} & result.keys())
 
 
 	def test_rejects_return_date_before_pickup_date(self):
@@ -465,7 +450,7 @@ class InquiryLocationEnforcementTests(unittest.TestCase):
 		handler.read_json = Mock(return_value={})
 		handler.send_json = Mock()
 		handler.log_message = Mock()
-		inquiry = {"target_latitude": None, "target_longitude": None, "email": "customer@example.com"}
+		inquiry = {"email": "customer@example.com"}
 		store = Mock()
 		store.add_inquiry.return_value = {"id": 42}
 		with patch.object(WebsiteHandler, "get_verified_google_user", return_value={"id": "user-123"}), \
@@ -481,24 +466,6 @@ class InquiryLocationEnforcementTests(unittest.TestCase):
 			201,
 			{"data": {"id": 42}, "emailNotificationSent": True},
 		)
-
-	def test_unverified_destination_is_rejected_before_saving(self):
-		handler = object.__new__(WebsiteHandler)
-		handler.headers = {}
-		handler.read_json = Mock(return_value={})
-		handler.send_json = Mock()
-		inquiry = {"target_latitude": 14.75, "target_longitude": 121.05}
-		store = Mock()
-		with patch.object(WebsiteHandler, "normalize_public_inquiry", return_value=inquiry), \
-			patch("server.lookup_target_location", return_value={
-				"valid": False,
-				"reason": "Choose a verified residential location.",
-			}), patch("server.get_mongo_store", return_value=store):
-			handler.create_inquiry()
-
-		handler.send_json.assert_called_once_with(400, {"error": "Choose a verified residential location."})
-		store.add_inquiry.assert_not_called()
-
 
 class GuestEmailVerificationTests(unittest.TestCase):
 	def setUp(self):
@@ -711,7 +678,7 @@ class BrandedEmailTests(unittest.TestCase):
 			"discountPercent": 5,
 			"discountAmount": 400,
 			"quotedRate": 7600,
-			"notes": "",
+			"notes": "Please include a child seat.",
 		}
 		handler = object.__new__(WebsiteHandler)
 		handler.headers = {}
@@ -721,10 +688,18 @@ class BrandedEmailTests(unittest.TestCase):
 		store = Mock()
 		store.add_inquiry.return_value = {"id": 42}
 		with patch("server.get_mongo_store", return_value=store), \
-			patch("server.lookup_target_location", return_value={"valid": True}), \
 			patch("server.send_inquiry_confirmation", side_effect=RuntimeError("SMTP unavailable")):
 			handler.create_inquiry()
 
+		saved_inquiry = store.add_inquiry.call_args.args[0]
+		self.assertEqual(saved_inquiry["notes"], "Please include a child seat.")
+		self.assertFalse({
+			"location",
+			"target_latitude",
+			"target_longitude",
+			"nearest_pickup_name",
+			"nearest_pickup_distance_km",
+		} & saved_inquiry.keys())
 		handler.send_json.assert_called_once_with(
 			201,
 			{"data": {"id": 42}, "emailNotificationSent": False},

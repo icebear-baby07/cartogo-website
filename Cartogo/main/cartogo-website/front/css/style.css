@@ -691,6 +691,8 @@ table.rates .skeleton-line{ height:0.7rem; }
 #guestEmailVerificationStatus.is-error{ color:var(--danger); }
 .booking-guest-note{ margin:0; padding:0.75rem 0.9rem; border-radius:var(--radius-sm); background:var(--concrete); color:var(--slate); font-size:0.84rem; font-weight:500; line-height:1.45; }
 .booking-contact-fields{ margin-top:0.15rem; }
+.booking-submit{ margin-top:1.25rem; }
+.booking-submit-mobile{ display:none; }
 .booking-contact-fields label{ display:flex; align-items:center; flex-wrap:wrap; gap:0.25rem; }
 .booking-phone-hint{ position:relative; display:inline-grid; width:1.15rem; height:1.15rem; place-items:center; color:var(--route-blue); cursor:help; }
 .booking-phone-hint i{ font-size:0.95rem; }
@@ -1063,6 +1065,8 @@ body.has-map-fullscreen .site-header,body.has-contact-map-fullscreen .site-heade
   .booking-panel{ padding:1rem; }
   .booking-workspace{ gap:1.25rem; }
   .booking-info{ padding:1rem; }
+  .booking-submit-desktop{ display:none; }
+  .booking-submit-mobile{ display:inline-flex; }
   .booking-workspace #bookingForm{ min-width:0; }
   .booking-contact-fields{ gap:0.8rem; }
   .booking-mode-toggle{ gap:0.45rem; }
