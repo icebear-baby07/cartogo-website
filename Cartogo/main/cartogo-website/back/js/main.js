@@ -1850,6 +1850,7 @@ function bindBookingEstimate() {
   const capacityInput = document.getElementById("bookingCapacity");
   const carSelect = document.getElementById("bookingCar");
   const pickupInput = document.getElementById("bookingPickup");
+  const pickupTimeInput = document.getElementById("bookingPickupTime");
   const rateAreaSelect = document.getElementById("bookingRateArea");
   const returnInput = document.getElementById("bookingReturn");
   const daysInput = document.getElementById("bookingRentalDays");
@@ -1858,7 +1859,22 @@ function bindBookingEstimate() {
   const durationDetails = document.getElementById("bookingDurationDetails");
   const durationSummary = document.getElementById("bookingDurationSummary");
   const modeOptions = document.querySelectorAll('input[name="bookingMode"]');
-  document.getElementById("bookingPickupTime").addEventListener("change", event => {
+  const syncPickupDateTimeConstraints = () => {
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    pickupInput.min = today;
+    if (pickupInput.value === today) {
+      pickupTimeInput.min = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    } else {
+      pickupTimeInput.removeAttribute("min");
+    }
+  };
+  syncPickupDateTimeConstraints();
+  pickupInput.addEventListener("focus", syncPickupDateTimeConstraints);
+  pickupInput.addEventListener("change", syncPickupDateTimeConstraints);
+  pickupTimeInput.addEventListener("focus", syncPickupDateTimeConstraints);
+  pickupTimeInput.addEventListener("change", syncPickupDateTimeConstraints);
+  pickupTimeInput.addEventListener("change", event => {
     event.currentTarget.blur();
   });
   const hoverCanExpand = window.matchMedia("(hover: hover) and (pointer: fine)");
@@ -2311,6 +2327,7 @@ function bindBookingForm() {
     msg.textContent = result.emailNotificationSent
       ? `Thanks, ${inquiry.name}. Your inquiry was received. A confirmation email is on its way.`
       : `Thanks, ${inquiry.name}. Your inquiry was received, but we couldn't send the confirmation email. Our team will follow up using your phone number.`;
+    showAuthToast("Booking request received successfully.");
     updateVerificationUI();
   };
 
@@ -2621,6 +2638,17 @@ function bindBookingForm() {
       msg.textContent = isGoogle && !inquiry.name
         ? "Your Google account did not provide a profile name. Add a name to your Google profile and sign in again."
         : "Please fill in your name, unit, pickup date, and pickup time.";
+      return;
+    }
+    const [pickupYear, pickupMonth, pickupDay] = inquiry.pickupDate.split("-").map(Number);
+    const [pickupHour, pickupMinute] = inquiry.pickupTime.split(":").map(Number);
+    const pickupDateTime = new Date(pickupYear, pickupMonth - 1, pickupDay, pickupHour, pickupMinute);
+    const now = new Date();
+    now.setSeconds(0, 0);
+    if (Number.isNaN(pickupDateTime.getTime()) || pickupDateTime < now) {
+      msg.className = "form-msg error";
+      msg.textContent = "Please, pick an appropriate date and time.";
+      document.getElementById("bookingPickup").focus();
       return;
     }
     const phoneDigits = inquiry.phone.replace(/\D/g, "");
