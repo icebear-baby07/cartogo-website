@@ -8,14 +8,16 @@ from pymongo.errors import PyMongoError
 
 class MongoDataStore:
 	def __init__(self, client, database_name, units_collection, site_assets_collection,
-			site_content_collection, inquiries_collection, sequences_collection):
+			site_content_collection, inquiries_collection, sequences_collection,
+			site_database_name=None):
 		self.client = client
 		self.database = client[database_name]
-		self.units = self.database[units_collection]
-		self.site_assets = self.database[site_assets_collection]
-		self.site_content = self.database[site_content_collection]
+		self.site_database = client[site_database_name or database_name]
+		self.units = self.site_database[units_collection]
+		self.site_assets = self.site_database[site_assets_collection]
+		self.site_content = self.site_database[site_content_collection]
 		self.inquiries = self.database[inquiries_collection]
-		self.sequences = self.database[sequences_collection]
+		self.sequences = self.site_database[sequences_collection]
 
 	@classmethod
 	def from_environment(cls):
@@ -35,6 +37,7 @@ class MongoDataStore:
 			os.environ.get("MONGODB_SITE_CONTENT_COLLECTION", "site_content").strip() or "site_content",
 			os.environ.get("MONGODB_INQUIRIES_COLLECTION", "inquiries").strip() or "inquiries",
 			os.environ.get("MONGODB_SEQUENCES_COLLECTION", "site_sequences").strip() or "site_sequences",
+			os.environ.get("MONGODB_SITE_DATABASE", "Site").strip() or "Site",
 		)
 
 	@staticmethod

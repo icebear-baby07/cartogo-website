@@ -1,16 +1,33 @@
 import unittest
-from unittest.mock import ANY, MagicMock
+from unittest.mock import ANY, MagicMock, patch
 
 from mongo_data import MongoDataStore
 
 
 class MongoDataStoreTests(unittest.TestCase):
+	@patch.dict("os.environ", {"MONGODB_URI": "mongodb://example"}, clear=True)
+	@patch("mongo_data.MongoClient")
+	def test_environment_defaults_site_collections_to_site_database(self, mongo_client):
+		store = MongoDataStore.from_environment()
+
+		mongo_client.return_value.__getitem__.assert_any_call("Site")
+		mongo_client.return_value.__getitem__.assert_any_call("cartogo")
+		self.assertIs(store.site_database, mongo_client.return_value["Site"])
+		self.assertIs(store.database, mongo_client.return_value["cartogo"])
+
 	def setUp(self):
 		self.collections = {}
-		self.database = MagicMock()
-		self.database.__getitem__.side_effect = lambda name: self.collections.setdefault(name, MagicMock())
+		self.databases = {}
+
+		def database_for(name):
+			database = self.databases.setdefault(name, MagicMock())
+			database.__getitem__.side_effect = lambda collection: self.collections.setdefault(
+				(name, collection), MagicMock()
+			)
+			return database
+
 		self.client = MagicMock()
-		self.client.__getitem__.return_value = self.database
+		self.client.__getitem__.side_effect = database_for
 		self.store = MongoDataStore(
 			self.client,
 			"cartogo",
@@ -19,12 +36,22 @@ class MongoDataStoreTests(unittest.TestCase):
 			"site_content",
 			"inquiries",
 			"site_sequences",
+			"Site",
 		)
+		self.database = self.databases["cartogo"]
+		self.site_database = self.databases["Site"]
 		self.units = self.store.units
 		self.assets = self.store.site_assets
 		self.content = self.store.site_content
 		self.inquiries = self.store.inquiries
 		self.sequences = self.store.sequences
+
+	def test_site_collections_and_sequences_use_site_database(self):
+		self.assertIs(self.store.units, self.site_database["vehicles"])
+		self.assertIs(self.store.site_assets, self.site_database["site_assets"])
+		self.assertIs(self.store.site_content, self.site_database["site_content"])
+		self.assertIs(self.store.sequences, self.site_database["site_sequences"])
+		self.assertIs(self.store.inquiries, self.database["inquiries"])
 
 	def test_public_unit_listing_excludes_inactive_and_hides_mongo_id(self):
 		self.units.find.return_value.sort.return_value = [
