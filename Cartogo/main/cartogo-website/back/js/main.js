@@ -2152,6 +2152,7 @@ function bindBookingForm() {
   const setGuestVerificationStatus = (message, state = "") => {
     guestVerificationStatus.textContent = message;
     guestVerificationStatus.className = state ? `is-${state}` : "";
+    guestVerification.setAttribute("aria-busy", String(state === "loading"));
   };
   const resetGuestEmailVerification = () => {
     guestEmailChallengeId = null;
@@ -2168,6 +2169,7 @@ function bindBookingForm() {
   form.addEventListener("reset", resetGuestEmailVerification);
   const updateVerificationUI = () => {
     const isGoogle = hasVerifiedGoogleAccount(currentUser);
+    authStatus.setAttribute("aria-busy", "false");
     const phoneInput = document.getElementById("bookingPhone");
     const profileName = getGoogleProfileName(currentUser);
     accountButton.classList.toggle("is-signed-in", isGoogle);
@@ -2434,7 +2436,7 @@ function bindBookingForm() {
     if (isRequestingGuestCode) return;
     isRequestingGuestCode = true;
     sendGuestEmailCodeButton.disabled = true;
-    setGuestVerificationStatus("Sending verification code…");
+    setGuestVerificationStatus("Sending verification code…", "loading");
     try {
       const result = await DB.requestGuestEmailCode(email);
       guestEmailChallengeId = result.challengeId;
@@ -2471,7 +2473,7 @@ function bindBookingForm() {
     }
     isVerifyingGuestCode = true;
     verifyGuestEmailCodeButton.disabled = true;
-    setGuestVerificationStatus("Verifying code…");
+    setGuestVerificationStatus("Verifying code…", "loading");
     try {
       const result = await DB.verifyGuestEmailCode(guestEmailChallengeId, code);
       guestEmailVerificationToken = result.verificationToken;
@@ -2513,7 +2515,10 @@ function bindBookingForm() {
     if (event.target === signoutDialog) signoutDialog.close();
   });
   signoutDialog.addEventListener("close", () => {
+    signoutDialog.setAttribute("aria-busy", "false");
     confirmSignOutButton.disabled = false;
+    confirmSignOutButton.classList.remove("is-loading");
+    confirmSignOutButton.textContent = "Sign out";
     cancelSignOutButton.disabled = false;
     signoutConfirmationError.hidden = true;
     signoutConfirmationError.textContent = "";
@@ -2525,6 +2530,9 @@ function bindBookingForm() {
       return;
     }
     confirmSignOutButton.disabled = true;
+    confirmSignOutButton.classList.add("is-loading");
+    confirmSignOutButton.textContent = "Signing out…";
+    signoutDialog.setAttribute("aria-busy", "true");
     cancelSignOutButton.disabled = true;
     signoutConfirmationError.hidden = true;
     try {
@@ -2556,15 +2564,25 @@ function bindBookingForm() {
     }
 
     googleButton.disabled = true;
+    googleButton.classList.add("is-loading");
+    googleButton.innerHTML = '<i class="fa-brands fa-google" aria-hidden="true"></i> Connecting to Google…';
+    authStatus.textContent = "Connecting to Google. Please wait…";
+    authStatus.setAttribute("aria-busy", "true");
     try {
       await startGoogleSignIn();
     } catch (error) {
       msg.className = "form-msg error";
       msg.textContent = `Google sign-in failed: ${error.message}`;
       googleButton.disabled = false;
+      googleButton.classList.remove("is-loading");
+      authStatus.setAttribute("aria-busy", "false");
+      updateVerificationUI();
     }
   });
+  authStatus.textContent = "Checking your sign-in status…";
+  authStatus.setAttribute("aria-busy", "true");
   supa.auth.getSession().then(({ data, error }) => {
+    authStatus.setAttribute("aria-busy", "false");
     if (error) {
       authStatus.textContent = "Could not check the current sign-in status.";
       return;

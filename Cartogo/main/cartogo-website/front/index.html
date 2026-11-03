@@ -303,7 +303,7 @@
               <label for="bookingEmail">Email <small class="field-note" id="bookingEmailNote">required for guest bookings</small></label>
               <input type="email" id="bookingEmail" form="bookingForm" autocomplete="email">
             </div>
-            <div class="guest-email-verification span-2" id="guestEmailVerification" hidden>
+            <div class="guest-email-verification span-2" id="guestEmailVerification" aria-busy="false" hidden>
               <button type="button" class="btn btn-ghost btn-sm" id="sendGuestEmailCode">Send verification code</button>
               <p id="guestEmailVerificationStatus" role="status" aria-live="polite"></p>
               <div class="guest-email-code-row" id="guestEmailCodeRow" hidden>
@@ -473,7 +473,7 @@
   </div>
 </dialog>
 
-<dialog class="signout-confirmation" id="signoutConfirmation" aria-labelledby="signoutConfirmationTitle" aria-describedby="signoutConfirmationDescription">
+<dialog class="signout-confirmation" id="signoutConfirmation" aria-labelledby="signoutConfirmationTitle" aria-describedby="signoutConfirmationDescription" aria-busy="false">
   <form class="signout-confirmation-inner" method="dialog">
     <p class="eyebrow">Account</p>
     <h2 id="signoutConfirmationTitle">Are you sure you want to sign out?</h2>

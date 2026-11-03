@@ -158,6 +158,10 @@ input, select, textarea{ font-family: inherit; font-size: 1rem; }
 .btn-ghost.on-dark:hover{ background: var(--paper); color: var(--asphalt); }
 .btn-block{ width: 100%; }
 .btn-sm{ padding: 0.55em 1em; font-size: 0.82rem; }
+.btn.is-loading{ display:inline-flex; align-items:center; justify-content:center; gap:0.55rem; }
+.btn.is-loading::before{ content:""; width:1em; height:1em; flex:none; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:action-loading-spin 0.75s linear infinite; }
+@keyframes action-loading-spin{ to{ transform:rotate(360deg); } }
+@media (prefers-reduced-motion:reduce){ .btn.is-loading::before{ animation:none; border-right-color:currentColor; } }
 
 /* ---------- Chatbot ---------- */
 .chatbot-shell{ position:fixed; right:1.25rem; bottom:1.25rem; z-index:1202; }
@@ -680,6 +684,9 @@ table.rates .skeleton-line{ height:0.7rem; }
 .guest-email-code-row label{ display:block; margin-bottom:0.35rem; font-size:0.76rem; font-weight:600; }
 .guest-email-code-controls{ display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:0.5rem; }
 #guestEmailVerificationStatus{ margin:0; color:var(--slate); font-size:0.78rem; }
+#guestEmailVerificationStatus.is-loading{ display:flex; align-items:center; gap:0.45rem; }
+#guestEmailVerificationStatus.is-loading::before{ content:""; width:0.9rem; height:0.9rem; flex:none; border:2px solid rgba(20,20,20,0.2); border-top-color:var(--signal); border-radius:50%; animation:action-loading-spin 0.75s linear infinite; }
+@media (prefers-reduced-motion:reduce){ #guestEmailVerificationStatus.is-loading::before{ animation:none; border-right-color:var(--signal); } }
 #guestEmailVerificationStatus.is-verified{ color:#1f5a31; font-weight:700; }
 #guestEmailVerificationStatus.is-error{ color:var(--danger); }
 .booking-guest-note{ margin:0; padding:0.75rem 0.9rem; border-radius:var(--radius-sm); background:var(--concrete); color:var(--slate); font-size:0.84rem; font-weight:500; line-height:1.45; }
