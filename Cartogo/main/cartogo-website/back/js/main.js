@@ -1467,6 +1467,23 @@ function bindBookingMap() {
   const searchInput = document.getElementById("bookingMapSearchInput");
   const searchSubmit = document.getElementById("bookingMapSearchSubmit");
   const searchStatus = document.getElementById("bookingMapSearchStatus");
+  const manualTargetInput = document.getElementById("bookingTargetLocation");
+  if (!mapElement || !searchInput || !searchSubmit || !searchStatus) {
+    const toggleManualTargetStatus = () => {
+      const value = manualTargetInput?.value.trim() || "";
+      const status = document.getElementById("bookingTargetStatus");
+      const prompt = document.getElementById("bookingMapDistancePrompt");
+      if (status) status.textContent = value ? `Target location: ${value}` : "Enter your target location.";
+      if (prompt) {
+        prompt.textContent = value
+          ? "Manual destination set. Distance and route checks are unavailable while the map is disabled."
+          : "Target location is entered manually; distance is not calculated without the map.";
+      }
+    };
+    manualTargetInput?.addEventListener("input", toggleManualTargetStatus);
+    toggleManualTargetStatus();
+    return;
+  }
   const resetMapView = () => {
     if (!BOOKING_MAP) return;
     if (!BOOKING_PICKUP_MARKERS.length) {

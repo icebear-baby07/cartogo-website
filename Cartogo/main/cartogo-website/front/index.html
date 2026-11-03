@@ -283,21 +283,13 @@
                   </details>
                 </fieldset>
                 <div class="field span-2 booking-map-field">
-                  <div class="booking-map-heading">
-                    <span class="booking-map-label">Target location</span>
-                    <div class="map-heading-controls">
-                      <button class="map-style-toggle" id="bookingMapStyleToggle" type="button" aria-label="Satellite map view" aria-pressed="false" title="Switch to satellite view" disabled><i class="fa-solid fa-satellite" aria-hidden="true"></i> Satellite</button>
-                      <button class="icon-btn booking-map-fullscreen" id="bookingMapFullscreen" type="button" aria-label="Expand target map to fullscreen" aria-pressed="false" title="Expand map"><i class="fa-solid fa-expand" aria-hidden="true"></i></button>
-                    </div>
-                  </div>
-                  <div class="booking-map-search" role="search">
-                    <label class="visually-hidden" for="bookingMapSearchInput">Search for a target location</label>
-                    <input type="text" id="bookingMapSearchInput" placeholder="Search for a location" autocomplete="off" aria-describedby="bookingMapSearchStatus">
-                    <button class="booking-map-search-clear" id="bookingMapSearchClear" type="button" aria-label="Clear location search" title="Clear search"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
-                    <button class="booking-map-search-submit" id="bookingMapSearchSubmit" type="button" aria-label="Search location" title="Search location" disabled><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i></button>
-                  </div>
-                  <p class="booking-map-search-status" id="bookingMapSearchStatus" role="status" aria-live="polite"></p>
-                  <div id="bookingMap" class="booking-map" role="application" aria-label="Map. Move the cursor to preview distance, click to select your target location."></div>
+                  <label for="bookingTargetLocation">Target location</label>
+                  <input type="text" id="bookingTargetLocation" form="bookingForm" placeholder="Enter your desired destination" autocomplete="street-address">
+                  <p class="booking-map-target" id="bookingTargetStatus" role="status" aria-live="polite">Enter your target location.</p>
+                  <p class="booking-map-distance" id="bookingMapDistance" role="status" aria-live="polite">
+                    <span id="bookingMapDistancePrompt">Target location is entered manually; distance is not calculated without the map.</span>
+                    <span id="bookingMapDistanceResult" hidden><span id="bookingMapDistancePrefix"></span><strong id="bookingMapDistanceValue"></strong> km <span id="bookingMapDistanceKind">driving distance</span> from the nearest pickup location (<span id="bookingMapNearestPickup"></span>)</span>
+                  </p>
                   <p class="booking-route-loading" id="bookingRouteLoading" role="status" aria-live="polite" hidden>
                     <i class="fa-solid fa-spinner" aria-hidden="true"></i>
                     <span id="bookingRouteLoadingText"></span>
@@ -305,11 +297,6 @@
                   <p class="booking-map-preview" id="bookingMapPreview" role="status" aria-live="polite" hidden>
                     <span id="bookingMapPreviewPrefix">Hovered location: </span><strong id="bookingMapPreviewName"></strong>
                   </p>
-                  <p class="booking-map-distance" id="bookingMapDistance" role="status" aria-live="polite">
-                    <span id="bookingMapDistancePrompt">Move the cursor over the map to preview distance from the nearest pickup point.</span>
-                    <span id="bookingMapDistanceResult" hidden><span id="bookingMapDistancePrefix"></span><strong id="bookingMapDistanceValue"></strong> km <span id="bookingMapDistanceKind">driving distance</span> from the nearest pickup location (<span id="bookingMapNearestPickup"></span>)</span>
-                  </p>
-                  <p class="booking-map-target" id="bookingTargetStatus" role="status" aria-live="polite">Click the map to choose your target location.</p>
                   <p class="booking-map-snap-status" id="bookingMapSnapStatus" role="status" aria-live="polite" hidden>
                     <span class="booking-map-snap-indicator" aria-hidden="true"></span>
                     <span id="bookingMapSnapStatusText"></span>
