@@ -166,12 +166,12 @@ The website can run without the chatbot. To set up the chatbot:
    MONGODB_COLLECTION=chat_logs
    MONGODB_UNITS_DATABASE=Site
    MONGODB_UNITS_COLLECTION=vehicles
-   MONGODB_KNOWLEDGE_DATABASE=kb
-   MONGODB_KNOWLEDGE_COLLECTION=PROPRIETARY_INFO_COLLECTION
-   MONGODB_IDENTITY_COLLECTION=bot_identity
+   MONGODB_KNOWLEDGE_DATABASE=KB
+   MONGODB_KNOWLEDGE_COLLECTION=proprietary_info_collection
+   MONGODB_BOT_IDENTITY=bot_identity
    ```
 
-2. Add approved company knowledge documents to `kb.PROPRIETARY_INFO_COLLECTION` (or your configured collection). A knowledge document needs a text `content` field; `title`, `topic`, `keywords`, and `tags` improve keyword matching. Populate the bot identity document separately if needed. These business records are not automatically seeded.
+2. Add approved company knowledge documents to `KB.proprietary_info_collection` (or your configured collection). A knowledge document needs a text `content` field; `title`, `topic`, `keywords`, and `tags` improve keyword matching. Add the bot identity document to `KB.bot_identity` (or the collection selected by `MONGODB_BOT_IDENTITY`). It must have `record_id: "cartogo-bot-identity"`, `record_type: "bot_identity"`, and a non-empty `instructions` string containing the complete assistant identity, behavior, safety, and grounding instructions. The chatbot has no local instruction fallback and will return a service error if this record cannot be read. These business records are not automatically seeded.
 3. Configure AWS credentials and Bedrock access for the model/region used by the chatbot. Use the repository's AWS login launcher when that is how your environment supplies credentials.
 4. From the `Cartogo` directory, start all services with:
 
