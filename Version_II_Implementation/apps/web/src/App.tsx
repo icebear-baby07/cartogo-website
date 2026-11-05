@@ -5,8 +5,16 @@ type ApiHealth = {
   service: string;
 };
 
+type ApiReadiness = {
+  status: "ready" | "not_ready";
+  dependencies: {
+    mongodb: "ok" | "unavailable";
+  };
+};
+
 export default function App() {
   const [apiStatus, setApiStatus] = useState("Checking API...");
+  const [mongoStatus, setMongoStatus] = useState("Checking MongoDB...");
 
   useEffect(() => {
     let active = true;
@@ -21,6 +29,21 @@ export default function App() {
       })
       .catch(() => {
         if (active) setApiStatus("API unavailable");
+      });
+
+    fetch("/api/health/ready")
+      .then(async (response) => (await response.json()) as ApiReadiness)
+      .then((readiness) => {
+        if (active) {
+          setMongoStatus(
+            readiness.dependencies.mongodb === "ok"
+              ? "MongoDB: connected"
+              : "MongoDB: unavailable",
+          );
+        }
+      })
+      .catch(() => {
+        if (active) setMongoStatus("MongoDB: status unavailable");
       });
 
     return () => {
@@ -39,6 +62,9 @@ export default function App() {
         </p>
         <output className="api-status" aria-live="polite">
           {apiStatus}
+        </output>
+        <output className="api-status" aria-live="polite">
+          {mongoStatus}
         </output>
       </section>
     </main>

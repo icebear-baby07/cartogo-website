@@ -3,13 +3,31 @@
 This is the isolated, incremental replacement workspace. The official
 `Cartogo` directory is not modified or replaced by this project.
 
-## Section 1 — Foundation (current)
+## Section 1 — Foundation
 
 - React + TypeScript frontend: `http://127.0.0.1:5173`
 - Express + TypeScript API: `http://127.0.0.1:3001`
-- `/api/health` is proxied through Vite so the starter UI can verify the API.
+- `/api/health` reports API liveness.
 - Custom CSS is used; Tailwind is intentionally not included.
 - Node 22 or newer is recommended.
+
+## Section 2 — MongoDB connection (current)
+
+- The API loads `apps/api/.env` and requires the server-only `MONGODB_URI`.
+- `MONGODB_DATABASE` defaults to `cartogo`; `MONGODB_SITE_DATABASE` defaults
+  to `Site`, matching the existing application's database split.
+- `/api/health/ready` pings MongoDB and reports readiness without exposing
+  connection details. The starter UI shows MongoDB connection status.
+- The API remains available for liveness checks when MongoDB is not configured
+  or temporarily unreachable; readiness returns HTTP 503 and logs the error.
+- The MongoDB client is reused and closed during graceful shutdown.
+- A live database handshake still needs verification with a non-production
+  development URI in `apps/api/.env`.
+
+Copy `apps/api/.env.example` to `apps/api/.env`, then set `MONGODB_URI` to the
+MongoDB URI used for a development/test database. Do not copy production
+credentials into the repository. Never point Version II testing at production
+until its data access and writes have been deliberately configured.
 
 From this directory:
 
@@ -27,7 +45,8 @@ Each section is to be implemented and verified independently in Version II.
 Do not delete or replace the official application until explicitly authorized.
 
 1. **Foundation** — workspace, TypeScript, React/Express starter, separate ports.
-2. **MongoDB connection** — server-only configuration and connection lifecycle.
+2. **MongoDB connection** — implemented: server-only configuration and
+   connection lifecycle. Collection access is part of the later API sections.
 3. **Shared API contracts** — typed DTOs and validation for browser/API boundaries.
 4. **Public read APIs** — site content, fleet, and site assets.
 5. **Public website UI** — migrate customer-facing screens to React and existing CSS.
