@@ -4,11 +4,13 @@
   "private": true,
   "workspaces": [
     "apps/api",
-    "apps/web"
+    "apps/web",
+    "packages/contracts"
   ],
   "scripts": {
-    "dev": "concurrently -k -n api,web -c blue,green \"npm:dev --workspace @cartogo/api\" \"npm:dev --workspace @cartogo/web\"",
-    "build": "npm run build --workspace @cartogo/api && npm run build --workspace @cartogo/web",
+    "dev": "npm run build --workspace @cartogo/contracts && concurrently -k -n api,web -c blue,green \"npm:dev --workspace @cartogo/api\" \"npm:dev --workspace @cartogo/web\"",
+    "build": "npm run build --workspace @cartogo/contracts && npm run build --workspace @cartogo/api && npm run build --workspace @cartogo/web",
+    "test": "npm run test --workspace @cartogo/contracts",
     "start:api": "npm run start --workspace @cartogo/api"
   },
   "devDependencies": {

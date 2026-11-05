@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import { ApiHealthSchema, ApiReadinessSchema } from "@cartogo/contracts";
 import { checkMongoReady, closeMongo, connectToMongo } from "./mongo.js";
 
 const app = express();
@@ -9,22 +10,34 @@ app.disable("x-powered-by");
 app.use(express.json({ limit: "16kb" }));
 
 app.get("/api/health", (_request, response) => {
-  response.json({ status: "ok", service: "cartogo-version-ii-api" });
+  response.json(
+    ApiHealthSchema.parse({
+      status: "ok",
+      service: "cartogo-version-ii-api",
+    }),
+  );
 });
 
 app.get("/api/health/ready", async (_request, response) => {
   try {
     await checkMongoReady();
-    response.json({ status: "ready", dependencies: { mongodb: "ok" } });
+    response.json(
+      ApiReadinessSchema.parse({
+        status: "ready",
+        dependencies: { mongodb: "ok" },
+      }),
+    );
   } catch (error) {
     console.error(
       "MongoDB readiness check failed.",
       error instanceof Error ? error.message : String(error),
     );
-    response.status(503).json({
-      status: "not_ready",
-      dependencies: { mongodb: "unavailable" },
-    });
+    response.status(503).json(
+      ApiReadinessSchema.parse({
+        status: "not_ready",
+        dependencies: { mongodb: "unavailable" },
+      }),
+    );
   }
 });
 

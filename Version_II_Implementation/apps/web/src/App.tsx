@@ -1,16 +1,5 @@
 import { useEffect, useState } from "react";
-
-type ApiHealth = {
-  status: "ok";
-  service: string;
-};
-
-type ApiReadiness = {
-  status: "ready" | "not_ready";
-  dependencies: {
-    mongodb: "ok" | "unavailable";
-  };
-};
+import { ApiHealthSchema, ApiReadinessSchema } from "@cartogo/contracts";
 
 export default function App() {
   const [apiStatus, setApiStatus] = useState("Checking API...");
@@ -22,7 +11,7 @@ export default function App() {
     fetch("/api/health")
       .then(async (response) => {
         if (!response.ok) throw new Error(`API returned ${response.status}`);
-        return (await response.json()) as ApiHealth;
+        return ApiHealthSchema.parse(await response.json());
       })
       .then((health) => {
         if (active) setApiStatus(`${health.service}: ${health.status}`);
@@ -32,7 +21,7 @@ export default function App() {
       });
 
     fetch("/api/health/ready")
-      .then(async (response) => (await response.json()) as ApiReadiness)
+      .then(async (response) => ApiReadinessSchema.parse(await response.json()))
       .then((readiness) => {
         if (active) {
           setMongoStatus(

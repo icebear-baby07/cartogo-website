@@ -11,7 +11,7 @@ This is the isolated, incremental replacement workspace. The official
 - Custom CSS is used; Tailwind is intentionally not included.
 - Node 22 or newer is recommended.
 
-## Section 2 — MongoDB connection (current)
+## Section 2 — MongoDB connection
 
 - The API loads `apps/api/.env` and requires the server-only `MONGODB_URI`.
 - `MONGODB_DATABASE` defaults to `cartogo`; `MONGODB_SITE_DATABASE` defaults
@@ -23,6 +23,18 @@ This is the isolated, incremental replacement workspace. The official
 - The MongoDB client is reused and closed during graceful shutdown.
 - A live database handshake still needs verification with a non-production
   development URI in `apps/api/.env`.
+
+## Section 3 — Shared API contracts (current)
+
+- `packages/contracts` publishes Zod schemas and inferred TypeScript types for
+  health/readiness responses, API errors, vehicle records, site assets, and
+  public site content.
+- API and React code both use the same health/readiness schemas; browser
+  responses are runtime-validated rather than trusted via type assertions.
+- The database-facing DTO schemas preserve additional document fields so a
+  public read API can migrate without dropping existing Mongo data.
+- Contract tests cover valid and invalid payloads. Future endpoint migrations
+  should validate requests and responses with these schemas as they are added.
 
 Copy `apps/api/.env.example` to `apps/api/.env`, then set `MONGODB_URI` to the
 MongoDB URI used for a development/test database. Do not copy production
@@ -47,7 +59,8 @@ Do not delete or replace the official application until explicitly authorized.
 1. **Foundation** — workspace, TypeScript, React/Express starter, separate ports.
 2. **MongoDB connection** — implemented: server-only configuration and
    connection lifecycle. Collection access is part of the later API sections.
-3. **Shared API contracts** — typed DTOs and validation for browser/API boundaries.
+3. **Shared API contracts** — implemented: typed schemas, inferred DTO types,
+   runtime validation, and contract tests.
 4. **Public read APIs** — site content, fleet, and site assets.
 5. **Public website UI** — migrate customer-facing screens to React and existing CSS.
 6. **Supabase authentication** — preserve Google sign-in and secure admin token checks.

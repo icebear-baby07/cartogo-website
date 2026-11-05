@@ -9,6 +9,7 @@
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort"
   },
   "dependencies": {
+    "@cartogo/contracts": "*",
     "@vitejs/plugin-react": "^5.0.2",
     "vite": "^7.1.5",
     "react": "^19.1.1",

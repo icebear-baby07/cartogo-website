@@ -1,0 +1,23 @@
+{
+  "name": "@cartogo/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/contracts.test.js"
+  },
+  "dependencies": {
+    "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0"
+  }
+}
