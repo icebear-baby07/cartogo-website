@@ -1,13 +1,42 @@
-import "dotenv/config";
+import dotenv from "dotenv";
 import express from "express";
+import { fileURLToPath } from "node:url";
 import { ApiHealthSchema, ApiReadinessSchema } from "@cartogo/contracts";
-import { checkMongoReady, closeMongo, connectToMongo } from "./mongo.js";
+import {
+  checkMongoReady,
+  closeMongo,
+  connectToMongo,
+  getAdminDataRepository,
+  getPublicDataRepository,
+} from "./mongo.js";
+import { createAuthRouter, createRequireAdmin } from "./auth.js";
+import { createAdminRouter } from "./admin-api.js";
+import { createPublicDataRouter } from "./public-data.js";
+
+dotenv.config({ path: fileURLToPath(new URL("../.env", import.meta.url)) });
 
 const app = express();
 const port = Number(process.env.API_PORT ?? 3001);
+const supabaseAuthConfig = {
+  supabaseUrl: process.env.SUPABASE_URL,
+  supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
+};
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "16kb" }));
+app.use("/api/admin", createRequireAdmin(supabaseAuthConfig));
+app.use("/api", createAuthRouter(supabaseAuthConfig));
+app.use("/api/admin", createAdminRouter(getAdminDataRepository, {
+  ...supabaseAuthConfig,
+  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  initialOwnerEmail: process.env.CARTOGO_INITIAL_OWNER_EMAIL || "remuelfernan07@gmail.com",
+  smtpUser: process.env.SMTP_USER,
+  smtpPassword: process.env.SMTP_APP_PASSWORD,
+  smtpHost: process.env.SMTP_HOST,
+  smtpPort: process.env.SMTP_PORT,
+  smtpFrom: process.env.SMTP_FROM,
+}));
+app.use("/api", createPublicDataRouter(getPublicDataRepository));
 
 app.get("/api/health", (_request, response) => {
   response.json(

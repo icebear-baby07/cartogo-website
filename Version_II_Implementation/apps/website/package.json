@@ -1,5 +1,5 @@
 {
-  "name": "@cartogo/web",
+  "name": "@cartogo/website",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@cartogo/contracts": "*",
+    "@supabase/supabase-js": "^2.57.4",
     "@vitejs/plugin-react": "^5.0.2",
     "vite": "^7.1.5",
     "react": "^19.1.1",

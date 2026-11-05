@@ -100,7 +100,42 @@ export const SiteContentSchema = z
         lateFeePerHour: z.number().finite().nonnegative(),
       })
       .passthrough(),
-    labels: z.record(z.string(), z.unknown()),
+    labels: z
+      .object({
+        hero: z.object({
+          title: z.string(),
+          subtitle: z.string(),
+        }),
+        trustStrip: z.array(
+          z.object({ value: z.string(), label: z.string() }).passthrough(),
+        ),
+        howItWorks: z.array(
+          z.object({ title: z.string(), description: z.string() }).passthrough(),
+        ),
+        whyChooseUs: z.array(
+          z
+            .object({
+              icon: z.string(),
+              title: z.string(),
+              description: z.string(),
+            })
+            .passthrough(),
+        ),
+        about: z.object({ title: z.string(), body: z.string() }),
+        faq: z.array(
+          z.object({ q: z.string(), a: z.string() }).passthrough(),
+        ),
+        testimonials: z.array(
+          z
+            .object({
+              quote: z.string(),
+              name: z.string(),
+              detail: z.string(),
+            })
+            .passthrough(),
+        ),
+      })
+      .passthrough(),
     discountRules: z.array(
       z
         .object({

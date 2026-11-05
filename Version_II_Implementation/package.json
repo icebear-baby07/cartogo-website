@@ -4,16 +4,18 @@
   "private": true,
   "workspaces": [
     "apps/api",
-    "apps/web",
+    "apps/website",
     "packages/contracts"
   ],
   "scripts": {
-    "dev": "npm run build --workspace @cartogo/contracts && concurrently -k -n api,web -c blue,green \"npm:dev --workspace @cartogo/api\" \"npm:dev --workspace @cartogo/web\"",
-    "build": "npm run build --workspace @cartogo/contracts && npm run build --workspace @cartogo/api && npm run build --workspace @cartogo/web",
-    "test": "npm run test --workspace @cartogo/contracts",
+    "dev": "npm run build --workspace @cartogo/contracts && concurrently -k -n api,website -c blue,green \"npm:dev --workspace @cartogo/api\" \"npm:dev --workspace @cartogo/website\"",
+    "dev:chatbot": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File apps/chatbot/start_chat.ps1",
+    "build": "npm run build --workspace @cartogo/contracts && npm run build --workspace @cartogo/api && npm run build --workspace @cartogo/website",
+    "test": "npm run test --workspace @cartogo/contracts && npm run test --workspace @cartogo/api",
     "start:api": "npm run start --workspace @cartogo/api"
   },
   "devDependencies": {
+    "@types/nodemailer": "^8.0.2",
     "concurrently": "^9.2.1",
     "typescript": "^5.9.3"
   }
