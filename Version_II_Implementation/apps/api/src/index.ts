@@ -12,6 +12,7 @@ import {
 import { createAuthRouter, createRequireAdmin } from "./auth.js";
 import { createAdminRouter } from "./admin-api.js";
 import { createPublicDataRouter } from "./public-data.js";
+import { createGeocodingRouter, createNominatimGeocoder } from "./geocoding.js";
 
 dotenv.config({ path: fileURLToPath(new URL("../.env", import.meta.url)) });
 
@@ -37,6 +38,9 @@ app.use("/api/admin", createAdminRouter(getAdminDataRepository, {
   smtpFrom: process.env.SMTP_FROM,
 }));
 app.use("/api", createPublicDataRouter(getPublicDataRepository));
+app.use("/api", createGeocodingRouter(createNominatimGeocoder({
+  contactEmail: process.env.GEOCODING_CONTACT_EMAIL,
+})));
 
 app.get("/api/health", (_request, response) => {
   response.json(

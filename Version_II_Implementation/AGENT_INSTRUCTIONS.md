@@ -24,10 +24,9 @@ replace it unless the user explicitly authorizes that.
 - Before editing, inspect `git status` and the relevant files. This worktree
   may contain unrelated edits, untracked files, or deletions; preserve them
   and never reset, clean, or revert changes you did not make.
-- Follow the roadmap below in order. The next planned implementation is
-  **Section 8 — Admin UI**. Confirm existing APIs and legacy workflows before
-  wiring screens; do not claim a workflow is complete unless it works end to
-  end.
+- Follow the roadmap below in order. Section 8 — Admin UI is now in progress.
+  Confirm existing APIs and legacy workflows before wiring screens; do not
+  claim a workflow is complete unless it works end to end.
 - Preserve existing user-visible behavior and database document shapes.
   Prefer shared API contracts, validation, and established app patterns.
 - Keep secrets server-side. Never print, copy into source control, or bundle
@@ -45,9 +44,9 @@ replace it unless the user explicitly authorizes that.
   Section 7 provides protected admin APIs, inquiry actions, role management,
   and owner-approved resource/account changes. Owner approval uses a
   short-lived, attempt-limited PIN sent by API-side SMTP.
-- Section 8, the admin dashboard and its UI workflows, is next. Sections 9–11
-  still include remaining email/geocoding work, chatbot UI migration and
-  embedding, and final verification/cutover.
+- Section 8, the admin dashboard and its UI workflows, is being implemented.
+  Sections 9–11 still include remaining email/geocoding work, chatbot UI
+  migration and embedding, and final verification/cutover.
 - The chatbot is currently an isolated copy with its own Python service and
   existing standalone HTML/JavaScript UI; it is not yet a React app embedded
   in the website.
@@ -87,8 +86,8 @@ website/API.
 ### Environment-file boundaries
 
 - `apps/api/.env` is for server-side MongoDB, Supabase server configuration,
-  SMTP, and owner-approval settings. Use `apps/api/.env.example` as the
-  server-side template.
+  SMTP, owner-approval settings, and optional `GEOCODING_CONTACT_EMAIL`. Use
+  `apps/api/.env.example` as the server-side template.
 - `apps/website/.env` should contain only `VITE_SUPABASE_URL` and
   `VITE_SUPABASE_ANON_KEY`. Keep its example equally limited. Do not put
   MongoDB, SMTP, or Supabase service-role credentials there.
@@ -238,10 +237,21 @@ Do not delete or replace the official application until explicitly authorized.
    `SMTP_*`, `SUPABASE_SERVICE_ROLE_KEY`, `CARTOGO_INITIAL_OWNER_EMAIL`, and
    the MongoDB collection names in `apps/api/.env`; never put server-only
    keys in the website environment.
-8. **Admin UI** — migrate the administration screens and workflows.
-9. **Email and geocoding integrations** — migrate the remaining email and
-   location services; owner-approval PINs and inquiry rejection emails use
-   API-side SMTP.
+8. **Admin UI** — in progress: authenticated admin dashboard with
+   permission-aware sections for inquiries, fleet, site assets, site content,
+   chat sessions, and owner-managed accounts. Changes requiring approval use
+   the existing owner PIN request and verification flow. Verify end-to-end
+   workflows and add any remaining legacy admin capabilities before marking
+   complete.
+9. **Email and geocoding integrations** — in progress: API-side SMTP is used
+   for owner-approval PINs and inquiry rejection notices; the public site now
+   renders pickup locations on a MapLibre/OpenStreetMap map. The API provides
+   rate-limited, cached Philippine Nominatim location search, with optional
+   `GEOCODING_CONTACT_EMAIL` for its identifying User-Agent. Durable inquiry
+   confirmation/outbox delivery and remaining booking geocoding workflows are
+   still deferred with booking submission. The map uses OpenStreetMap raster
+   tiles with attribution and should comply with the tile service usage policy;
+   select a suitable tile provider before high-volume production use.
 10. **Chatbot separation** — copied to `apps/chatbot` with its existing
     standalone UI and Python/Boto3 service. React/TypeScript UI migration and
     website embedding remain future work.

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
+import AdminDashboard from "./AdminDashboard";
 import { supabase } from "./supabase";
 
 type AuthView =
@@ -106,6 +107,10 @@ export default function AdminSignIn() {
     if (error) setView({ status: "error", message: `Could not sign out: ${error.message}` });
   }
 
+  if (view.status === "authorized") {
+    return <AdminDashboard email={view.email} onSignOut={() => void signOut()} />;
+  }
+
   return (
     <main className="admin-auth-page">
       <section className="admin-auth-card" aria-labelledby="admin-auth-title">
@@ -127,15 +132,6 @@ export default function AdminSignIn() {
               onClick={() => void signIn()}
             >
               {signInPending ? "Redirecting…" : "Sign in with Google"}
-            </button>
-          </>
-        ) : null}
-        {view.status === "authorized" ? (
-          <>
-            <p role="status">Signed in and authorized as {view.email}.</p>
-            <p>The admin workspace will be added in Section 8.</p>
-            <button className="button button-ghost" type="button" onClick={() => void signOut()}>
-              Sign out
             </button>
           </>
         ) : null}

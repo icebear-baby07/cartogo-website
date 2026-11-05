@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type {
   PublicUnit,
   SiteAsset,
   SiteContent,
 } from "@cartogo/contracts";
+
+const PickupMap = lazy(() => import("./PickupMap"));
 
 type PublicSiteProps = {
   units: PublicUnit[];
@@ -314,14 +316,17 @@ export default function PublicSite({ units, assets, content }: PublicSiteProps) 
               {contact?.operational_hours && <p><span>Hours</span>{contact.operational_hours}</p>}
               <h4>Pickup locations</h4>
               {locations.length ? (
-                <ul className="pickup-list">
-                  {locations.map((location) => (
-                    <li key={location.id}>
-                      <strong>{location.loc_name || location.display_name}</strong>
-                      <span>{location.display_name}{location.status === "closed" ? " · Currently closed" : ""}</span>
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <DeferredPickupMap locations={locations} />
+                  <ul className="pickup-list">
+                    {locations.map((location) => (
+                      <li key={location.id}>
+                        <strong>{location.loc_name || location.display_name}</strong>
+                        <span>{location.display_name}{location.status === "closed" ? " · Currently closed" : ""}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
               ) : <p>Contact our team to confirm pickup arrangements.</p>}
             </div>
           </div>
@@ -383,6 +388,43 @@ function SectionHeading({
       <p className="eyebrow">{eyebrow}</p>
       <h2>{title}</h2>
       {children && <p>{children}</p>}
+    </div>
+  );
+}
+
+function DeferredPickupMap({
+  locations,
+}: {
+  locations: Extract<SiteAsset, { asset_type: "location" }>[];
+}) {
+  const [visible, setVisible] = useState(false);
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!container) return;
+    if (!("IntersectionObserver" in window)) {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setVisible(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: "200px" });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [container]);
+
+  return (
+    <div className="pickup-map-frame" ref={setContainer}>
+      {visible ? (
+        <Suspense fallback={<div className="pickup-map" role="status">Loading pickup map…</div>}>
+          <PickupMap locations={locations} />
+        </Suspense>
+      ) : (
+        <div className="pickup-map" role="img" aria-label="Pickup map will load when it is visible" />
+      )}
     </div>
   );
 }
