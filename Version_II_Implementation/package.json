@@ -1,0 +1,18 @@
+{
+  "name": "cartogo-version-ii",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c blue,green \"npm:dev --workspace @cartogo/api\" \"npm:dev --workspace @cartogo/web\"",
+    "build": "npm run build --workspace @cartogo/api && npm run build --workspace @cartogo/web",
+    "start:api": "npm run start --workspace @cartogo/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3"
+  }
+}
