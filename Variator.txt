@@ -1,1 +1,1 @@
--- This file will be used strictly for comments to allow git changes/update
+-- This file will be used strictly for comments to allow git changes/updates
