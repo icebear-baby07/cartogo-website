@@ -4,6 +4,8 @@ import type {
   SiteAsset,
   SiteContent,
 } from "@cartogo/contracts";
+import ChatWidget from "./ChatWidget";
+import BookingForm from "./BookingForm";
 
 const PickupMap = lazy(() => import("./PickupMap"));
 
@@ -53,6 +55,9 @@ export default function PublicSite({ units, assets, content }: PublicSiteProps) 
   const categories = ["All", ...new Set(units.map((unit) => unit.brand))];
   const [activeCategory, setActiveCategory] = useState("All");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [selectedBookingUnit, setSelectedBookingUnit] = useState("");
+  const [activeStep, setActiveStep] = useState(0);
+  const [pauseSlides, setPauseSlides] = useState(false);
 
   useEffect(() => {
     document.title = `${settings.companyName} — Car Rentals`;
@@ -64,31 +69,35 @@ export default function PublicSite({ units, assets, content }: PublicSiteProps) 
       : units.filter((unit) => unit.brand === activeCategory);
   const availableCount = units.filter((unit) => unit.status === "Available").length;
   const about = labels.about;
+  const howItWorks = labels.howItWorks.some((step) =>
+    step.title.trim().toLowerCase() === "return the vehicle",
+  )
+    ? labels.howItWorks
+    : [...labels.howItWorks, {
+      title: "Return the vehicle",
+      description: "Bring the car back at the agreed time and place. Contact our team in advance if you need to request a change.",
+    }];
+
+  useEffect(() => {
+    if (pauseSlides || howItWorks.length < 2 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setInterval(() => {
+      setActiveStep((current) => (current + 1) % howItWorks.length);
+    }, 7000);
+    return () => window.clearInterval(timer);
+  }, [howItWorks.length, pauseSlides]);
 
   return (
     <>
       <a className="skip-link" href="#main">Skip to content</a>
       <div className="topbar">Reliable cars · Easy booking · Flexible pickup across Metro Manila</div>
       <div className="kerb-strip" aria-hidden="true" />
-      <header className="site-header" id="top">
+      <header className={`site-header${menuOpen ? " open" : ""}`} id="siteHeader">
         <div className="wrap header-inner">
           <a className="logo" href="#top" aria-label={`${settings.companyName} home`}>
             {settings.companyName}
           </a>
-          <button
-            className="nav-toggle"
-            type="button"
-            aria-expanded={menuOpen}
-            aria-controls="primary-nav"
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            <span className="visually-hidden">Toggle navigation</span>
-            <span />
-            <span />
-            <span />
-          </button>
           <nav
-            className={`nav-links${menuOpen ? " is-open" : ""}`}
+            className="nav-links"
             id="primary-nav"
             aria-label="Primary"
           >
@@ -101,39 +110,56 @@ export default function PublicSite({ units, assets, content }: PublicSiteProps) 
             ].map(([label, href]) => (
               <a href={href} key={href} onClick={() => setMenuOpen(false)}>{label}</a>
             ))}
-            <a className="button button-primary button-small" href="#contact" onClick={() => setMenuOpen(false)}>
-              Contact to reserve
+            <a className="button button-primary button-small mobile-nav-cta" href="#booking" onClick={() => setMenuOpen(false)}>
+              Reserve a car
             </a>
           </nav>
+          <div className="header-actions">
+            <a className="header-account" href="#booking" aria-label="Continue to booking details" title="Booking">
+              <i className="fa-regular fa-user" aria-hidden="true" />
+            </a>
+            <a className="button button-primary button-small" href="#booking">Reserve a car</a>
+            <button
+              className="nav-toggle"
+              type="button"
+              aria-expanded={menuOpen}
+              aria-controls="primary-nav"
+              aria-label="Toggle navigation menu"
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <span />
+              <span />
+              <span />
+            </button>
+          </div>
         </div>
       </header>
 
       <main id="main">
-        <section className="hero">
+        <section className="hero" id="top">
           <div className="wrap hero-grid">
             <div className="hero-copy">
               <p className="eyebrow">Book in minutes · Drive in hours</p>
               <h1>{inlineEmphasis(labels.hero.title)}</h1>
               <p className="hero-sub">{labels.hero.subtitle}</p>
-              <div className="hero-actions">
+              <div className="hero-cta-row">
                 <a className="button button-primary" href="#fleet">Browse the fleet</a>
                 <a className="button button-ghost on-dark" href="#how">How it works</a>
               </div>
             </div>
             <div className="hero-art">
               <img src="/images/main-picture.jpg" alt="carTOGO rental cars ready for your trip" />
-              <span className="hero-art-caption">Your next trip starts here</span>
             </div>
           </div>
           <div className="road" aria-hidden="true" />
         </section>
 
         <div className="wrap trust-wrap">
-          <div className="trust-strip" aria-label="Rental highlights">
-            <div><strong>{units.length}</strong><span>Cars in our fleet</span></div>
-            <div><strong>{categories.length - 1}</strong><span>Vehicle options</span></div>
-            <div><strong>{locations.length || "Metro Manila"}</strong><span>Pickup areas</span></div>
-            <div><strong>{availableCount}</strong><span>Currently available</span></div>
+          <div className="trust-strip hero-shortcuts" aria-label="Rental highlights">
+            <a className="hero-shortcut" href="#fleet"><strong>{units.length}</strong><span>Cars in our fleet</span></a>
+            <a className="hero-shortcut" href="#fleet"><strong>{categories.length - 1}</strong><span>Vehicle options</span></a>
+            <a className="hero-shortcut" href="#contact"><strong>{locations.length || "Metro Manila"}</strong><span>Pickup areas</span></a>
+            <a className="hero-shortcut" href="#booking"><strong>{availableCount}</strong><span>Currently available</span></a>
           </div>
         </div>
 
@@ -158,15 +184,15 @@ export default function PublicSite({ units, assets, content }: PublicSiteProps) 
             {visibleUnits.length ? (
               <div className="fleet-grid">
                 {visibleUnits.map((unit) => (
-                  <article className="vehicle-card" key={unit.id}>
-                    <div className="vehicle-image">
+                  <article className="vehicle-card car-card" key={unit.id}>
+                    <div className="vehicle-image car-media">
                       <img src={imageForUnit(unit)} alt={`${unit.display_name} rental vehicle`} loading="lazy" />
-                      <span className="vehicle-category">{unit.brand}</span>
-                      <span className={`availability${unit.status === "Available" ? "" : " is-unavailable"}`}>
+                      <span className="vehicle-category tag">{unit.brand}</span>
+                      <span className={`availability avail${unit.status === "Available" ? "" : " out"}`}>
                         {unit.status}
                       </span>
                     </div>
-                    <div className="vehicle-body">
+                    <div className="vehicle-body car-body">
                       <h3>{unit.display_name}</h3>
                       <div className="vehicle-specs">
                         <span>{unit.capacity} seats</span>
@@ -174,7 +200,11 @@ export default function PublicSite({ units, assets, content }: PublicSiteProps) 
                         {unit.features.map((feature) => <span key={feature}>{feature}</span>)}
                       </div>
                       <p>{unit.features.length ? "Unit features listed above." : "Contact us for vehicle details."}</p>
-                      <a className="button button-dark button-small" href="#contact">
+                      <a
+                        className="button button-dark button-small"
+                        href="#booking"
+                        onClick={() => setSelectedBookingUnit(String(unit.id))}
+                      >
                         {unit.status === "Available" ? "Ask about this car" : "Ask about availability"}
                       </a>
                     </div>
@@ -187,28 +217,72 @@ export default function PublicSite({ units, assets, content }: PublicSiteProps) 
           </div>
         </section>
 
-        <section className="section section-paper" id="how">
+        <section className="section bg-paper" id="how">
           <div className="wrap">
             <SectionHeading eyebrow="Simple steps, no surprises" title="How renting with us works" centered />
-            <div className="steps-grid">
-              {labels.howItWorks.map((step, index) => (
-                <article className="step-card" key={`${step.title}-${index}`}>
-                  <span className="step-number">{String(index + 1).padStart(2, "0")}</span>
-                  <h3>{step.title}</h3>
-                  <p>{step.description}</p>
-                </article>
-              ))}
+            <div
+              className="how-slideshow"
+              role="region"
+              aria-roledescription="carousel"
+              aria-label="Rental procedure"
+              onPointerEnter={() => setPauseSlides(true)}
+              onPointerLeave={() => setPauseSlides(false)}
+              onFocusCapture={() => setPauseSlides(true)}
+              onBlurCapture={(event) => {
+                if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) {
+                  setPauseSlides(false);
+                }
+              }}
+            >
+              <div className="how-slideshow-stage" aria-live="polite">
+                {howItWorks.map((step, index) => (
+                  <article
+                    className={`marker how-slide${index === activeStep ? " is-active" : ""}`}
+                    key={`${step.title}-${index}`}
+                    role="group"
+                    aria-roledescription="slide"
+                    aria-label={`Step ${index + 1} of ${howItWorks.length}`}
+                    aria-hidden={index !== activeStep}
+                    inert={index !== activeStep}
+                  >
+                    <div className="num">{String(index + 1).padStart(2, "0")}</div>
+                    <p className="how-slide-count">Step {index + 1} of {howItWorks.length}</p>
+                    <h3>{step.title}</h3>
+                    <p>{step.description}</p>
+                  </article>
+                ))}
+              </div>
+              <div className="how-slideshow-controls">
+                <button className="how-slide-control" type="button" aria-label="Previous step" onClick={() => setActiveStep((current) => (current - 1 + howItWorks.length) % howItWorks.length)}>
+                  <i className="fa-solid fa-arrow-left" aria-hidden="true" />
+                </button>
+                <div className="how-slide-indicators" role="group" aria-label="Choose a rental procedure step">
+                  {howItWorks.map((step, index) => (
+                    <button
+                      className="how-slide-indicator"
+                      type="button"
+                      key={`${step.title}-${index}`}
+                      aria-label={`Go to step ${index + 1}: ${step.title}`}
+                      aria-pressed={index === activeStep}
+                      onClick={() => setActiveStep(index)}
+                    ><span aria-hidden="true" /></button>
+                  ))}
+                </div>
+                <button className="how-slide-control" type="button" aria-label="Next step" onClick={() => setActiveStep((current) => (current + 1) % howItWorks.length)}>
+                  <i className="fa-solid fa-arrow-right" aria-hidden="true" />
+                </button>
+              </div>
             </div>
           </div>
         </section>
 
-        <section className="section">
+        <section className="section bg-dark">
           <div className="wrap">
             <SectionHeading eyebrow="Why carTOGO" title="A smoother way to get moving" />
-            <div className="benefit-grid">
+            <div className="why-grid">
               {labels.whyChooseUs.map((item, index) => (
-                <article className="benefit-card" key={`${item.title}-${index}`}>
-                  <span className="benefit-mark" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+                <article className="why-item" key={`${item.title}-${index}`}>
+                  <span className="icon"><i className={`fa-solid ${iconClass(item.icon)}`} aria-hidden="true" /></span>
                   <h3>{item.title}</h3>
                   <p>{item.description}</p>
                 </article>
@@ -217,13 +291,13 @@ export default function PublicSite({ units, assets, content }: PublicSiteProps) 
           </div>
         </section>
 
-        <section className="section section-paper" id="rates">
+        <section className="section bg-paper" id="rates">
           <div className="wrap">
             <SectionHeading eyebrow="Pricing" title="Rates & deposits">
               Rates vary by vehicle and destination. Long rentals may qualify for the listed discount.
             </SectionHeading>
-            <div className="rates-scroll">
-              <table className="rates-table">
+            <div className="rates-table-wrap rates-scroll">
+              <table className="rates rates-table">
                 <thead>
                   <tr>
                     <th scope="col">Vehicle</th>
@@ -250,11 +324,11 @@ export default function PublicSite({ units, assets, content }: PublicSiteProps) 
                 </tbody>
               </table>
             </div>
-            <div className="fee-grid">
-              <Fee label="Extra driver / trip" value={settings.extraDriverFee} currency={settings.currency} />
-              <Fee label="Child seat / trip" value={settings.childSeatFee} currency={settings.currency} />
-              <Fee label="Late return / hour" value={settings.lateFeePerHour} currency={settings.currency} />
-              <div className="fee-card"><strong>{settings.depositPercent}%</strong><span>Estimated refundable deposit</span></div>
+            <div className="fees-note fee-grid">
+              <Fee label="Extra driver / trip" value={settings.extraDriverFee} currency={settings.currency} detail="A per-trip charge for adding an authorized driver." />
+              <Fee label="Child seat / trip" value={settings.childSeatFee} currency={settings.currency} detail="Request a child seat with your booking inquiry." />
+              <Fee label="Late return / hour" value={settings.lateFeePerHour} currency={settings.currency} detail="Charged for each hour past the scheduled return time." />
+              <Fee label="Refundable deposit" value={settings.depositPercent} currency="%" detail="The displayed percentage is an estimate of the refundable deposit." />
             </div>
             {content.discountRules.length > 0 && (
               <p className="discount-note">
@@ -269,19 +343,19 @@ export default function PublicSite({ units, assets, content }: PublicSiteProps) 
         <section className="section">
           <div className="wrap">
             <SectionHeading eyebrow="A few words about the fleet" title="Road-ready for every kind of trip" />
-            <div className="testimonial-grid">
+            <div className="testi-grid testimonial-grid">
               {labels.testimonials.map((item, index) => (
-                <blockquote className="testimonial-card" key={`${item.name}-${index}`}>
-                  <span className="quote-mark" aria-hidden="true">“</span>
+                <blockquote className="testi-card testimonial-card" key={`${item.name}-${index}`}>
+                  <span className="quote-mark quote" aria-hidden="true">“</span>
                   <p>{item.quote}</p>
-                  <footer><strong>{item.name}</strong><span>{item.detail}</span></footer>
+                  <footer className="who"><strong>{item.name}</strong><span>{item.detail}</span></footer>
                 </blockquote>
               ))}
             </div>
           </div>
         </section>
 
-        <section className="section section-paper" id="faq">
+        <section className="section bg-paper" id="faq">
           <div className="wrap faq-layout">
             <SectionHeading eyebrow="Good to know" title="Frequently asked questions">
               Need more details? Contact our team and we’ll be happy to help.
@@ -297,37 +371,58 @@ export default function PublicSite({ units, assets, content }: PublicSiteProps) 
           </div>
         </section>
 
-        <section className="section contact-section" id="contact">
-          <div className="wrap contact-layout">
-            <div>
-              <p className="eyebrow">Ready when you are</p>
-              <h2>Let’s plan your next drive.</h2>
-              <p>Contact our live agent to ask about vehicle availability, pickup, and booking details. No payment is taken online.</p>
-              <div className="contact-actions">
-                {contact?.phone && <a className="button button-primary" href={`tel:${contact.phone.replace(/[^\d+]/g, "")}`}>Call our team</a>}
-                {contact?.email && <a className="button button-ghost on-dark" href={`mailto:${contact.email}`}>Email us</a>}
+        <BookingForm
+          units={units}
+          content={content}
+          selectedUnitId={selectedBookingUnit}
+          onUnitChange={setSelectedBookingUnit}
+        />
+
+        <section className="section bg-paper" id="contact">
+          <div className="wrap">
+            <SectionHeading eyebrow="Ready when you are" title="Talk to a live agent">
+              Ask about vehicle availability, pickup, and booking details. No payment is taken online.
+            </SectionHeading>
+            <div className="contact-grid">
+              <div className="contact-info-column">
+                <article className={`contact-card live-agent-card${contact?.status === "closed" ? " is-closed" : ""}`}>
+                  <div className="contact-card-heading">
+                    <h3>{contact?.display_name || "Live agent"}</h3>
+                    {contact && <span className={`contact-status${contact.status === "closed" ? " is-closed" : ""}`}>{contact.status === "closed" ? "Closed" : "Open"}</span>}
+                  </div>
+                  {contact?.description && <p className="contact-description">{contact.description}</p>}
+                  {contact?.phone && (
+                    <div className="contact-channel"><i className="fa-solid fa-phone" aria-hidden="true" /><div><span>Phone</span><a href={`tel:${contact.phone.replace(/[^\d+]/g, "")}`}>{contact.phone}</a></div></div>
+                  )}
+                  {contact?.email && (
+                    <div className="contact-channel"><i className="fa-solid fa-envelope" aria-hidden="true" /><div><span>Email</span><a href={`mailto:${contact.email}`}>{contact.email}</a></div></div>
+                  )}
+                  {contact?.operational_hours && (
+                    <div className="contact-channel"><i className="fa-regular fa-clock" aria-hidden="true" /><div><span>Operational hours</span><p>{contact.operational_hours}</p></div></div>
+                  )}
+                  <div className="contact-actions">
+                    {contact?.phone && <a className="button button-primary button-small" href={`tel:${contact.phone.replace(/[^\d+]/g, "")}`}>Call our team</a>}
+                    {contact?.email && <a className="button button-ghost button-small" href={`mailto:${contact.email}`}>Email us</a>}
+                  </div>
+                </article>
+                <article className="contact-card">
+                  <h3>Pickup locations</h3>
+                  {locations.length ? (
+                    <ul className="contact-location-list pickup-list">
+                      {locations.map((location) => (
+                        <li key={location.id}>
+                          <strong>{location.loc_name || location.display_name}</strong>
+                          <span>{location.display_name}{location.status === "closed" ? " · Currently closed" : ""}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : <p>Contact our team to confirm pickup arrangements.</p>}
+                </article>
               </div>
-            </div>
-            <div className="contact-card">
-              <h3>{contact?.display_name || "Live agent"}</h3>
-              {contact?.description && <p>{contact.description}</p>}
-              {contact?.phone && <p><span>Phone</span><a href={`tel:${contact.phone.replace(/[^\d+]/g, "")}`}>{contact.phone}</a></p>}
-              {contact?.email && <p><span>Email</span><a href={`mailto:${contact.email}`}>{contact.email}</a></p>}
-              {contact?.operational_hours && <p><span>Hours</span>{contact.operational_hours}</p>}
-              <h4>Pickup locations</h4>
-              {locations.length ? (
-                <>
-                  <DeferredPickupMap locations={locations} />
-                  <ul className="pickup-list">
-                    {locations.map((location) => (
-                      <li key={location.id}>
-                        <strong>{location.loc_name || location.display_name}</strong>
-                        <span>{location.display_name}{location.status === "closed" ? " · Currently closed" : ""}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : <p>Contact our team to confirm pickup arrangements.</p>}
+              <div className="contact-map-panel">
+                <div className="contact-map-heading"><span><i className="fa-solid fa-location-dot" aria-hidden="true" /> Pickup location map</span></div>
+                {locations.length ? <DeferredPickupMap locations={locations} /> : <p className="contact-map-empty">No pickup locations are configured yet.</p>}
+              </div>
             </div>
           </div>
         </section>
@@ -336,7 +431,7 @@ export default function PublicSite({ units, assets, content }: PublicSiteProps) 
       <div className="kerb-strip" aria-hidden="true" />
       <footer className="site-footer">
         <div className="wrap footer-grid">
-          <div>
+          <div className="footer-brand">
             <a className="logo footer-logo" href="#top">{settings.companyName}</a>
             <h2>{about.title}</h2>
             <p>{about.body}</p>
@@ -368,6 +463,7 @@ export default function PublicSite({ units, assets, content }: PublicSiteProps) 
           <span>Rates and fleet information are subject to confirmation.</span>
         </div>
       </footer>
+      <ChatWidget />
     </>
   );
 }
@@ -384,7 +480,7 @@ function SectionHeading({
   centered?: boolean;
 }) {
   return (
-    <div className={`section-heading${centered ? " is-centered" : ""}`}>
+    <div className={`section-heading section-head${centered ? " is-centered center" : ""}`}>
       <p className="eyebrow">{eyebrow}</p>
       <h2>{title}</h2>
       {children && <p>{children}</p>}
@@ -429,6 +525,36 @@ function DeferredPickupMap({
   );
 }
 
-function Fee({ label, value, currency }: { label: string; value: number; currency: string }) {
-  return <div className="fee-card"><strong>{formatCurrency(value, currency)}</strong><span>{label}</span></div>;
+function Fee({ label, value, currency, detail }: { label: string; value: number; currency: string; detail: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const formattedValue = currency === "%" ? `${value}%` : formatCurrency(value, currency);
+  return (
+    <button
+      className={`fee-chip${expanded ? " is-expanded" : ""}`}
+      type="button"
+      aria-expanded={expanded}
+      onClick={() => setExpanded((current) => !current)}
+    >
+      <b>{formattedValue}</b>
+      <span>{label}</span>
+      <span className="fee-chip-detail" aria-hidden={!expanded} inert={!expanded}><span>{detail}</span></span>
+    </button>
+  );
+}
+
+function iconClass(name: string): string {
+  const icons: Record<string, string> = {
+    user: "fa-user",
+    gear: "fa-gear",
+    fuel: "fa-gas-pump",
+    location: "fa-location-dot",
+    car: "fa-car-side",
+    calendar: "fa-calendar-days",
+    clipboard: "fa-clipboard-list",
+    card: "fa-credit-card",
+    phone: "fa-phone",
+    key: "fa-key",
+    shield: "fa-shield-halved",
+  };
+  return icons[name] ?? "fa-circle-info";
 }

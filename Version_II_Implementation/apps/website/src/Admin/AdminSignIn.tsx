@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import AdminDashboard from "./AdminDashboard";
-import { supabase } from "./supabase";
+import { supabase } from "../supabase";
 
 type AuthView =
   | { status: "loading" | "signed-out" | "checking" }
@@ -23,6 +23,7 @@ function responseMessage(body: unknown): string | undefined {
 export default function AdminSignIn() {
   const [view, setView] = useState<AuthView>({ status: "loading" });
   const [signInPending, setSignInPending] = useState(false);
+  const authorizedEmail = useRef<string | null>(null);
 
   useEffect(() => {
     document.title = "Admin sign-in — carTOGO.mnl";
@@ -41,6 +42,7 @@ export default function AdminSignIn() {
     const verifySession = async (session: Session | null) => {
       if (!active) return;
       if (!session) {
+        authorizedEmail.current = null;
         setView({ status: "signed-out" });
         return;
       }
@@ -68,8 +70,10 @@ export default function AdminSignIn() {
         ) {
           throw new Error("The API returned an invalid identity response.");
         }
+        authorizedEmail.current = body.email.toLowerCase();
         setView({ status: "authorized", email: body.email });
       } catch (error) {
+        authorizedEmail.current = null;
         setView({
           status: "error",
           message: error instanceof Error ? error.message : "Could not verify admin access.",
@@ -77,7 +81,18 @@ export default function AdminSignIn() {
       }
     };
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "TOKEN_REFRESHED" || event === "USER_UPDATED") return;
+      if (event === "SIGNED_OUT") {
+        authorizedEmail.current = null;
+        setView({ status: "signed-out" });
+        setSignInPending(false);
+        return;
+      }
+      if (
+        event === "SIGNED_IN" &&
+        session?.user.email?.toLowerCase() === authorizedEmail.current
+      ) return;
       queueMicrotask(() => void verifySession(session));
     });
 
@@ -112,10 +127,9 @@ export default function AdminSignIn() {
   }
 
   return (
-    <main className="admin-auth-page">
-      <section className="admin-auth-card" aria-labelledby="admin-auth-title">
+    <main className="admin-auth-page login-screen">
+      <section className="admin-auth-card login-card" aria-labelledby="admin-auth-title">
         <a className="logo" href="/">carTOGO.mnl</a>
-        <p className="eyebrow">Version II admin</p>
         <h1 id="admin-auth-title">Admin sign-in</h1>
         {view.status === "loading" || view.status === "checking" ? (
           <p role="status" aria-live="polite">
@@ -124,15 +138,15 @@ export default function AdminSignIn() {
         ) : null}
         {view.status === "signed-out" ? (
           <>
-            <p>Only Google accounts on the administrator allowlist can continue.</p>
             <button
-              className="button button-primary"
+              className="button button-primary btn btn-primary btn-block"
               type="button"
               disabled={signInPending || !supabase}
               onClick={() => void signIn()}
             >
               {signInPending ? "Redirecting…" : "Sign in with Google"}
             </button>
+            <p className="hint">Only Google accounts listed in Admin Settings can access the admin panel.</p>
           </>
         ) : null}
         {view.status === "denied" || view.status === "error" ? (
@@ -143,12 +157,8 @@ export default function AdminSignIn() {
                 Sign out
               </button>
             ) : null}
-            {view.status === "error" && !supabase ? (
-              <a className="button button-ghost" href="/">Back to website</a>
-            ) : null}
           </>
         ) : null}
-        <a className="admin-auth-back" href="/">Back to website</a>
       </section>
     </main>
   );

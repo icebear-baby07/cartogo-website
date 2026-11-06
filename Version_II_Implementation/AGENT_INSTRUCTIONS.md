@@ -24,7 +24,8 @@ replace it unless the user explicitly authorizes that.
 - Before editing, inspect `git status` and the relevant files. This worktree
   may contain unrelated edits, untracked files, or deletions; preserve them
   and never reset, clean, or revert changes you did not make.
-- Follow the roadmap below in order. Section 8 — Admin UI is now in progress.
+- Follow the roadmap below in order. Section 8 — Admin UI is implemented;
+  final non-production workflow verification remains.
   Confirm existing APIs and legacy workflows before wiring screens; do not
   claim a workflow is complete unless it works end to end.
 - Preserve existing user-visible behavior and database document shapes.
@@ -44,17 +45,40 @@ replace it unless the user explicitly authorizes that.
   Section 7 provides protected admin APIs, inquiry actions, role management,
   and owner-approved resource/account changes. Owner approval uses a
   short-lived, attempt-limited PIN sent by API-side SMTP.
-- Section 8, the admin dashboard and its UI workflows, is being implemented.
-  Sections 9–11 still include remaining email/geocoding work, chatbot UI
-  migration and embedding, and final verification/cutover.
-- The chatbot is currently an isolated copy with its own Python service and
-  existing standalone HTML/JavaScript UI; it is not yet a React app embedded
-  in the website.
-- Existing validation at the last implementation checkpoint: contract and
-  API tests passed, the contracts/API/website production build passed, and
-  `npm audit` reported no vulnerabilities. Re-run checks after making changes;
-  these results do not validate live credentials, SMTP delivery, OAuth
-  callbacks, or live database writes.
+- Section 8's admin dashboard and core workflows are implemented; final legacy
+  capability parity is still under review. Section 9 now includes the booking
+  inquiry flow, guest email verification,
+  optional verified Google sign-in, server-calculated pricing, and a persistent
+  confirmation-email outbox. Destination search and reverse-geocoded road
+  validation now determine the rate area on both client and server. Section
+  10's React chatbot widget and embedding are implemented. Section 11 remains
+  non-production end-to-end verification; production cutover still requires
+  an explicit go signal.
+- The chatbot's Python/Bedrock service remains isolated in `apps/chatbot`;
+  the public site now embeds a React/TypeScript chat widget through a
+  same-origin API proxy. The old standalone HTML/JavaScript chatbot page is
+  retained as a fallback and direct local test surface.
+- A legacy-appearance pass is in progress: Version II reuses the Cartogo site
+  and admin stylesheets, compatible React styles, and selected fleet photos.
+  The public header, hero, fleet, rates, contact, and chat launcher have been
+  aligned while keeping the new APIs and booking flow. This is not yet a claim
+  of pixel-perfect parity; compare the remaining booking/chat states and all
+  authenticated admin tabs before calling the visual migration complete.
+- Automated validation: all 5 contract tests and 33 API tests pass; the
+  contracts/API/website production build and `git diff --check` pass. The
+  website build reports a large MapLibre chunk.
+- Read-only local smoke checks: the running API reports healthy and MongoDB
+  ready; public fleet/content/assets endpoints respond; the website renders,
+  keeps inquiry submission disabled until required fields are ready, and
+  completes a destination search and road-validation flow. The admin sign-in
+  page renders, and its identity API rejects unauthenticated requests. These
+  checks did not submit inquiries or change admin data. The API env file is
+  present, but its MongoDB URI is reported to match the one used by the legacy
+  application; treat this as potentially production and do not run write
+  tests until a dedicated non-production URI is configured and confirmed. The
+  website env file also contains server-only variable names and should be
+  reduced to browser-safe `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
+  settings; its values were not inspected or changed.
 
 ### Setup and checks
 
@@ -87,7 +111,13 @@ website/API.
 
 - `apps/api/.env` is for server-side MongoDB, Supabase server configuration,
   SMTP, owner-approval settings, and optional `GEOCODING_CONTACT_EMAIL`. Use
-  `apps/api/.env.example` as the server-side template.
+  `apps/api/.env.example` as the server-side template. The chatbot proxy uses
+  `CHATBOT_URL` or defaults to `http://127.0.0.1:8003`. Booking inquiries
+  also use the configured guest-challenge and email-outbox collection names;
+  guest verification requires SMTP credentials. Set the same
+  `GUEST_EMAIL_VERIFICATION_SECRET` on every API instance; if omitted, the
+  SMTP app password is used as the HMAC key for short-lived verification
+  codes.
 - `apps/website/.env` should contain only `VITE_SUPABASE_URL` and
   `VITE_SUPABASE_ANON_KEY`. Keep its example equally limited. Do not put
   MongoDB, SMTP, or Supabase service-role credentials there.
@@ -104,33 +134,47 @@ website/API.
 ## Application layout
 
 - `apps/website` — React + TypeScript public website UI, port `5173`.
+  Website components are grouped under `apps/website/src/Admin` for admin
+  workflows and `apps/website/src/Site` for public-site workflows. Shared
+  bootstrap, authentication client, and global styles remain directly under
+  `src`.
 - `apps/api` — Express + TypeScript website API, port `3001`.
-- `apps/chatbot` — isolated copy of the existing chatbot UI and Python/Bedrock
-  service, port `8003`. It has its own environment file, dependencies, and
-  tests; the original `Cartogo/chatbot` remains untouched. The copied UI is
-  still the existing HTML/JavaScript version; its React/TypeScript rewrite is
-  future work.
+- `apps/chatbot` — isolated Python/Bedrock chatbot service, port `8003`, with
+  its environment, dependencies, tests, and retained legacy standalone UI.
+  The public site uses its React widget and the API's same-origin chat proxy;
+  the original `Cartogo/chatbot` remains untouched.
 - `packages/contracts` — shared website API types and server-side validation.
 
-Run the website and API from this directory:
+Run the API and website from this directory:
 
 ```powershell
-npm.cmd install
-npm.cmd run dev
+.\start_site.cmd
 ```
 
-In another terminal, run the Version II chatbot:
+The first launch installs JavaScript dependencies when needed and creates
+missing environment files from their examples. Configure the new `.env` files
+and run the launcher again. On Linux/macOS, use `bash ./start_site.sh`.
+
+To launch the website/API and chatbot together, use `.\start_cartogo.cmd` on
+Windows or `bash ./start_cartogo.sh` on Linux/macOS. The Windows launcher opens
+separate terminals for AWS sign-in, the website/API, and the chatbot. The shell
+launcher runs AWS sign-in first when the AWS CLI is installed, then runs the
+chatbot alongside the website/API.
+
+To run only the Version II chatbot:
 
 ```powershell
-npm.cmd run dev:chatbot
+.\apps\chatbot\start_chat.cmd
 ```
+
+On Linux/macOS, run `bash ./apps/chatbot/start_chat.sh`. The Windows chatbot
+launcher prepares an isolated Python environment at `ctg-venv`; the shell
+launcher uses `.venv-chatbot`. Configure the chatbot's own `apps/chatbot/.env`
+for MongoDB and Bedrock/AWS access. Do not copy the official chatbot `.env` or
+virtual environment.
 
 Open the website at `http://127.0.0.1:5173/` and the separate chatbot at
-`http://127.0.0.1:8003/`. The chatbot launcher prepares an isolated Python
-environment at `ctg-venv` in this Version II root; configure its own
-`apps/chatbot/.env` for
-MongoDB and Bedrock/AWS access. Do not copy the official chatbot `.env` or
-virtual environment.
+`http://127.0.0.1:8003/`.
 
 The website's public data still requires a development MongoDB URI in
 `apps/api/.env`. The chatbot service has a separate `.env` because it uses
@@ -210,13 +254,21 @@ Do not delete or replace the official application until explicitly authorized.
 4. **Public read APIs** — implemented: validated, read-only site-content,
    public fleet, and site-asset endpoints.
 5. **Public website UI** — implemented: responsive React public landing page,
-   fleet filtering, rates, FAQs, pickup details, and contact actions. Booking
-   submission and MapLibre location maps remain deferred until their API/auth
-   and geocoding integrations are migrated; visitors are directed to the live
-   agent rather than being shown a nonfunctional booking form.
+   fleet filtering, rates, FAQs, pickup details, contact actions, and a booking
+   inquiry form with legacy rental modes, estimate/discount recap, guest email
+   verification, and verified Google account submission. The form searches
+   Philippine destinations and validates road/residential access before
+   selecting a rate area. The API independently repeats destination validation
+   and calculates pricing from MongoDB fleet rates and site discount rules.
+   A legacy-appearance pass has been started using the original public styles
+   and selected photos; finish visual comparison across booking and responsive
+   states before claiming full design parity.
 6. **Supabase authentication** — implemented: PKCE Google sign-in, a protected
    `/api/auth/me` identity check, and server-side access-token verification
-   against Supabase Auth and the admin allowlist RPC. Configure
+   against Supabase Auth and the admin allowlist RPC. Public booking accepts
+   a Google session only when its verified Supabase profile identifies Google
+   as a provider; otherwise the guest email verification path is required.
+   Configure
    `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in
    `apps/website/.env`; configure the matching `SUPABASE_URL` and
    `SUPABASE_ANON_KEY` in `apps/api/.env`, then restart the API. Only the
@@ -225,7 +277,7 @@ Do not delete or replace the official application until explicitly authorized.
    of this authentication flow. Configure the Supabase Google provider and
    allow `http://127.0.0.1:5173/admin` in its redirect URL settings (plus the
    deployed admin URL when applicable). The `/admin` route verifies access;
-   dashboard features remain in Section 8.
+   the authenticated dashboard is described in Section 8.
 7. **Admin APIs** — implemented: permission-checked admin reads, inquiry
    actions, chat-session listing, role management, and owner-approved fleet,
    asset, content, and account changes. Owner PINs are stored hashed in
@@ -237,26 +289,44 @@ Do not delete or replace the official application until explicitly authorized.
    `SMTP_*`, `SUPABASE_SERVICE_ROLE_KEY`, `CARTOGO_INITIAL_OWNER_EMAIL`, and
    the MongoDB collection names in `apps/api/.env`; never put server-only
    keys in the website environment.
-8. **Admin UI** — in progress: authenticated admin dashboard with
+8. **Admin UI** — implemented: authenticated admin dashboard with
    permission-aware sections for inquiries, fleet, site assets, site content,
-   chat sessions, and owner-managed accounts. Changes requiring approval use
-   the existing owner PIN request and verification flow. Verify end-to-end
-   workflows and add any remaining legacy admin capabilities before marking
-   complete.
-9. **Email and geocoding integrations** — in progress: API-side SMTP is used
-   for owner-approval PINs and inquiry rejection notices; the public site now
-   renders pickup locations on a MapLibre/OpenStreetMap map. The API provides
-   rate-limited, cached Philippine Nominatim location search, with optional
-   `GEOCODING_CONTACT_EMAIL` for its identifying User-Agent. Durable inquiry
-   confirmation/outbox delivery and remaining booking geocoding workflows are
-   still deferred with booking submission. The map uses OpenStreetMap raster
-   tiles with attribution and should comply with the tile service usage policy;
-   select a suitable tile provider before high-volume production use.
-10. **Chatbot separation** — copied to `apps/chatbot` with its existing
-    standalone UI and Python/Boto3 service. React/TypeScript UI migration and
-    website embedding remain future work.
-11. **End-to-end verification and cutover** — compare behavior, test deployments,
-    and wait for an explicit go signal before changing the official application.
+   chat sessions, and owner-managed accounts. It supports inquiry CSV export
+   and all public content fields, including discount rules and social links.
+   Changes requiring approval use the existing owner PIN request and
+   verification flow. CSV export includes the full legacy inquiry field set,
+   and resetting public content to defaults is available behind confirmation
+   and owner approval. Authenticated workflows still need non-production
+   end-to-end verification.
+9. **Email and geocoding integrations** — implemented. A live, read-only
+   destination search and road-validation smoke check passed; transactional
+   non-production verification remains. API-side SMTP is used for owner-approval
+   PINs, guest email verification, and inquiry rejection
+   notices. Public inquiries are saved in the legacy-compatible MongoDB shape,
+   require a single-use guest verification token, and enqueue confirmation
+   emails in the persistent outbox; a worker retries delivery up to five
+   times. The API provides rate-limited, cached Philippine Nominatim search
+   and reverse-geocoded residential/road validation, with optional
+   `GEOCODING_CONTACT_EMAIL`; invalid map points can be snapped to a nearby
+   verified OSRM road. The public site renders pickup locations on a
+   MapLibre/OpenStreetMap map. The map uses OpenStreetMap raster tiles with
+   attribution; select a suitable tile provider and follow its usage policy
+   before high-volume production use. Guest booking/email, live MongoDB writes,
+   Supabase callbacks, owner-approved admin changes, and production tile-provider
+   selection still need verification.
+10. **Chatbot separation** — implemented: isolated Python/Boto3 service,
+    embedded React/TypeScript public chat widget, same-origin API proxy, safe
+    session IDs, bounded history, suggestions, and clearly disclosed offline
+    agent preview. The standalone legacy chatbot UI remains available for
+    local fallback/testing.
+11. **End-to-end verification and cutover** — partially complete: automated
+    tests/build and safe local read-only smoke checks pass. Before cutover,
+    configure and confirm a dedicated non-production database (the current
+    API URI is reported to match the legacy application's), verify
+    booking/email and authenticated admin workflows against staging, and
+    select a production tile provider. Compare behavior and deployments; wait
+    for an explicit go signal before changing the official application. Never
+    test write workflows against an unconfirmed database.
 
 MongoDB schemas and existing data should remain unchanged during the initial
 application migration. Keep credentials in local environment files; never

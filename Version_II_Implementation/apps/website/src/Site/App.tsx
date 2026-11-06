@@ -6,7 +6,6 @@ import type {
   SiteContent,
 } from "@cartogo/contracts";
 import PublicSite from "./PublicSite";
-import "./style.css";
 
 type PublicPageData = {
   units: PublicUnit[];

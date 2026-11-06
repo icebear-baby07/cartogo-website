@@ -1,0 +1,622 @@
+.button {
+  gap: 0.5em;
+  padding: 0.85em 1.6em;
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.button-primary {
+  background: var(--signal);
+}
+
+.button-dark:hover {
+  background: #000;
+}
+
+.button-small {
+  padding: 0.55em 1em;
+  font-size: 0.82rem;
+}
+
+.section-heading {
+  max-width: 640px;
+  margin-bottom: 2.75rem;
+}
+
+.section-heading.is-centered {
+  margin-inline: auto;
+  text-align: center;
+}
+
+.filter-button {
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+}
+
+.filter-button:hover,
+.filter-button.is-active {
+  border-color: var(--asphalt);
+  background: var(--asphalt);
+  color: var(--paper);
+}
+
+.vehicle-card {
+  display: flex;
+  flex-direction: column;
+  border-top: 4px solid var(--asphalt);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.vehicle-card:hover {
+  border-top-color: var(--signal);
+  box-shadow: var(--shadow-lift);
+}
+
+.vehicle-image {
+  height: auto;
+  aspect-ratio: 4 / 3;
+}
+
+.vehicle-category {
+  border-radius: var(--radius-sm);
+}
+
+.availability {
+  border-radius: 999px;
+  background: var(--go-green);
+  color: var(--paper);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+}
+
+.availability.is-unavailable {
+  background: #3a3a3a;
+  color: var(--paper);
+}
+
+.vehicle-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1.25rem;
+}
+
+.vehicle-body h3 {
+  margin-bottom: 0;
+}
+
+.trust-wrap {
+  margin-bottom: -2.5rem;
+}
+
+.trust-strip {
+  position: relative;
+  transform: translateY(-46%);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+  padding: 1.1rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lift);
+}
+
+.trust-strip > a {
+  display: flex;
+  min-width: 0;
+  min-height: 5rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.55rem;
+  border-radius: var(--radius-sm);
+  text-align: center;
+  transition: background-color 0.2s ease, transform 0.2s ease, color 0.2s ease;
+}
+
+.trust-strip > a:hover,
+.trust-strip > a:focus-visible {
+  transform: translateY(-3px);
+  background: #fff2ef;
+  color: var(--signal);
+}
+
+.trust-strip > a strong {
+  color: var(--route-blue);
+  font-family: var(--font-mono);
+  font-size: 1.45rem;
+}
+
+.trust-strip > a span {
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.faq-layout {
+  grid-template-columns: minmax(240px, 0.8fr) minmax(0, 1.2fr);
+}
+
+.contact-section {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.contact-section h2,
+.contact-section h3,
+.contact-section h4 {
+  color: var(--asphalt);
+}
+
+.contact-section > .wrap > div:first-child > p:not(.eyebrow) {
+  color: var(--slate);
+}
+
+.contact-card {
+  background: var(--paper);
+  border-color: var(--line);
+  box-shadow: var(--shadow-card);
+}
+
+.contact-card > p,
+.pickup-list span {
+  color: var(--slate);
+}
+
+.contact-card > p > span {
+  color: var(--asphalt);
+  font-weight: 700;
+}
+
+.pickup-list li {
+  border-color: var(--line);
+}
+
+.contact-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  align-items: start;
+  gap: 2.5rem;
+}
+
+.contact-info-column {
+  display: grid;
+  gap: 1rem;
+}
+
+.contact-map-panel {
+  display: flex;
+  min-width: 0;
+  min-height: 328px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--concrete);
+  box-shadow: var(--shadow-card);
+}
+
+.contact-map-heading {
+  min-height: 48px;
+  padding: 0.8rem 1rem;
+  background: var(--paper);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.pickup-map-frame,
+.pickup-map {
+  width: 100%;
+  min-height: 280px;
+  flex: 1 0 280px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.social-links {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.footer-brand h2 {
+  margin-top: 1.4rem;
+  font-size: 1.6rem;
+}
+
+.fee-card {
+  box-shadow: var(--shadow-card);
+}
+
+.booking-form {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.booking-fieldset {
+  margin: 0;
+  padding: 0 0 1rem;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.booking-fieldset legend {
+  padding: 0.7rem 0.4rem 0.7rem 0;
+  color: var(--signal-deep);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.booking-contact-fields .booking-field {
+  display: grid;
+  align-items: start;
+}
+
+.booking-auth-cta .button {
+  width: 100%;
+  min-width: 0;
+  justify-content: center;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.booking-submit .button {
+  width: 100%;
+}
+
+.booking-field {
+  gap: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.booking-field input,
+.booking-field select,
+.booking-field textarea {
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.booking-field input:focus,
+.booking-field select:focus,
+.booking-field textarea:focus {
+  border-color: var(--signal);
+}
+
+.booking-rental-panel {
+  min-width: 0;
+  margin: 0;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: linear-gradient(145deg, #fff8f5, var(--paper) 60%);
+  box-shadow: 0 8px 24px rgb(34 31 30 / 6%);
+}
+
+.booking-rental-panel legend {
+  padding: 0 0.5rem;
+  color: var(--asphalt);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 750;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.booking-rental-mode-toggle,
+.booking-period-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.booking-rental-mode-card {
+  display: grid;
+  min-width: 0;
+  min-height: 76px;
+  align-content: center;
+  justify-items: start;
+  gap: 0.35rem;
+  padding: 0.9rem 1rem;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: transform 0.18s ease, border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.booking-rental-mode-card:hover,
+.booking-rental-mode-card.is-previewed {
+  transform: translateY(-2px);
+  border-color: var(--signal);
+  box-shadow: 0 5px 16px rgb(214 40 40 / 12%);
+}
+
+.booking-rental-mode-card.is-selected {
+  border-color: var(--signal);
+  background: var(--signal);
+  box-shadow: 0 5px 16px rgb(214 40 40 / 18%);
+  color: var(--paper);
+}
+
+.booking-rental-mode-card:focus-visible,
+.booking-period-option:focus-visible {
+  outline: 3px solid rgb(214 40 40 / 38%);
+  outline-offset: 2px;
+}
+
+.booking-rental-mode-card:disabled {
+  transform: none;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.booking-rental-mode-title {
+  font-size: 0.94rem;
+  font-weight: 750;
+}
+
+.booking-rental-mode-description {
+  color: var(--slate);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.booking-rental-mode-card.is-selected .booking-rental-mode-description {
+  color: rgb(255 255 255 / 84%);
+}
+
+.booking-rental-controls {
+  margin-top: 0.85rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+}
+
+.booking-rental-controls[hidden] {
+  display: none;
+}
+
+.booking-rental-control-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+  color: var(--asphalt);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.booking-rental-control-label output {
+  color: var(--signal-deep);
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.booking-period-option {
+  min-height: 48px;
+  padding: 0.65rem 1rem;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
+}
+
+.booking-period-option:hover {
+  border-color: var(--signal);
+}
+
+.booking-period-option.is-selected {
+  border-color: var(--signal);
+  background: #fff0ed;
+  color: var(--signal-deep);
+}
+
+.booking-rental-range {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  margin: 0.2rem 0 0;
+  accent-color: var(--signal);
+  cursor: pointer;
+}
+
+.booking-rental-range:focus-visible {
+  outline: 3px solid rgb(214 40 40 / 35%);
+  outline-offset: 3px;
+}
+
+.booking-rental-range-scale {
+  display: flex;
+  justify-content: space-between;
+  color: var(--slate);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.booking-rental-hint {
+  margin: 0.6rem 0 0;
+  color: var(--slate);
+  font-size: 0.8rem;
+}
+
+.booking-rental-promo {
+  margin: 0.65rem 0 0;
+  padding: 0.7rem 0.8rem;
+  border-left: 4px solid var(--signal);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: #fff0ed;
+  color: var(--signal-deep);
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+@media (max-width: 680px) {
+  .booking-rental-mode-toggle {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .booking-rental-mode-card {
+    min-height: 64px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .booking-rental-mode-card,
+  .booking-period-option {
+    transition: none;
+  }
+
+  .booking-rental-mode-card:hover,
+  .booking-rental-mode-card.is-previewed {
+    transform: none;
+  }
+}
+
+.chat-launcher {
+  display: flex;
+  width: 52px;
+  height: 52px;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: 15px;
+  background: var(--signal);
+  box-shadow: var(--shadow-lift);
+  color: var(--paper);
+  cursor: pointer;
+  transition: width 0.22s ease, border-radius 0.22s ease, padding 0.22s ease,
+    background-color 0.18s ease, transform 0.2s ease;
+}
+
+.chat-launcher > i {
+  flex: 0 0 auto;
+  font-size: 1.2rem;
+}
+
+.chat-launcher > span {
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  white-space: nowrap;
+  transition: max-width 0.22s ease, opacity 0.18s ease;
+}
+
+.chat-launcher:hover,
+.chat-launcher:focus-visible,
+.chatbot-widget:focus-within .chat-launcher {
+  width: 150px;
+  justify-content: flex-start;
+  padding: 0.8rem 1.05rem;
+  border-radius: 999px;
+}
+
+.chat-launcher:hover > span,
+.chat-launcher:focus-visible > span,
+.chatbot-widget:focus-within .chat-launcher > span {
+  max-width: 110px;
+  opacity: 1;
+}
+
+.chat-launcher:hover {
+  background: var(--signal-deep);
+}
+
+@media (max-width: 740px) {
+  .chat-launcher {
+    width: 48px;
+    height: 48px;
+  }
+
+  .chat-launcher:hover,
+  .chat-launcher:focus-visible {
+    width: min(150px, calc(100vw - 1.5rem));
+  }
+}
+
+@media (max-width: 1120px) {
+  .trust-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    transform: translateY(-26%);
+  }
+
+  .trust-wrap {
+    margin-bottom: 1.5rem;
+  }
+
+  .site-header.open .nav-links {
+    display: flex;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    left: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1.5rem var(--gutter);
+    border-bottom: 1px solid var(--line);
+    background: var(--concrete);
+  }
+
+  .nav-links .mobile-nav-cta {
+    display: inline-flex;
+  }
+
+  .header-actions > .button {
+    display: none;
+  }
+}
+
+@media (max-width: 680px) {
+  .trust-strip {
+    grid-template-columns: minmax(0, 1fr);
+    transform: none;
+  }
+
+  .trust-wrap {
+    margin-bottom: 1.5rem;
+  }
+
+  .contact-grid,
+  .faq-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

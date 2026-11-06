@@ -5,18 +5,24 @@ import {
   type Db,
   type Document,
 } from "mongodb";
-import { SiteContentSchema } from "@cartogo/contracts";
+import { PublicUnitSchema, SiteContentSchema } from "@cartogo/contracts";
 import type { PublicDataRepository } from "./public-data.js";
 import type { AdminDataRepository, ApprovalChallenge } from "./admin-api.js";
+import type { BookingRepository, GuestChallenge } from "./booking.js";
 
 type MongoDatabases = {
   client: MongoClient;
-  inquiries: Db;
+  bookingOperations: Db;
   site: Db;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 let client: MongoClient | undefined;
 let connection: Promise<MongoClient> | undefined;
+let bookingIndexes: Promise<void> | undefined;
 
 export async function connectToMongo(): Promise<MongoClient> {
   if (connection) return connection;
@@ -50,7 +56,7 @@ export async function getMongoDatabases(): Promise<MongoDatabases> {
   const connectedClient = await connectToMongo();
   return {
     client: connectedClient,
-    inquiries: connectedClient.db(process.env.MONGODB_DATABASE?.trim() || "cartogo"),
+    bookingOperations: connectedClient.db(process.env.MONGODB_DATABASE?.trim() || "cartogo"),
     site: connectedClient.db(process.env.MONGODB_SITE_DATABASE?.trim() || "Site"),
   };
 }
@@ -92,8 +98,221 @@ export async function getPublicDataRepository(): Promise<PublicDataRepository> {
   };
 }
 
+export async function getBookingRepository(): Promise<BookingRepository> {
+  const { bookingOperations, site } = await getMongoDatabases();
+  const units = site.collection<Document & { _id: number; id: number }>(
+    process.env.MONGODB_UNITS_COLLECTION?.trim() || "vehicles",
+  );
+  const content = site.collection<Document & { _id: string }>(
+    process.env.MONGODB_SITE_CONTENT_COLLECTION?.trim() || "site_content",
+  );
+  const inquiryCollection = site.collection<Document & { _id: number; id: number }>(
+    process.env.MONGODB_INQUIRIES_COLLECTION?.trim() || "inquiries",
+  );
+  const sequences = site.collection<Document & { _id: string; value: number }>(
+    process.env.MONGODB_SEQUENCES_COLLECTION?.trim() || "site_sequences",
+  );
+  const challenges = bookingOperations.collection<Document & { _id: string }>(
+    process.env.MONGODB_GUEST_CHALLENGES_COLLECTION?.trim() || "guest_email_challenges",
+  );
+  const emailOutbox = bookingOperations.collection<Document & { _id: string }>(
+    process.env.MONGODB_EMAIL_OUTBOX_COLLECTION?.trim() || "email_outbox",
+  );
+
+  if (!bookingIndexes) {
+    bookingIndexes = Promise.all([
+      inquiryCollection.createIndex(
+        { client_request_id: 1 },
+        { unique: true, sparse: true, name: "client_request_id_unique" },
+      ),
+      challenges.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 }),
+      challenges.createIndex({ email: 1, created_at: -1 }),
+      challenges.createIndex({ ip_hash: 1, created_at: -1 }),
+      emailOutbox.createIndex(
+        { status: 1, next_attempt_at: 1, created_at: 1 },
+        { name: "email_outbox_pending" },
+      ),
+    ]).then(() => undefined).catch((error: unknown) => {
+      bookingIndexes = undefined;
+      throw error;
+    });
+  }
+  await bookingIndexes;
+
+  const nextInquiryId = async (): Promise<number> => {
+    const maximum = await inquiryCollection.findOne({}, { sort: { id: -1 }, projection: { id: 1 } });
+    await sequences.updateOne(
+      { _id: "inquiries" },
+      { $max: { value: maximum?.id ?? 0 } },
+      { upsert: true },
+    );
+    const sequence = await sequences.findOneAndUpdate(
+      { _id: "inquiries" },
+      { $inc: { value: 1 } },
+      { returnDocument: ReturnDocument.AFTER },
+    );
+    if (!sequence) throw new Error("Could not allocate an inquiry ID.");
+    return sequence.value;
+  };
+  const findInquiryByRequestId = async (requestId: string) =>
+    inquiryCollection.findOne(
+      { client_request_id: requestId },
+      { projection: { _id: 0, client_request_id: 0 } },
+    ) as Promise<(Record<string, unknown> & { id: number; email: string }) | null>;
+
+  return {
+    async getUnit(id) {
+      const unit = await units.findOne({ _id: id }, { projection: { _id: 0 } });
+      if (!unit) return null;
+      return PublicUnitSchema.parse(unit);
+    },
+    async getDiscountRules() {
+      const siteContent = await content.findOne({ _id: "public" }, { projection: { _id: 0 } });
+      if (!siteContent) {
+        throw new Error("Site discount rules are not initialized.");
+      }
+      return SiteContentSchema.parse(siteContent).discountRules;
+    },
+    async findInquiryByRequestId(requestId) {
+      return findInquiryByRequestId(requestId);
+    },
+    async createGuestChallenge(challenge: GuestChallenge) {
+      const recent = await challenges.findOne({
+        created_at: { $gt: new Date(challenge.created_at.valueOf() - 60_000) },
+        $or: [{ email: challenge.email }, { ip_hash: challenge.ip_hash }],
+      });
+      if (recent) throw new Error("rate_limited");
+      await challenges.insertOne({ ...challenge, _id: challenge.id });
+    },
+    async getGuestChallenge(id) {
+      const result = await challenges.findOne({ _id: id }, { projection: { _id: 0 } });
+      return result as GuestChallenge | null;
+    },
+    async incrementGuestChallengeAttempts(id, now) {
+      const result = await challenges.findOneAndUpdate(
+        { _id: id, attempts: { $lt: 5 }, expires_at: { $gt: now }, verified_at: { $exists: false } },
+        { $inc: { attempts: 1 } },
+        { returnDocument: ReturnDocument.AFTER },
+      );
+      return result?.attempts as number | undefined ?? null;
+    },
+    async saveGuestChallengeVerification(id, tokenHash, now) {
+      const result = await challenges.updateOne(
+        { _id: id, attempts: { $lte: 5 }, expires_at: { $gt: now }, verified_at: { $exists: false } },
+        { $set: { verified_at: now, token_hash: tokenHash } },
+      );
+      return result.modifiedCount === 1;
+    },
+    async deleteGuestChallenge(id) {
+      await challenges.deleteOne({ _id: id });
+    },
+    async consumeGuestChallenge(id, email, tokenHash, now) {
+      const result = await challenges.findOneAndUpdate(
+        {
+          _id: id,
+          email,
+          token_hash: tokenHash,
+          verified_at: { $exists: true },
+          consumed_at: { $exists: false },
+          expires_at: { $gt: now },
+        },
+        { $set: { consumed_at: now } },
+        { returnDocument: ReturnDocument.AFTER, projection: { _id: 1 } },
+      );
+      return result !== null;
+    },
+    async releaseGuestChallenge(id, email, tokenHash) {
+      await challenges.updateOne(
+        { _id: id, email, token_hash: tokenHash, consumed_at: { $exists: true } },
+        { $unset: { consumed_at: "" } },
+      );
+    },
+    async addInquiry(inquiry, requestId) {
+      const existing = await findInquiryByRequestId(requestId);
+      if (existing) return existing;
+      if (typeof inquiry.email !== "string") throw new Error("A valid inquiry email is required.");
+      const id = await nextInquiryId();
+      const timestamp = new Date().toISOString();
+      const document = {
+        ...inquiry,
+        email: inquiry.email,
+        id,
+        _id: id,
+        client_request_id: requestId,
+        created_at: timestamp,
+        verified_at: timestamp,
+      };
+      try {
+        await inquiryCollection.insertOne(document);
+      } catch (error) {
+        const duplicate = await findInquiryByRequestId(requestId);
+        if (duplicate) return duplicate;
+        throw error;
+      }
+      const { _id: _insertedId, client_request_id: _requestId, ...result } = document;
+      return result as Record<string, unknown> & { id: number; email: string };
+    },
+    async enqueueInquiryConfirmation(inquiry) {
+      const now = new Date();
+      await emailOutbox.updateOne(
+        { _id: `inquiry-confirmation:${inquiry.id}` },
+        {
+          $setOnInsert: {
+            inquiry_id: inquiry.id,
+            inquiry,
+            status: "queued",
+            attempts: 0,
+            created_at: now,
+            next_attempt_at: now,
+          },
+        },
+        { upsert: true },
+      );
+    },
+    async claimInquiryConfirmation(now) {
+      const item = await emailOutbox.findOneAndUpdate(
+        {
+          $or: [
+            { status: "queued", next_attempt_at: { $lte: now } },
+            { status: "processing", locked_at: { $lte: new Date(now.valueOf() - 5 * 60_000) } },
+          ],
+        },
+        {
+          $set: { status: "processing", locked_at: now },
+          $inc: { attempts: 1 },
+        },
+        { returnDocument: ReturnDocument.AFTER, sort: { created_at: 1 } },
+      );
+      return item as { _id: string; attempts: number; inquiry: Record<string, unknown> & { id: number; email: string } } | null;
+    },
+    async completeInquiryConfirmation(id, now) {
+      const result = await emailOutbox.updateOne(
+        { _id: id, status: "processing" },
+        { $set: { status: "sent", sent_at: now }, $unset: { locked_at: "", last_error: "" } },
+      );
+      if (result.modifiedCount !== 1) throw new Error("The claimed inquiry email could not be marked as sent.");
+    },
+    async retryInquiryConfirmation(id, attempts, error, now) {
+      const exhausted = attempts >= 5;
+      const delayMinutes = Math.min(60, 2 ** Math.max(0, attempts - 1));
+      const result = await emailOutbox.updateOne(
+        { _id: id, status: "processing" },
+        {
+          $set: {
+            status: exhausted ? "failed" : "queued",
+            last_error: error,
+            next_attempt_at: new Date(now.valueOf() + delayMinutes * 60_000),
+          },
+          $unset: { locked_at: "" },
+        },
+      );
+      if (result.modifiedCount !== 1) throw new Error("The inquiry email retry state could not be saved.");
+    },
+  };
+}
+
 export async function getAdminDataRepository(): Promise<AdminDataRepository> {
-  const { inquiries: inquiryDb, site } = await getMongoDatabases();
+  const { site } = await getMongoDatabases();
   const units = site.collection<Document & { _id: number; id: number }>(
     process.env.MONGODB_UNITS_COLLECTION?.trim() || "vehicles",
   );
@@ -103,7 +322,7 @@ export async function getAdminDataRepository(): Promise<AdminDataRepository> {
   const siteContent = site.collection<Document & { _id: string }>(
     process.env.MONGODB_SITE_CONTENT_COLLECTION?.trim() || "site_content",
   );
-  const inquiryCollection = inquiryDb.collection<Document & { _id: number }>(
+  const inquiryCollection = site.collection<Document & { _id: number }>(
     process.env.MONGODB_INQUIRIES_COLLECTION?.trim() || "inquiries",
   );
   const sequences = site.collection<Document & { _id: string; value: number }>(
@@ -331,18 +550,22 @@ export async function getAdminDataRepository(): Promise<AdminDataRepository> {
       if (!current) throw new Error("Site content is not initialized.");
       const merged = {
         ...current,
-        ...(update.settings ? { settings: { ...current.settings, ...update.settings } } : {}),
-        ...(update.labels ? { labels: { ...current.labels, ...update.labels } } : {}),
+        ...(isRecord(update.settings) ? { settings: { ...current.settings, ...update.settings } } : {}),
+        ...(isRecord(update.labels) ? { labels: { ...current.labels, ...update.labels } } : {}),
+        ...(Array.isArray(update.discountRules) ? { discountRules: update.discountRules } : {}),
+        ...(Array.isArray(update.socialLinks) ? { socialLinks: update.socialLinks } : {}),
       };
       const validated = SiteContentSchema.safeParse(merged);
       if (!validated.success) throw new Error("The updated site content does not match the public content contract.");
       const fields: Record<string, unknown> = {};
-      if (update.settings) {
+      if (isRecord(update.settings)) {
         for (const [key, value] of Object.entries(update.settings)) fields[`settings.${key}`] = value;
       }
-      if (update.labels) {
+      if (isRecord(update.labels)) {
         for (const [key, value] of Object.entries(update.labels)) fields[`labels.${key}`] = value;
       }
+      if (Array.isArray(update.discountRules)) fields.discountRules = update.discountRules;
+      if (Array.isArray(update.socialLinks)) fields.socialLinks = update.socialLinks;
       await siteContent.updateOne({ _id: "public" }, { $set: fields });
       const result = await siteContent.findOne({ _id: "public" }, { projection: { _id: 0 } });
       if (!result) throw new Error("Site content is not initialized.");

@@ -1509,3 +1509,563 @@ p {
     transition-duration: 0.001ms !important;
   }
 }
+
+.chatbot-widget {
+  position: fixed;
+  z-index: 30;
+  right: max(1.25rem, env(safe-area-inset-right));
+  bottom: max(1.25rem, env(safe-area-inset-bottom));
+  color: #242323;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.chat-launcher {
+  display: inline-flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.85rem 1.15rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--signal);
+  box-shadow: 0 8px 26px rgb(0 0 0 / 22%);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.chat-launcher:hover {
+  background: var(--signal-deep);
+}
+
+.chat-launcher > span:first-child {
+  font-size: 1.3rem;
+}
+
+.chat-panel {
+  display: flex;
+  width: min(390px, calc(100vw - 2rem));
+  height: min(640px, calc(100dvh - 2rem));
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #e6e3e1;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 16px 55px rgb(0 0 0 / 24%);
+}
+
+.chatbot-widget.is-fullscreen {
+  inset: max(0.75rem, env(safe-area-inset-top))
+    max(0.75rem, env(safe-area-inset-right))
+    max(0.75rem, env(safe-area-inset-bottom))
+    max(0.75rem, env(safe-area-inset-left));
+}
+
+.chatbot-widget.is-fullscreen .chat-panel {
+  width: 100%;
+  height: 100%;
+}
+
+.chat-panel-header {
+  display: flex;
+  min-height: 72px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  background: #191919;
+  color: #fff;
+}
+
+.chat-panel-header > div:first-child {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.chat-panel-header strong {
+  font-size: 0.96rem;
+}
+
+.chat-panel-header span {
+  color: #d3d0ce;
+  font-size: 0.76rem;
+}
+
+.chat-header-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.chat-header-actions button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #4d4d4d;
+  border-radius: 5px;
+  background: transparent;
+  color: #fff;
+  font-size: 1.2rem;
+}
+
+.chat-header-actions button:hover {
+  background: #333;
+}
+
+.chat-mode-switch {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.55rem 0.85rem;
+  border-bottom: 1px solid #e8e5e2;
+  background: #faf9f8;
+}
+
+.chat-mode-switch button {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: #5c5c5c;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.chat-mode-switch button.is-active {
+  border-color: #ded9d5;
+  background: #fff;
+  color: #171717;
+}
+
+.chat-transcript {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.8rem;
+  overflow-y: auto;
+  padding: 1rem;
+  overscroll-behavior: contain;
+}
+
+.chat-message {
+  max-width: 90%;
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  font-size: 0.87rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.chat-message p {
+  margin: 0.3rem 0 0;
+  color: inherit;
+  white-space: pre-wrap;
+}
+
+.chat-message strong {
+  font-size: 0.73rem;
+}
+
+.assistant-message {
+  align-self: flex-start;
+  background: #f0eeec;
+  color: #292725;
+}
+
+.user-message {
+  align-self: flex-end;
+  background: #222;
+  color: #fff;
+}
+
+.chat-message.is-error {
+  border: 1px solid #e6b8b5;
+  background: #fff3f2;
+  color: #7a1f1f;
+}
+
+.chat-suggestions {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.chat-suggestions > span {
+  color: #68635f;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.chat-suggestions button {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #ded9d5;
+  border-radius: 6px;
+  background: #fff;
+  color: #292725;
+  font-size: 0.8rem;
+  text-align: left;
+}
+
+.chat-suggestions button:hover:not(:disabled) {
+  border-color: var(--signal);
+}
+
+.chat-panel-footer {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border-top: 1px solid #e8e5e2;
+}
+
+.chat-contact-prompt {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.73rem;
+}
+
+.chat-contact-prompt > span {
+  margin-right: auto;
+  color: #625e5a;
+}
+
+.chat-contact-prompt button,
+.chat-panel-footer > p {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #8f1c1c;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.chat-contact-prompt button:last-child {
+  color: #68635f;
+  font-size: 1rem;
+}
+
+.chat-panel-footer > p {
+  color: #68635f;
+  font-weight: 500;
+}
+
+.chat-composer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem;
+  border: 1px solid #d6d1cd;
+  border-radius: 8px;
+}
+
+.chat-composer:focus-within {
+  outline: 2px solid rgb(214 40 40 / 25%);
+  border-color: var(--signal);
+}
+
+.chat-composer input {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0.4rem 0.55rem;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #171717;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.chat-composer button {
+  min-height: 38px;
+  padding: 0.45rem 0.7rem;
+  border: 0;
+  border-radius: 5px;
+  background: #242323;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.chat-composer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.agent-preview {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 0.75rem;
+  min-height: 100%;
+  text-align: center;
+}
+
+.agent-preview h2,
+.agent-preview p {
+  margin: 0;
+}
+
+.agent-preview h2 {
+  font-size: 1.4rem;
+}
+
+.agent-preview p {
+  color: #625e5a;
+  font-size: 0.82rem;
+}
+
+.agent-preview .preview-disclaimer {
+  padding: 0.75rem;
+  border-radius: 5px;
+  background: #fff6dd;
+  color: #624d16;
+}
+
+.agent-preview .agent-preview-message {
+  justify-self: end;
+  padding: 0.65rem 0.8rem;
+  border-radius: 8px;
+  background: #222;
+  color: #fff;
+  text-align: left;
+}
+
+.agent-pulse {
+  color: var(--signal);
+  font-size: 2rem;
+  letter-spacing: 0.25em;
+}
+
+@media (max-width: 480px) {
+  .chatbot-widget:not(.is-fullscreen) {
+    right: 0.6rem;
+    bottom: 0.6rem;
+  }
+
+  .chatbot-widget:not(.is-fullscreen) .chat-panel {
+    width: calc(100vw - 1.2rem);
+    height: min(620px, calc(100dvh - 1.2rem));
+  }
+}
+
+.booking-form {
+  display: grid;
+  gap: 1.2rem;
+  max-width: 980px;
+  margin-inline: auto;
+}
+
+.booking-fieldset {
+  min-width: 0;
+  padding: clamp(1rem, 3vw, 1.6rem);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+}
+
+.booking-fieldset legend {
+  padding-inline: 0.4rem;
+  color: var(--asphalt);
+  font-family: "Bebas Neue", "Arial Narrow", sans-serif;
+  font-size: 1.5rem;
+  text-transform: uppercase;
+}
+
+.booking-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.booking-field {
+  display: grid;
+  min-width: 0;
+  gap: 0.4rem;
+  color: var(--ink);
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.booking-field input,
+.booking-field select,
+.booking-field textarea {
+  width: 100%;
+  min-height: 46px;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #c9c4c0;
+  border-radius: 4px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+
+.booking-field textarea {
+  resize: vertical;
+}
+
+.booking-field input:focus-visible,
+.booking-field select:focus-visible,
+.booking-field textarea:focus-visible {
+  outline: 3px solid rgb(214 40 40 / 35%);
+  outline-offset: 1px;
+}
+
+.booking-field-wide {
+  grid-column: 1 / -1;
+}
+
+.booking-location-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.6rem;
+}
+
+.booking-location-search input {
+  min-width: 0;
+  min-height: 46px;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #c9c4c0;
+  border-radius: 4px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+
+.booking-location-results {
+  display: grid;
+  max-height: 240px;
+  gap: 0.35rem;
+  overflow: auto;
+  margin: 0.25rem 0 0;
+  padding: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--paper);
+  list-style: none;
+}
+
+.booking-location-results button {
+  width: 100%;
+  padding: 0.65rem;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.booking-location-results button:hover,
+.booking-location-results button:focus-visible {
+  outline: none;
+  background: #fbf2ef;
+}
+
+.booking-location-status {
+  margin: 0.25rem 0 0;
+  color: var(--slate);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.booking-quote {
+  margin-top: 1.2rem;
+  padding: 1rem;
+  border-left: 4px solid var(--signal);
+  background: #fbf7f4;
+}
+
+.booking-quote p {
+  margin-bottom: 0.35rem;
+}
+
+.booking-quote strong {
+  color: var(--asphalt);
+  font-size: 1.08rem;
+}
+
+.booking-quote small {
+  color: var(--slate);
+}
+
+.booking-verification {
+  display: grid;
+  justify-items: start;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.booking-verify-row {
+  display: flex;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.booking-verify-row .booking-field {
+  width: 160px;
+}
+
+.booking-form-status,
+.booking-form-error,
+.booking-form-success {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+}
+
+.booking-form-status {
+  color: var(--slate);
+}
+
+.booking-form-error {
+  border-left: 4px solid var(--signal);
+  background: #fff1f0;
+  color: #7a1f1f;
+}
+
+.booking-form-success {
+  border-left: 4px solid #287a3d;
+  background: #f0fff4;
+  color: #205b31;
+}
+
+.booking-submit {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.booking-submit p {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.booking-submit button:disabled,
+.booking-verification button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+@media (max-width: 600px) {
+  .booking-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .booking-field-wide {
+    grid-column: auto;
+  }
+
+  .booking-location-search {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .booking-submit,
+  .booking-verify-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .booking-verify-row .booking-field {
+    width: 100%;
+  }
+}

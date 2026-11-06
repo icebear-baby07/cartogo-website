@@ -57,7 +57,7 @@ export default function PickupMap({ locations }: { locations: PickupLocation[] }
 
   return (
     <div
-      className="pickup-map"
+      className="pickup-map contact-map"
       ref={mapContainer}
       role="img"
       aria-label={`Map showing ${locations.length} pickup ${locations.length === 1 ? "location" : "locations"}`}

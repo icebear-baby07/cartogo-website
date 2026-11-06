@@ -50,7 +50,7 @@ export type AdminDataRepository = {
   consumeApproval(id: string): Promise<boolean>;
   applyUnitChange(action: ChangeAction, unit: Record<string, unknown>): Promise<unknown>;
   applySiteAssetChange(action: ChangeAction, asset: Record<string, unknown>): Promise<unknown>;
-  updateSiteContent(update: Record<string, Record<string, unknown>>): Promise<unknown>;
+  updateSiteContent(update: Record<string, unknown>): Promise<unknown>;
   updateInquiryStatus(id: number, status: string): Promise<unknown>;
   restoreInquiry(id: number): Promise<unknown>;
   rejectInquiry(id: number, reason: string): Promise<Record<string, unknown>>;
@@ -71,6 +71,7 @@ type AdminApiConfig = {
   smtpHost?: string;
   smtpPort?: string;
   smtpFrom?: string;
+  sendEmail?: (to: string, subject: string, text: string) => Promise<void>;
 };
 
 type ResourcePermission = {
@@ -233,11 +234,12 @@ function normalizeAssetChange(action: unknown, data: unknown): [ChangeAction, Re
   return [normalizedAction, normalizedAsset];
 }
 
-function normalizeSiteContent(data: unknown): Record<string, Record<string, unknown>> {
-  if (!isRecord(data) || !Object.keys(data).length || Object.keys(data).some((key) => !["settings", "labels"].includes(key))) {
-    throw new Error("Only site settings and page labels can be updated.");
+function normalizeSiteContent(data: unknown): Record<string, unknown> {
+  const allowedFields = ["settings", "labels", "discountRules", "socialLinks"];
+  if (!isRecord(data) || !Object.keys(data).length || Object.keys(data).some((key) => !allowedFields.includes(key))) {
+    throw new Error("Only site settings, page labels, discount rules, and social links can be updated.");
   }
-  const update: Record<string, Record<string, unknown>> = {};
+  const update: Record<string, unknown> = {};
   const settingsKeys = new Set([
     "companyName", "tagline", "currency", "depositPercent", "extraDriverFee",
     "childSeatFee", "lateFeePerHour",
@@ -265,6 +267,18 @@ function normalizeSiteContent(data: unknown): Record<string, Record<string, unkn
       throw new Error("Labels contain unsupported fields. Contact and pickup details are managed in site assets.");
     }
     update.labels = data.labels;
+  }
+  if ("discountRules" in data) {
+    if (!Array.isArray(data.discountRules)) {
+      throw new Error("Discount rules must be a list.");
+    }
+    update.discountRules = data.discountRules;
+  }
+  if ("socialLinks" in data) {
+    if (!Array.isArray(data.socialLinks)) {
+      throw new Error("Social links must be a list.");
+    }
+    update.socialLinks = data.socialLinks;
   }
   return update;
 }
@@ -522,43 +536,38 @@ export function createAdminRouter(
         response.json({ data: await repository.updateInquiryStatus(id, "confirmed") });
       } else if (action === "restore") {
         response.json({ data: await repository.restoreInquiry(id) });
-      } else if (action === "reject") {
-        if (typeof request.body.reason !== "string" || !request.body.reason.trim() ||
-            request.body.reason.trim().length > 3000 || request.body.reason.trim().split(/\s+/).length > 250) {
+      } else if (action === "reject" || action === "resend_rejection") {
+        const existing = await repository.getInquiry(id);
+        if (!existing) throw new Error("That inquiry no longer exists.");
+
+        const retryingRejection = existing.status === "rejected";
+        const alreadyEmailed = retryingRejection && existing.rejection_email_sent === true;
+        const savedReason = typeof existing.rejection_reason === "string" ? existing.rejection_reason : "";
+        const suppliedReason = typeof request.body.reason === "string" ? request.body.reason.trim() : "";
+        const reason = retryingRejection && savedReason ? savedReason : suppliedReason;
+        if (!alreadyEmailed && (!reason || reason.length > 3000 || reason.split(/\s+/).length > 250)) {
           throw new Error("Enter a rejection reason of no more than 250 words.");
         }
-        const inquiry = await repository.rejectInquiry(id, request.body.reason.trim());
-        let emailSent = false;
-        try {
+
+        const inquiry = retryingRejection || alreadyEmailed
+          ? existing
+          : await repository.rejectInquiry(id, reason);
+        if (inquiry.rejection_email_sent !== true) {
           const to = typeof inquiry.email === "string" ? inquiry.email : "";
           if (!to) throw new Error("Inquiry email address is missing.");
-          await sendMail(
-            config,
-            to,
-            "carTOGO.mnl | Update on your rental inquiry",
-            `Hello ${String(inquiry.firstName || inquiry.name || "there")},\n\nWe are unable to proceed with your inquiry.\n\nReason: ${request.body.reason.trim()}\n\nPlease contact our team if you have questions.`,
-          );
-          emailSent = true;
+          try {
+            const subject = "carTOGO.mnl | Update on your rental inquiry";
+            const message = `Hello ${String(inquiry.firstName || inquiry.name || "there")},\n\nWe are unable to proceed with your inquiry.\n\nReason: ${reason}\n\nPlease contact our team if you have questions.`;
+            if (config.sendEmail) await config.sendEmail(to, subject, message);
+            else await sendMail(config, to, subject, message);
+          } catch (emailError) {
+            console.error("Inquiry rejection email could not be sent.", emailError instanceof Error ? emailError.name : "UnknownError");
+            throw new Error("The rejection email could not be sent. The inquiry was kept; retry to send the email and complete deletion.");
+          }
           await repository.markInquiryRejectionEmailSent(id);
-        } catch (emailError) {
-          console.error("Inquiry rejection email could not be sent.", emailError instanceof Error ? emailError.name : "UnknownError");
         }
-        response.json({
-          data: { ...inquiry, rejection_email_sent: emailSent },
-          emailSent,
-          ...(emailSent ? {} : { emailError: "The inquiry was rejected, but its email notification could not be sent." }),
-        });
-      } else if (action === "resend_rejection") {
-        const inquiry = await repository.getInquiry(id);
-        if (!inquiry || inquiry.status !== "rejected") throw new Error("Only a rejected inquiry can receive a rejection email.");
-        if (inquiry.rejection_email_sent) throw new Error("The rejection email has already been sent.");
-        const to = typeof inquiry.email === "string" ? inquiry.email : "";
-        if (!to) throw new Error("The inquiry email address is missing.");
-        await sendMail(config, to, "carTOGO.mnl | Update on your rental inquiry", String(inquiry.rejection_reason ?? ""));
-        const updated = await repository.markInquiryRejectionEmailSent(id);
-        response.json({ data: updated, emailSent: true });
-      } else if (action === "delete") {
-        response.json({ data: await repository.deleteInquiry(id) });
+        const deleted = await repository.deleteInquiry(id);
+        response.json({ data: deleted, emailSent: true, deleted: true });
       } else {
         throw new Error("Choose a valid inquiry action.");
       }

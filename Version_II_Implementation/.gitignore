@@ -3,6 +3,7 @@ dist/
 coverage/
 *.tsbuildinfo
 ctg-venv/
+.venv-chatbot/
 .env
 .env.*
 !.env.example

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { supabase } from "./supabase";
+import { supabase } from "../supabase";
+import defaultSiteContent from "./site-content-defaults.json";
 
 type AdminProfile = { email: string; titles: string[] };
 type DataRecord = Record<string, unknown>;
@@ -87,6 +88,70 @@ function pretty(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+function exportInquiryCsv(inquiries: DataRecord[]): void {
+  const columns = [
+    ["id", "Inquiry ID"],
+    ["created_at", "Submitted"],
+    ["name", "Customer name"],
+    ["email", "Email"],
+    ["phone", "Phone"],
+    ["secondary_phone", "Secondary phone"],
+    ["car_name", "Vehicle"],
+    ["car_id", "Unit ID"],
+    ["capacity", "Capacity"],
+    ["pickup_date", "Pickup date"],
+    ["pickup_time", "Pickup time"],
+    ["return_date", "Return date"],
+    ["rate_region", "Rate region"],
+    ["rental_mode", "Rental mode"],
+    ["rental_period_hours", "Rate period hours"],
+    ["estimated_rental_hours", "Estimated hours"],
+    ["rental_days", "Rental days"],
+    ["rate_per_period", "Rate per period"],
+    ["discount_percent", "Discount percent"],
+    ["discount_amount", "Discount amount"],
+    ["quoted_rate", "Quoted rate"],
+    ["status", "Status"],
+    ["rejection_reason", "Rejection reason"],
+    ["rejection_email_sent", "Rejection email sent"],
+    ["notes", "Notes"],
+  ] as const;
+  const aliases: Record<string, string> = {
+    created_at: "submittedAt",
+    car_name: "carName",
+    car_id: "carId",
+    pickup_date: "pickupDate",
+    pickup_time: "pickupTime",
+    return_date: "returnDate",
+    rate_region: "rateRegion",
+    rental_mode: "rentalMode",
+    rental_period_hours: "rentalPeriodHours",
+    estimated_rental_hours: "estimatedRentalHours",
+    rental_days: "rentalDays",
+    rate_per_period: "ratePerPeriod",
+    discount_percent: "discountPercent",
+    discount_amount: "discountAmount",
+    quoted_rate: "quotedRate",
+    rejection_reason: "rejectionReason",
+    rejection_email_sent: "rejectionEmailSent",
+  };
+  const escape = (value: unknown) => {
+    let cell = value === null || value === undefined ? "" : String(value);
+    if (/^[\u0000-\u0020]*[=+\-@]/.test(cell)) cell = `'${cell}`;
+    return `"${cell.replaceAll('"', '""')}"`;
+  };
+  const rows = inquiries.map((inquiry) =>
+    columns.map(([key]) => escape(inquiry[key] ?? inquiry[aliases[key] ?? ""])).join(","),
+  );
+  const contents = `\uFEFF${columns.map(([, label]) => escape(label)).join(",")}\r\n${rows.join("\r\n")}`;
+  const url = URL.createObjectURL(new Blob([contents], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `cartogo-inquiries-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 export default function AdminDashboard({
   email,
   onSignOut,
@@ -94,7 +159,10 @@ export default function AdminDashboard({
   email: string;
   onSignOut: () => void;
 }) {
-  const [tab, setTab] = useState<DashboardTab>("inquiries");
+  const [tab, setTab] = useState<DashboardTab>(() => {
+    const savedTab = window.sessionStorage.getItem("cartogo-admin-tab");
+    return tabs.find((item) => item.id === savedTab)?.id ?? "inquiries";
+  });
   const [profile, setProfile] = useState<AdminProfile | null>(null);
   const [data, setData] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
@@ -230,9 +298,13 @@ export default function AdminDashboard({
           : "";
       setRejection(null);
       await loadTab("inquiries");
-      setNotice(`Inquiry ${action === "delete" ? "deleted" : "updated"}.${emailWarning}`);
+      setNotice(action === "reject" || action === "resend_rejection"
+        ? "Inquiry Rejected."
+        : `Inquiry updated.${emailWarning}`);
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : "Could not update the inquiry.");
+      const message = actionError instanceof Error ? actionError.message : "Could not update the inquiry.";
+      if (action === "reject" || action === "resend_rejection") await loadTab("inquiries");
+      setError(message);
     }
   }
 
@@ -275,7 +347,12 @@ export default function AdminDashboard({
       await requestOwnerChange({
         resource: "site_content",
         action: "update",
-        data: { settings: value.settings, labels: value.labels },
+        data: {
+          settings: value.settings,
+          labels: value.labels,
+          discountRules: value.discountRules,
+          socialLinks: value.socialLinks,
+        },
       });
     } catch (parseError) {
       setError(parseError instanceof Error ? parseError.message : "Could not prepare this change.");
@@ -301,6 +378,14 @@ export default function AdminDashboard({
               <option value="rejected">Rejected</option>
             </select>
           </label>
+          <button
+            className="button button-ghost"
+            type="button"
+            disabled={!visible.length}
+            onClick={() => exportInquiryCsv(visible)}
+          >
+            Export CSV
+          </button>
           <button className="button button-ghost" type="button" onClick={() => void refresh()}>Refresh</button>
         </div>
         {visible.length ? (
@@ -329,20 +414,17 @@ export default function AdminDashboard({
                   </dl>
                   <div className="admin-actions">
                     {currentStatus !== "confirmed" && currentStatus !== "rejected" ? (
-                      <button className="button button-primary" type="button" onClick={() => void inquiryAction(id, "update")}>Confirm</button>
-                    ) : null}
-                    {currentStatus === "rejected" ? (
-                      <>
-                        <button className="button button-ghost" type="button" onClick={() => void inquiryAction(id, "restore")}>Restore</button>
-                        {inquiry.rejection_email_sent === false ? <button className="button button-ghost" type="button" onClick={() => void inquiryAction(id, "resend_rejection")}>Resend rejection email</button> : null}
-                      </>
+                      <button className="button button-primary" type="button" onClick={() => void inquiryAction(id, "update", { status: "confirmed" })}>Confirm</button>
                     ) : null}
                     {currentStatus !== "rejected" ? (
                       <button className="button button-ghost" type="button" onClick={() => setRejection({ id, reason: "" })}>Reject</button>
-                    ) : null}
-                    <button className="button button-danger" type="button" onClick={() => {
-                      if (window.confirm(`Delete inquiry #${id}? This cannot be undone.`)) void inquiryAction(id, "delete");
-                    }}>Delete</button>
+                    ) : typeof inquiry.rejection_reason === "string" && inquiry.rejection_reason.trim() ? (
+                      <button className="button button-danger" type="button" onClick={() => void inquiryAction(id, "reject")}>
+                        {inquiry.rejection_email_sent === true ? "Finish deletion" : "Retry email & delete"}
+                      </button>
+                    ) : (
+                      <button className="button button-danger" type="button" onClick={() => setRejection({ id, reason: "" })}>Add reason and finish rejection</button>
+                    )}
                   </div>
                   {rejection?.id === id ? (
                     <form className="admin-rejection-form" onSubmit={(event) => {
@@ -352,8 +434,9 @@ export default function AdminDashboard({
                       <label className="admin-field">Reason (required, max 250 words)
                         <textarea required maxLength={3000} rows={3} value={rejection.reason} onChange={(event) => setRejection({ id, reason: event.target.value })} />
                       </label>
+                      <p>The inquiry is deleted only after the email is accepted by the configured mail server.</p>
                       <div className="admin-actions">
-                        <button className="button button-primary" type="submit">Reject and email customer</button>
+                        <button className="button button-primary" type="submit">Email customer and delete inquiry</button>
                         <button className="button button-ghost" type="button" onClick={() => setRejection(null)}>Cancel</button>
                       </div>
                     </form>
@@ -439,12 +522,31 @@ export default function AdminDashboard({
 
   function renderContent() {
     return (
-      <form className="admin-card admin-json-editor" onSubmit={(event) => void submitContentChange(event)}>
-        <h2>Edit public site content</h2>
-        <p>Preserve the complete settings and labels structure. Only these two fields are submitted for owner approval.</p>
-        <label className="admin-field">Site content JSON<textarea value={editor || pretty(data)} onChange={(event) => setEditor(event.target.value)} rows={25} spellCheck={false} /></label>
-        <div className="admin-actions"><button className="button button-primary" type="submit">Request owner approval</button><button className="button button-ghost" type="button" onClick={() => setEditor(pretty(data))}>Reset editor</button></div>
-      </form>
+      <>
+        <form className="admin-card admin-json-editor" onSubmit={(event) => void submitContentChange(event)}>
+          <h2>Edit public site content</h2>
+          <p>Preserve the complete settings and labels structure. Only these fields are submitted for owner approval.</p>
+          <label className="admin-field">Site content JSON<textarea value={editor || pretty(data)} onChange={(event) => setEditor(event.target.value)} rows={25} spellCheck={false} /></label>
+          <div className="admin-actions"><button className="button button-primary" type="submit">Request owner approval</button><button className="button button-ghost" type="button" onClick={() => setEditor(pretty(data))}>Reset editor</button></div>
+        </form>
+        <section className="admin-card">
+          <h2>Reset public site content</h2>
+          <p>This restores public settings and page copy. Fleet, site assets, inquiries, chat sessions, and administrator access are unchanged. Owner approval is required.</p>
+          <button className="button button-danger" type="button" onClick={() => {
+            if (!window.confirm("Reset public settings and page copy to defaults? Fleet, site assets, booking inquiries, and chat sessions will remain unchanged.")) return;
+            void requestOwnerChange({
+              resource: "site_content",
+              action: "update",
+              data: {
+                settings: defaultSiteContent.settings,
+                labels: defaultSiteContent.labels,
+                discountRules: defaultSiteContent.discountRules,
+                socialLinks: defaultSiteContent.socialLinks,
+              },
+            });
+          }}>Request reset to defaults</button>
+        </section>
+      </>
     );
   }
 
@@ -536,13 +638,14 @@ export default function AdminDashboard({
   const activeTab = tabs.find((item) => item.id === tab);
 
   return (
-    <main className="admin-dashboard">
+    <main className="admin-dashboard admin-shell visible">
       <aside className="admin-sidebar">
         <a className="logo" href="/">carTOGO.mnl</a>
         <p className="eyebrow">Admin workspace</p>
-        <nav className="admin-nav" aria-label="Admin sections">
+        <nav className="admin-nav admin-tabs" aria-label="Admin sections">
           {visibleTabs.map((item) => (
             <button className={item.id === tab ? "is-active" : ""} type="button" key={item.id} onClick={() => {
+              window.sessionStorage.setItem("cartogo-admin-tab", item.id);
               setTab(item.id);
               void loadTab(item.id);
             }}>{item.label}</button>
