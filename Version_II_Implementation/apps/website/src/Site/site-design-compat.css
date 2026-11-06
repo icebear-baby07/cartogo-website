@@ -264,6 +264,14 @@
   text-transform: uppercase;
 }
 
+.booking-vehicle-selection {
+  grid-column: 1 / -1;
+}
+
+.booking-vehicle-selection > .booking-field {
+  align-self: start;
+}
+
 .booking-contact-fields .booking-field {
   display: grid;
   align-items: start;
@@ -277,8 +285,102 @@
   white-space: normal;
 }
 
+.booking-google-account {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  margin-bottom: 0.8rem;
+  padding: 0.9rem;
+  border: 1px solid #c8dfd1;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, #f1f8f3, #fff 78%);
+  box-shadow: 0 6px 18px rgb(34 31 30 / 6%);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.booking-google-account:hover {
+  transform: translateY(-1px);
+  border-color: #83b995;
+  box-shadow: 0 9px 22px rgb(34 31 30 / 10%);
+}
+
+.booking-google-account:focus-visible {
+  outline: 3px solid rgb(38 115 67 / 35%);
+  outline-offset: 3px;
+}
+
+.booking-google-check {
+  display: grid;
+  width: 2.5rem;
+  aspect-ratio: 1;
+  place-items: center;
+  border-radius: 50%;
+  background: #e0f0e5;
+  color: #267343;
+}
+
+.booking-google-check svg {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.booking-google-account-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
+}
+
+.booking-google-account-label {
+  color: #267343;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.booking-google-account-copy strong {
+  overflow-wrap: anywhere;
+  color: var(--asphalt);
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.booking-google-account-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #267343;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .booking-submit .button {
   width: 100%;
+}
+
+@media (max-width: 520px) {
+  .booking-google-account {
+    grid-template-columns: 2.25rem minmax(0, 1fr);
+    gap: 0.65rem;
+    padding: 0.8rem;
+  }
+
+  .booking-google-check {
+    width: 2.25rem;
+  }
+
+  .booking-google-account-action {
+    grid-column: 2;
+    justify-self: start;
+  }
 }
 
 .booking-field {
@@ -393,6 +495,21 @@
   color: rgb(255 255 255 / 84%);
 }
 
+.booking-rental-discount {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 0.1rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: #fff0ed;
+  color: var(--signal-deep);
+  font-size: clamp(0.68rem, 2.4vw, 0.76rem);
+  font-weight: 800;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
 .booking-rental-controls {
   margin-top: 0.85rem;
   padding: 0.95rem 1rem;
@@ -483,6 +600,114 @@
   color: var(--signal-deep);
   font-size: 0.84rem;
   font-weight: 650;
+}
+
+.booking-terms-consent {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.65rem;
+  margin-top: 0.25rem;
+  color: var(--asphalt);
+  font-size: 0.86rem;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.booking-terms-consent input {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0.15rem 0 0;
+  accent-color: var(--route-blue);
+}
+
+.booking-terms-consent a {
+  color: var(--route-blue);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  overflow-wrap: anywhere;
+}
+
+.booking-terms-consent a:hover {
+  color: #174a73;
+}
+
+.booking-terms-consent a:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid var(--route-blue);
+  outline-offset: 2px;
+}
+
+.booking-terms-dialog {
+  width: min(36rem, calc(100vw - 2rem));
+  max-width: none;
+  max-height: min(85dvh, 42rem);
+  margin: auto;
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--route-blue);
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 24px 80px rgb(20 20 20 / 28%);
+}
+
+.booking-terms-dialog::backdrop {
+  background: rgb(20 20 20 / 45%);
+  backdrop-filter: blur(5px);
+}
+
+.booking-terms-content {
+  display: grid;
+  gap: 1rem;
+  padding: clamp(1.15rem, 5vw, 2rem);
+}
+
+.booking-terms-copy {
+  display: grid;
+  gap: 0.75rem;
+  color: var(--slate);
+  line-height: 1.6;
+}
+
+.booking-terms-copy p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.booking-terms-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.booking-terms-heading .eyebrow {
+  margin: 0 0 0.35rem;
+}
+
+.booking-terms-heading h2 {
+  margin: 0;
+  font-size: clamp(1.35rem, 5vw, 1.8rem);
+}
+
+.booking-terms-status {
+  flex: none;
+  padding: 0.3rem 0.55rem;
+  border-radius: 999px;
+  background: #eaf3fb;
+  color: var(--route-blue);
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.booking-terms-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.25rem;
 }
 
 @media (max-width: 680px) {

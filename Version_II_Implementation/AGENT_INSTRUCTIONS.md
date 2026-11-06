@@ -49,8 +49,8 @@ replace it unless the user explicitly authorizes that.
   capability parity is still under review. Section 9 now includes the booking
   inquiry flow, guest email verification,
   optional verified Google sign-in, server-calculated pricing, and a persistent
-  confirmation-email outbox. Destination search and reverse-geocoded road
-  validation now determine the rate area on both client and server. Section
+  confirmation-email outbox. Renters choose the rate area and the API calculates
+  prices from database rates. Section
   10's React chatbot widget and embedding are implemented. Section 11 remains
   non-production end-to-end verification; production cutover still requires
   an explicit go signal.
@@ -64,13 +64,13 @@ replace it unless the user explicitly authorizes that.
   aligned while keeping the new APIs and booking flow. This is not yet a claim
   of pixel-perfect parity; compare the remaining booking/chat states and all
   authenticated admin tabs before calling the visual migration complete.
-- Automated validation: all 5 contract tests and 33 API tests pass; the
+- Automated validation: all 5 contract tests and 31 API tests pass; the
   contracts/API/website production build and `git diff --check` pass. The
   website build reports a large MapLibre chunk.
 - Read-only local smoke checks: the running API reports healthy and MongoDB
   ready; public fleet/content/assets endpoints respond; the website renders,
   keeps inquiry submission disabled until required fields are ready, and
-  completes a destination search and road-validation flow. The admin sign-in
+  calculates rates from the renter-selected area. The admin sign-in
   page renders, and its identity API rejects unauthenticated requests. These
   checks did not submit inquiries or change admin data. The API env file is
   present, but its MongoDB URI is reported to match the one used by the legacy
@@ -110,7 +110,7 @@ website/API.
 ### Environment-file boundaries
 
 - `apps/api/.env` is for server-side MongoDB, Supabase server configuration,
-  SMTP, owner-approval settings, and optional `GEOCODING_CONTACT_EMAIL`. Use
+  SMTP, and owner-approval settings. Use
   `apps/api/.env.example` as the server-side template. The chatbot proxy uses
   `CHATBOT_URL` or defaults to `http://127.0.0.1:8003`. Booking inquiries
   also use the configured guest-challenge and email-outbox collection names;
@@ -223,6 +223,11 @@ MongoDB for bot identity, company knowledge, and chat logs.
   sorted by numeric `id`.
 - `GET /api/site-content` reads the public site-content document (`_id:
   "public"`).
+- Its optional `labels.termsAndConditions` string is served publicly and
+  displayed in the booking Terms & Conditions dialog. An authorized database
+  operator can edit `Site.site_content` document `_id: "public"` directly;
+  changes appear after the site reloads. Store only text intended for public
+  visitors there.
 - MongoDB collection defaults match the current website: `vehicles`,
   `site_assets`, and `site_content` in the `Site` database. Override them with
   `MONGODB_UNITS_COLLECTION`, `MONGODB_SITE_ASSETS_COLLECTION`, and
@@ -298,17 +303,14 @@ Do not delete or replace the official application until explicitly authorized.
    and resetting public content to defaults is available behind confirmation
    and owner approval. Authenticated workflows still need non-production
    end-to-end verification.
-9. **Email and geocoding integrations** — implemented. A live, read-only
-   destination search and road-validation smoke check passed; transactional
-   non-production verification remains. API-side SMTP is used for owner-approval
-   PINs, guest email verification, and inquiry rejection
-   notices. Public inquiries are saved in the legacy-compatible MongoDB shape,
-   require a single-use guest verification token, and enqueue confirmation
-   emails in the persistent outbox; a worker retries delivery up to five
-   times. The API provides rate-limited, cached Philippine Nominatim search
-   and reverse-geocoded residential/road validation, with optional
-   `GEOCODING_CONTACT_EMAIL`; invalid map points can be snapped to a nearby
-   verified OSRM road. The public site renders pickup locations on a
+9. **Email and booking integrations** — implemented. API-side SMTP sends
+   branded HTML emails with plain-text alternatives for owner approvals, guest
+   email verification, inquiry confirmations, and rejection notices. Public
+   inquiries are saved in the legacy-compatible MongoDB shape, require a
+   single-use guest verification token, and enqueue confirmation emails in the
+   persistent outbox; a worker retries delivery up to five times. The booking
+   rate area is selected by the renter and pricing is recalculated against
+   database rates. The public site renders pickup locations on a
    MapLibre/OpenStreetMap map. The map uses OpenStreetMap raster tiles with
    attribution; select a suitable tile provider and follow its usage policy
    before high-volume production use. Guest booking/email, live MongoDB writes,

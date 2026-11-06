@@ -7,6 +7,7 @@ import {
   SiteContentSchema,
 } from "@cartogo/contracts";
 import type { AuthenticatedAdmin } from "./auth.js";
+import { inquiryRejectionEmail, ownerApprovalEmail } from "./email-templates.js";
 
 type ApprovalResource =
   | "unit"
@@ -71,7 +72,7 @@ type AdminApiConfig = {
   smtpHost?: string;
   smtpPort?: string;
   smtpFrom?: string;
-  sendEmail?: (to: string, subject: string, text: string) => Promise<void>;
+  sendEmail?: (to: string, subject: string, text: string, html?: string) => Promise<void>;
 };
 
 type ResourcePermission = {
@@ -332,7 +333,7 @@ function normalizeOwnerChange(body: unknown): {
   throw new Error("Choose a supported owner-approved change.");
 }
 
-async function sendMail(config: AdminApiConfig, to: string, subject: string, text: string): Promise<void> {
+async function sendMail(config: AdminApiConfig, to: string, subject: string, text: string, html?: string): Promise<void> {
   const user = config.smtpUser?.trim();
   const password = config.smtpPassword?.trim().replace(/\s+/g, "");
   if (!user || !password) throw new Error("SMTP is not configured on the API.");
@@ -354,6 +355,7 @@ async function sendMail(config: AdminApiConfig, to: string, subject: string, tex
     to,
     subject,
     text,
+    html,
   });
 }
 
@@ -556,10 +558,13 @@ export function createAdminRouter(
           const to = typeof inquiry.email === "string" ? inquiry.email : "";
           if (!to) throw new Error("Inquiry email address is missing.");
           try {
-            const subject = "carTOGO.mnl | Update on your rental inquiry";
-            const message = `Hello ${String(inquiry.firstName || inquiry.name || "there")},\n\nWe are unable to proceed with your inquiry.\n\nReason: ${reason}\n\nPlease contact our team if you have questions.`;
-            if (config.sendEmail) await config.sendEmail(to, subject, message);
-            else await sendMail(config, to, subject, message);
+            const subject = "An update about your carTOGO.mnl inquiry";
+            const message = inquiryRejectionEmail(
+              String(inquiry.firstName || inquiry.name || "there"),
+              reason,
+            );
+            if (config.sendEmail) await config.sendEmail(to, subject, message.text, message.html);
+            else await sendMail(config, to, subject, message.text, message.html);
           } catch (emailError) {
             console.error("Inquiry rejection email could not be sent.", emailError instanceof Error ? emailError.name : "UnknownError");
             throw new Error("The rejection email could not be sent. The inquiry was kept; retry to send the email and complete deletion.");
@@ -661,11 +666,19 @@ export function createAdminRouter(
       const subjectResource = change.resource.resource.replaceAll("_", " ");
       try {
         for (const email of ownerEmails) {
+          const message = ownerApprovalEmail({
+            operation,
+            resource: subjectResource,
+            requester: admin.email,
+            data: change.data,
+            code,
+          });
           await sendMail(
             config,
             email,
-            `carTOGO.mnl | Owner PIN: ${operation} ${subjectResource}`,
-            `Requested by ${admin.email}: ${operation} ${subjectResource}.\n\nRequested values:\n${JSON.stringify(change.data, null, 2)}\n\nOwner PIN: ${code}\nThis PIN expires in 5 minutes and authorizes only this change.`,
+            `Approval needed: ${operation} ${subjectResource} | carTOGO.mnl`,
+            message.text,
+            message.html,
           );
         }
       } catch (error) {

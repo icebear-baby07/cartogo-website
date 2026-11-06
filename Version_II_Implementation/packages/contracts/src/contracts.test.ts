@@ -113,6 +113,7 @@ test("validates location and contact assets using the existing Mongo document sh
 });
 
 test("validates the public site-content seed structure and API error shape", () => {
+  const termsAndConditions = "Renters are responsible for returning the vehicle on time.";
   assert.equal(
     SiteContentSchema.safeParse({
       settings: {
@@ -125,6 +126,7 @@ test("validates the public site-content seed structure and API error shape", () 
         lateFeePerHour: 250,
       },
       labels: {
+        termsAndConditions,
         hero: { title: "Welcome", subtitle: "Reliable rentals." },
         trustStrip: [],
         howItWorks: [],
@@ -137,6 +139,32 @@ test("validates the public site-content seed structure and API error shape", () 
       socialLinks: [{ platform: "facebook", label: "Facebook", url: "" }],
     }).success,
     true,
+  );
+  assert.equal(
+    SiteContentSchema.safeParse({
+      settings: {
+        companyName: "carTOGO.mnl",
+        tagline: "Rent. Drive. Go.",
+        currency: "₱",
+        depositPercent: 20,
+        extraDriverFee: 300,
+        childSeatFee: 150,
+        lateFeePerHour: 250,
+      },
+      labels: {
+        termsAndConditions: { text: "Not a string" },
+        hero: { title: "Welcome", subtitle: "Reliable rentals." },
+        trustStrip: [],
+        howItWorks: [],
+        whyChooseUs: [],
+        about: { title: "About", body: "About carTOGO." },
+        faq: [],
+        testimonials: [],
+      },
+      discountRules: [{ minDays: 4, maxDays: 7, percent: 5 }],
+      socialLinks: [{ platform: "facebook", label: "Facebook", url: "" }],
+    }).success,
+    false,
   );
   assert.deepEqual(ApiErrorSchema.parse({ error: "Not found." }), {
     error: "Not found.",

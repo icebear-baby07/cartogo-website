@@ -56,6 +56,8 @@ export default function PublicSite({ units, assets, content }: PublicSiteProps) 
   const [activeCategory, setActiveCategory] = useState("All");
   const [menuOpen, setMenuOpen] = useState(false);
   const [selectedBookingUnit, setSelectedBookingUnit] = useState("");
+  const [accountDialogOpen, setAccountDialogOpen] = useState(false);
+  const [googleAccountSignedIn, setGoogleAccountSignedIn] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
   const [pauseSlides, setPauseSlides] = useState(false);
 
@@ -115,9 +117,17 @@ export default function PublicSite({ units, assets, content }: PublicSiteProps) 
             </a>
           </nav>
           <div className="header-actions">
-            <a className="header-account" href="#booking" aria-label="Continue to booking details" title="Booking">
+            <button
+              className={`header-account${googleAccountSignedIn ? " is-signed-in" : ""}`}
+              type="button"
+              aria-label={googleAccountSignedIn ? "View signed-in account details" : "View account details"}
+              aria-haspopup="dialog"
+              aria-controls="accountDialog"
+              title={googleAccountSignedIn ? "Account" : "View account details"}
+              onClick={() => setAccountDialogOpen(true)}
+            >
               <i className="fa-regular fa-user" aria-hidden="true" />
-            </a>
+            </button>
             <a className="button button-primary button-small" href="#booking">Reserve a car</a>
             <button
               className="nav-toggle"
@@ -376,6 +386,9 @@ export default function PublicSite({ units, assets, content }: PublicSiteProps) 
           content={content}
           selectedUnitId={selectedBookingUnit}
           onUnitChange={setSelectedBookingUnit}
+          accountDialogOpen={accountDialogOpen}
+          onAccountDialogOpenChange={setAccountDialogOpen}
+          onGoogleAuthChange={setGoogleAccountSignedIn}
         />
 
         <section className="section bg-paper" id="contact">

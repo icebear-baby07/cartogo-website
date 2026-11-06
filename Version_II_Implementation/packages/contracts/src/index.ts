@@ -102,6 +102,7 @@ export const SiteContentSchema = z
       .passthrough(),
     labels: z
       .object({
+        termsAndConditions: z.string().max(50000).optional(),
         hero: z.object({
           title: z.string(),
           subtitle: z.string(),

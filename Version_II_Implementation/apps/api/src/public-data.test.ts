@@ -40,6 +40,7 @@ const siteContent = {
     lateFeePerHour: 250,
   },
   labels: {
+    termsAndConditions: "Renters are responsible for returning the vehicle on time.",
     hero: { title: "Welcome", subtitle: "Reliable rentals." },
     trustStrip: [],
     howItWorks: [],

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -133,6 +134,7 @@ export default function ChatWidget() {
   }
 
   return (
+    createPortal(
     <div className={`chatbot-widget${fullscreen ? " is-fullscreen" : ""}`}>
       {!open ? (
         <button className="chat-launcher" type="button" aria-label="Open Cartogo chat" onClick={() => setOpen(true)}>
@@ -216,6 +218,8 @@ export default function ChatWidget() {
           </footer>
         </section>
       )}
-    </div>
+    </div>,
+    document.body,
+    )
   );
 }

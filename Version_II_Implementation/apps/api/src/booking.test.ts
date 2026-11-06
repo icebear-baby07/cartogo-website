@@ -104,14 +104,6 @@ function createRepository(): BookingRepository {
   };
 }
 
-const validTargetLocation = async (latitude: number, longitude: number) => ({
-  valid: true,
-  label: "Makati City, Metro Manila, Philippines",
-  latitude,
-  longitude,
-  rateRegion: "in" as const,
-});
-
 async function post(
   router: express.Router,
   path: string,
@@ -149,12 +141,11 @@ function inquiryPayload(challengeId: string, verificationToken: string) {
     phone: "+63 912 345 6789",
     carId: "1",
     capacity: 5,
+    requestedCapacity: null,
     pickupDate: "2026-11-10",
     pickupTime: "09:00",
     returnDate: "2026-11-10",
     rateRegion: "in",
-    targetLatitude: 14.5547,
-    targetLongitude: 121.0244,
     rentalMode: "hourly",
     rentalPeriodHours: 12,
     estimatedRentalHours: 12,
@@ -172,13 +163,14 @@ test("sends a guest verification code and accepts it once", async () => {
   let sentMessage: SendMailOptions | undefined;
   const router = createBookingRouter(async () => repository, {
     verificationSecret: "test-verification-secret",
-    validateTargetLocation: validTargetLocation,
     sendMail: async (message) => { sentMessage = message; },
   });
   const requested = await post(router, "/public/email-verification/request", { email: "Renter@example.com" });
   assert.equal(requested.status, 201);
   const { challengeId } = await requested.json() as { challengeId: string };
   assert.equal(sentMessage?.to, "renter@example.com");
+  assert.match(String(sentMessage?.subject), /Verify your email/);
+  assert.match(String(sentMessage?.html), /carTOGO<span/);
   const code = String(sentMessage?.text).match(/\b\d{6}\b/)?.[0];
   assert.ok(code);
 
@@ -196,7 +188,6 @@ test("saves a server-priced inquiry once and queues its confirmation", async () 
   let sentMessage: SendMailOptions | undefined;
   const router = createBookingRouter(async () => repository, {
     verificationSecret: "test-verification-secret",
-    validateTargetLocation: validTargetLocation,
     sendMail: async (message) => { sentMessage = message; },
   });
   const requested = await post(router, "/public/email-verification/request", { email: "renter@example.com" });
@@ -204,7 +195,10 @@ test("saves a server-priced inquiry once and queues its confirmation", async () 
   const code = String(sentMessage?.text).match(/\b\d{6}\b/)?.[0]!;
   const verified = await post(router, "/public/email-verification/verify", { challengeId, code });
   const { verificationToken } = await verified.json() as { verificationToken: string };
-  const payload = inquiryPayload(challengeId, verificationToken);
+  const payload = {
+    ...inquiryPayload(challengeId, verificationToken),
+    requestedCapacity: 4,
+  };
 
   const submitted = await post(router, "/public/inquiries", payload);
   assert.equal(submitted.status, 201);
@@ -214,6 +208,7 @@ test("saves a server-priced inquiry once and queues its confirmation", async () 
   };
   assert.equal(result.inquiry.id, 41);
   assert.equal(result.inquiry.car_name, "Honda City");
+  assert.equal(result.inquiry.requested_capacity, 4);
   assert.equal(result.inquiry.status, "pending_review");
   assert.equal(result.emailNotificationQueued, true);
 
@@ -227,7 +222,6 @@ test("rejects a client quote that differs from database rates", async () => {
   let sentMessage: SendMailOptions | undefined;
   const router = createBookingRouter(async () => repository, {
     verificationSecret: "test-verification-secret",
-    validateTargetLocation: validTargetLocation,
     sendMail: async (message) => { sentMessage = message; },
   });
   const requested = await post(router, "/public/email-verification/request", { email: "renter@example.com" });
@@ -246,7 +240,6 @@ test("does not submit an inquiry without a verified email", async () => {
   const repository = createRepository();
   const router = createBookingRouter(async () => repository, {
     verificationSecret: "test-verification-secret",
-    validateTargetLocation: validTargetLocation,
     sendMail: async () => {},
   });
   const response = await post(
@@ -257,31 +250,54 @@ test("does not submit an inquiry without a verified email", async () => {
   assert.equal(response.status, 403);
 });
 
-test("derives the booking rate area from the verified destination, not the client", async () => {
-  const router = createBookingRouter(async () => createRepository(), {
+test("uses the renter-selected rate area and calculates the quote from database rates", async () => {
+  const repository = createRepository();
+  let sentMessage: SendMailOptions | undefined;
+  const router = createBookingRouter(async () => repository, {
     verificationSecret: "test-verification-secret",
-    validateTargetLocation: async (latitude, longitude) => ({
-      valid: true,
-      label: "Bulacan, Philippines",
-      latitude,
-      longitude,
-      rateRegion: "out",
-    }),
-    sendMail: async () => {},
+    sendMail: async (message) => { sentMessage = message; },
   });
+  const requested = await post(router, "/public/email-verification/request", { email: "renter@example.com" });
+  const { challengeId } = await requested.json() as { challengeId: string };
+  const code = String(sentMessage?.text).match(/\b\d{6}\b/)?.[0]!;
+  const verified = await post(router, "/public/email-verification/verify", { challengeId, code });
+  const { verificationToken } = await verified.json() as { verificationToken: string };
+  const payload = {
+    ...inquiryPayload(challengeId, verificationToken),
+    rateRegion: "out",
+    ratePerPeriod: 1400,
+    quotedRate: 1400,
+  };
   const response = await post(
     router,
     "/public/inquiries",
-    inquiryPayload("unknown-challenge", "unverified-token"),
+    payload,
+  );
+  assert.equal(response.status, 201);
+  const result = await response.json() as { inquiry: Record<string, unknown> };
+  assert.equal(result.inquiry.rate_region, "out");
+  assert.equal(result.inquiry.rate_per_period, 1400);
+  assert.equal(result.inquiry.quoted_rate, 1400);
+});
+
+test("rejects unsupported renter-selected rate areas", async () => {
+  const router = createBookingRouter(async () => createRepository(), {
+    verificationSecret: "test-verification-secret",
+    sendMail: async () => {},
+  });
+  const payload = { ...inquiryPayload("unknown-challenge", "unverified-token"), rateRegion: "not-a-region" };
+  const response = await post(
+    router,
+    "/public/inquiries",
+    payload,
   );
   assert.equal(response.status, 400);
-  assert.match((await response.json() as { error: string }).error, /rate area changed/i);
+  assert.match((await response.json() as { error: string }).error, /valid rate region/i);
 });
 
 test("accepts a verified Google booking without guest OTP and uses the verified profile", async () => {
   const repository = createRepository();
   const router = createBookingRouter(async () => repository, {
-    validateTargetLocation: validTargetLocation,
     verifyGoogleUser: async (token) => {
       assert.equal(token, "google-access-token");
       return {
@@ -366,6 +382,8 @@ test("sends queued confirmation email and records retry state on delivery failur
   assert.equal(await runInquiryConfirmationWorker(repository, async (value) => { message = value; }), true);
   assert.equal(message?.to, "renter@example.com");
   assert.match(String(message?.text), /no payment has been taken/i);
+  assert.match(String(message?.subject), /We received your carTOGO.mnl inquiry/);
+  assert.match(String(message?.html), /Thank you for reaching out/);
   assert.equal(completed, item._id);
 
   const failure = new Error("temporary SMTP failure");

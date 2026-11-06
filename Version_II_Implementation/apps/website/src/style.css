@@ -1512,7 +1512,7 @@ p {
 
 .chatbot-widget {
   position: fixed;
-  z-index: 30;
+  z-index: 1000;
   right: max(1.25rem, env(safe-area-inset-right));
   bottom: max(1.25rem, env(safe-area-inset-bottom));
   color: #242323;
@@ -1546,7 +1546,7 @@ p {
 .chat-panel {
   display: flex;
   width: min(390px, calc(100vw - 2rem));
-  height: min(640px, calc(100dvh - 2rem));
+  height: min(640px, calc(100dvh - 7rem - env(safe-area-inset-bottom)));
   flex-direction: column;
   overflow: hidden;
   border: 1px solid #e6e3e1;
@@ -1556,7 +1556,7 @@ p {
 }
 
 .chatbot-widget.is-fullscreen {
-  inset: max(0.75rem, env(safe-area-inset-top))
+  inset: max(8.5rem, calc(7rem + env(safe-area-inset-top)))
     max(0.75rem, env(safe-area-inset-right))
     max(0.75rem, env(safe-area-inset-bottom))
     max(0.75rem, env(safe-area-inset-left));
@@ -1568,7 +1568,10 @@ p {
 }
 
 .chat-panel-header {
+  position: relative;
+  z-index: 1;
   display: flex;
+  flex: 0 0 auto;
   min-height: 72px;
   align-items: center;
   justify-content: space-between;
@@ -1594,21 +1597,31 @@ p {
 
 .chat-header-actions {
   display: flex;
+  flex: 0 0 auto;
   gap: 0.35rem;
 }
 
 .chat-header-actions button {
+  display: grid;
+  flex: 0 0 36px;
   width: 36px;
   height: 36px;
+  place-items: center;
   border: 1px solid #4d4d4d;
   border-radius: 5px;
   background: transparent;
   color: #fff;
+  cursor: pointer;
   font-size: 1.2rem;
 }
 
 .chat-header-actions button:hover {
   background: #333;
+}
+
+.chat-header-actions button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
 }
 
 .chat-mode-switch {
@@ -1843,7 +1856,7 @@ p {
 
   .chatbot-widget:not(.is-fullscreen) .chat-panel {
     width: calc(100vw - 1.2rem);
-    height: min(620px, calc(100dvh - 1.2rem));
+    height: min(620px, calc(100dvh - 7rem - env(safe-area-inset-bottom)));
   }
 }
 
@@ -1913,59 +1926,14 @@ p {
   grid-column: 1 / -1;
 }
 
-.booking-location-search {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.6rem;
-}
-
-.booking-location-search input {
-  min-width: 0;
-  min-height: 46px;
-  padding: 0.65rem 0.75rem;
-  border: 1px solid #c9c4c0;
-  border-radius: 4px;
-  background: var(--paper);
-  color: var(--ink);
-  font: inherit;
-}
-
-.booking-location-results {
-  display: grid;
-  max-height: 240px;
-  gap: 0.35rem;
-  overflow: auto;
-  margin: 0.25rem 0 0;
-  padding: 0.5rem;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--paper);
-  list-style: none;
-}
-
-.booking-location-results button {
-  width: 100%;
-  padding: 0.65rem;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--ink);
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-
-.booking-location-results button:hover,
-.booking-location-results button:focus-visible {
-  outline: none;
-  background: #fbf2ef;
-}
-
-.booking-location-status {
-  margin: 0.25rem 0 0;
+.booking-rate-area-hint {
   color: var(--slate);
-  font-size: 0.85rem;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
   font-weight: 500;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
 }
 
 .booking-quote {
@@ -1986,6 +1954,18 @@ p {
 
 .booking-quote small {
   color: var(--slate);
+}
+
+.booking-quote.is-invalid {
+  border-left-color: var(--danger);
+  background: #fff1f0;
+}
+
+.booking-quote-invalid-title {
+  margin: 0 0 0.65rem;
+  color: var(--danger);
+  font-size: 1rem;
+  line-height: 1.35;
 }
 
 .booking-verification {
@@ -2053,10 +2033,6 @@ p {
 
   .booking-field-wide {
     grid-column: auto;
-  }
-
-  .booking-location-search {
-    grid-template-columns: minmax(0, 1fr);
   }
 
   .booking-submit,

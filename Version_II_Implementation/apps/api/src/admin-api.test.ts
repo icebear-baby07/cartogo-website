@@ -190,8 +190,11 @@ test("confirms an inquiry when the admin sends the confirmed status", async () =
 test("emails the customer before deleting a rejected inquiry", async () => {
   const state = createInquiryRepository();
   const server = await createServer(state.repository, {
-    sendEmail: async (to) => {
+    sendEmail: async (to, subject, text, html) => {
       assert.equal(to, "customer@example.com");
+      assert.match(subject, /update about your carTOGO.mnl inquiry/i);
+      assert.match(text, /unable to proceed/i);
+      assert.match(String(html), /carTOGO<span/);
       state.events.push("email-accepted");
     },
   });

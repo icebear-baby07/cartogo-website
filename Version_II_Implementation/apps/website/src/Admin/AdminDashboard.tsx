@@ -99,6 +99,7 @@ function exportInquiryCsv(inquiries: DataRecord[]): void {
     ["car_name", "Vehicle"],
     ["car_id", "Unit ID"],
     ["capacity", "Capacity"],
+    ["requested_capacity", "Requested seats"],
     ["pickup_date", "Pickup date"],
     ["pickup_time", "Pickup time"],
     ["return_date", "Return date"],
@@ -408,6 +409,7 @@ export default function AdminDashboard({
                     <div><dt>Phone</dt><dd>{text(inquiry.phone)}</dd></div>
                     <div><dt>Pickup</dt><dd>{text(inquiry.pickup_date ?? inquiry.pickupDate)} {text(inquiry.pickup_time ?? inquiry.pickupTime, "")}</dd></div>
                     <div><dt>Return</dt><dd>{text(inquiry.return_date ?? inquiry.returnDate)}</dd></div>
+                    {typeof inquiry.requested_capacity === "number" ? <div><dt>Requested seats</dt><dd>{text(inquiry.requested_capacity)}</dd></div> : null}
                     <div><dt>Quoted rate</dt><dd>{text(inquiry.quoted_rate)}</dd></div>
                     {typeof inquiry.notes === "string" && inquiry.notes ? <div className="admin-detail-wide"><dt>Notes</dt><dd>{inquiry.notes}</dd></div> : null}
                     {typeof inquiry.rejection_reason === "string" && inquiry.rejection_reason ? <div className="admin-detail-wide"><dt>Rejection reason</dt><dd>{inquiry.rejection_reason}</dd></div> : null}

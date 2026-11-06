@@ -4,41 +4,22 @@ import type { FormEvent } from "react";
 import type { PublicUnit, SiteContent } from "@cartogo/contracts";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "../supabase";
+import TermsAndConditions from "./TermsAndConditions";
 
 type BookingFormProps = {
   units: PublicUnit[];
   content: SiteContent;
   selectedUnitId: string;
   onUnitChange: (id: string) => void;
+  accountDialogOpen: boolean;
+  onAccountDialogOpenChange: (open: boolean) => void;
+  onGoogleAuthChange: (signedIn: boolean) => void;
 };
 
 type VerificationResponse = {
   challengeId?: string;
   verificationToken?: string;
 };
-
-type LocationSearchResult = {
-  label: string;
-  latitude: number;
-  longitude: number;
-};
-
-type ValidatedDestination = {
-  label: string;
-  latitude: number;
-  longitude: number;
-  rateRegion: "in" | "out" | "luzon";
-  snapDistanceMeters?: number;
-};
-
-function isLocationSearchResults(value: unknown): value is LocationSearchResult[] {
-  return Array.isArray(value) && value.every((item) =>
-    typeof item === "object" && item !== null &&
-    "label" in item && typeof item.label === "string" &&
-    "latitude" in item && typeof item.latitude === "number" &&
-    "longitude" in item && typeof item.longitude === "number",
-  );
-}
 
 function formatCurrency(value: number, currency: string): string {
   return `${currency}${new Intl.NumberFormat("en-PH", { maximumFractionDigits: 0 }).format(value)}`;
@@ -49,6 +30,24 @@ function dateAfter(date: string, days: number): string {
   const [year, month, day] = date.split("-").map(Number);
   const result = new Date(Date.UTC(year, month - 1, day + days));
   return result.toISOString().slice(0, 10);
+}
+
+function pickupTimestamp(date: string, time: string): number | null {
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  const timeMatch = /^(\d{2}):(\d{2})$/.exec(time);
+  if (!dateMatch || !timeMatch) return null;
+
+  const [, year, month, day] = dateMatch;
+  const [, hour, minute] = timeMatch;
+  const selected = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
+  if (
+    selected.getFullYear() !== Number(year)
+    || selected.getMonth() !== Number(month) - 1
+    || selected.getDate() !== Number(day)
+    || selected.getHours() !== Number(hour)
+    || selected.getMinutes() !== Number(minute)
+  ) return null;
+  return selected.getTime();
 }
 
 function isVerifiedGoogleUser(user: User | null): user is User {
@@ -62,6 +61,19 @@ function isVerifiedGoogleUser(user: User | null): user is User {
   const verified = metadata.email_verified === true || metadata.email_verified === "true"
     || Boolean(user.email_confirmed_at || user.confirmed_at);
   return providers.includes("google") && verified;
+}
+
+function googleProfileName(user: User | null): string {
+  if (!user) return "";
+  const profile = user.user_metadata;
+  const fullName = [profile.full_name, profile.name].find(
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
+  );
+  if (fullName) return fullName.trim();
+  return [profile.given_name, profile.middle_name, profile.family_name]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => value.trim())
+    .join(" ");
 }
 
 async function postJson<T>(
@@ -79,26 +91,31 @@ async function postJson<T>(
   return result;
 }
 
-export default function BookingForm({ units, content, selectedUnitId, onUnitChange }: BookingFormProps) {
+export default function BookingForm({
+  units,
+  content,
+  selectedUnitId,
+  onUnitChange,
+  accountDialogOpen,
+  onAccountDialogOpenChange,
+  onGoogleAuthChange,
+}: BookingFormProps) {
   const [pickupDate, setPickupDate] = useState("");
   const [pickupTime, setPickupTime] = useState("09:00");
-  const [rateRegion, setRateRegion] = useState("");
-  const [destinationQuery, setDestinationQuery] = useState("");
-  const [locationResults, setLocationResults] = useState<LocationSearchResult[]>([]);
-  const [destination, setDestination] = useState<ValidatedDestination | null>(null);
-  const [locationStatus, setLocationStatus] = useState("");
-  const [searchingLocations, setSearchingLocations] = useState(false);
+  const [requestedSeats, setRequestedSeats] = useState("");
+  const [rateRegion, setRateRegion] = useState<"in" | "out" | "luzon" | "">("");
   const [rentalMode, setRentalMode] = useState<"hourly" | "custom_days">("hourly");
   const [rentalModePreview, setRentalModePreview] = useState<"hourly" | "custom_days" | null>(null);
   const [periodHours, setPeriodHours] = useState(24);
   const [rentalDays, setRentalDays] = useState(4);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [middleName, setMiddleName] = useState("");
   const [suffix, setSuffix] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [secondaryPhone, setSecondaryPhone] = useState("");
   const [notes, setNotes] = useState("");
   const [code, setCode] = useState("");
   const [challengeId, setChallengeId] = useState("");
@@ -109,10 +126,10 @@ export default function BookingForm({ units, content, selectedUnitId, onUnitChan
   const [busy, setBusy] = useState(false);
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(Boolean(supabase));
+  const [currentTime, setCurrentTime] = useState(() => new Date());
   const emailInput = useRef<HTMLInputElement>(null);
-  const rentalModeField = useRef<HTMLFieldSetElement>(null);
+  const accountDialogRef = useRef<HTMLDialogElement>(null);
   const requestId = useRef<string | null>(null);
-  const locationRequestSequence = useRef(0);
 
   useEffect(() => {
     if (!supabase) {
@@ -141,7 +158,34 @@ export default function BookingForm({ units, content, selectedUnitId, onUnitChan
   }, []);
 
   const googleUser = isVerifiedGoogleUser(authUser) ? authUser : null;
-  const unit = units.find((item) => String(item.id) === selectedUnitId);
+  const accountName = googleProfileName(googleUser);
+  const termsAndConditions = content.labels.termsAndConditions ?? "";
+  const selectedPickupTimestamp = pickupTimestamp(pickupDate, pickupTime);
+  const pickupTimeInvalid = selectedPickupTimestamp !== null && selectedPickupTimestamp <= currentTime.getTime();
+
+  useEffect(() => {
+    onGoogleAuthChange(Boolean(googleUser));
+  }, [googleUser, onGoogleAuthChange]);
+
+  useEffect(() => {
+    const dialog = accountDialogRef.current;
+    if (!dialog) return;
+    if (accountDialogOpen && !dialog.open) dialog.showModal();
+    else if (!accountDialogOpen && dialog.open) dialog.close();
+  }, [accountDialogOpen]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const requestedSeatCount = requestedSeats.trim() ? Number(requestedSeats) : null;
+  const matchingUnits = useMemo(() => {
+    if (requestedSeatCount === null) return units;
+    if (!Number.isInteger(requestedSeatCount) || requestedSeatCount < 1 || requestedSeatCount > 8) return [];
+    return units.filter((item) => item.capacity >= requestedSeatCount);
+  }, [units, requestedSeatCount]);
+  const unit = matchingUnits.find((item) => String(item.id) === selectedUnitId);
   const quote = useMemo(() => {
     if (!unit || !rateRegion || !pickupDate || !pickupTime) return null;
     const regionRate = rateRegion === "in"
@@ -170,6 +214,7 @@ export default function BookingForm({ units, content, selectedUnitId, onUnitChan
     };
   }, [unit, rateRegion, pickupDate, pickupTime, periodHours, rentalMode, rentalDays, content.discountRules]);
   const visibleRentalMode = rentalModePreview ?? rentalMode;
+  const highestDiscountPercent = Math.max(0, ...content.discountRules.map((rule) => rule.percent));
   const rentalDiscountPercent = content.discountRules.find((rule) =>
     rentalDays >= rule.minDays && rentalDays <= rule.maxDays,
   )?.percent ?? 0;
@@ -180,117 +225,6 @@ export default function BookingForm({ units, content, selectedUnitId, onUnitChan
     setVerificationToken("");
     setCode("");
     setVerificationMessage("");
-  };
-
-  const clearDestination = () => {
-    locationRequestSequence.current += 1;
-    setLocationResults([]);
-    setDestination(null);
-    setRateRegion("");
-    setLocationStatus("");
-  };
-
-  const searchDestinations = async () => {
-    const query = destinationQuery.trim();
-    if (query.length < 3 || query.length > 200) {
-      setLocationStatus("Enter a location search between 3 and 200 characters.");
-      return;
-    }
-    const requestSequence = ++locationRequestSequence.current;
-    setSearchingLocations(true);
-    setError("");
-    setLocationStatus("Searching Philippine locations…");
-    try {
-      const response = await fetch(`/api/target-location/search?q=${encodeURIComponent(query)}`, {
-        cache: "no-store",
-      });
-      const result: unknown = await response.json();
-      if (!response.ok) {
-        const message = typeof result === "object" && result !== null && "error" in result
-          ? String(result.error)
-          : "Location search failed.";
-        throw new Error(message);
-      }
-      if (!isLocationSearchResults(result)) {
-        throw new Error("Location search returned invalid results.");
-      }
-      if (requestSequence !== locationRequestSequence.current) return;
-      setLocationResults(result);
-      setLocationStatus(result.length ? "Choose your destination to verify the road and rate area." : "No matching locations found. Try a more specific search.");
-    } catch (requestError) {
-      if (requestSequence === locationRequestSequence.current) {
-        setLocationResults([]);
-        setLocationStatus(requestError instanceof Error ? requestError.message : "Location search failed.");
-      }
-    } finally {
-      if (requestSequence === locationRequestSequence.current) setSearchingLocations(false);
-    }
-  };
-
-  const chooseDestination = async (result: LocationSearchResult) => {
-    const requestSequence = ++locationRequestSequence.current;
-    setLocationResults([]);
-    setDestination(null);
-    setRateRegion("");
-    setLocationStatus("Verifying this destination and checking nearby roads…");
-    setError("");
-    try {
-      const validated = await postJson<{
-        valid: boolean;
-        label: string;
-        reason?: string;
-        latitude?: number;
-        longitude?: number;
-        rateRegion?: string | null;
-        snapped?: boolean;
-        snapDistanceMeters?: number;
-      }>("/api/target-location/validate", {
-        latitude: result.latitude,
-        longitude: result.longitude,
-        snapInvalid: true,
-      });
-      if (requestSequence !== locationRequestSequence.current) return;
-      if (!validated.valid) {
-        setLocationStatus(validated.reason || "Choose a road-accessible residential destination.");
-        return;
-      }
-      if (validated.rateRegion !== "in" && validated.rateRegion !== "out" && validated.rateRegion !== "luzon") {
-        setLocationStatus(validated.rateRegion === "out_of_bounds"
-          ? "We currently accept destinations in Luzon only."
-          : "This destination is outside our supported service area.");
-        return;
-      }
-      if (
-        typeof validated.latitude !== "number" ||
-        typeof validated.longitude !== "number"
-      ) {
-        setLocationStatus("The verified destination did not include valid road coordinates. Please choose another.");
-        return;
-      }
-      const selected: ValidatedDestination = {
-        label: validated.label || result.label,
-        latitude: validated.latitude,
-        longitude: validated.longitude,
-        rateRegion: validated.rateRegion,
-        ...(validated.snapped && typeof validated.snapDistanceMeters === "number"
-          ? { snapDistanceMeters: validated.snapDistanceMeters }
-          : {}),
-      };
-      setDestination(selected);
-      setRateRegion(selected.rateRegion);
-      if (selected.rateRegion === "luzon") setRentalMode("custom_days");
-      setDestinationQuery(selected.label);
-      setLocationStatus(
-        `Verified destination · ${
-          selected.rateRegion === "in" ? "Metro Manila" :
-            selected.rateRegion === "out" ? "Nearby areas" : "Other Luzon"
-        } rates${selected.snapDistanceMeters ? ` · snapped to a road ${selected.snapDistanceMeters} m away` : ""}.`,
-      );
-    } catch (requestError) {
-      if (requestSequence === locationRequestSequence.current) {
-        setLocationStatus(requestError instanceof Error ? requestError.message : "Could not verify this destination.");
-      }
-    }
   };
 
   const requestCode = async () => {
@@ -371,8 +305,13 @@ export default function BookingForm({ units, content, selectedUnitId, onUnitChan
     setError("");
     setStatus("");
     if (!event.currentTarget.reportValidity()) return;
-    if (!unit || !quote || !destination) {
-      setError("Choose a vehicle, pickup date, and verified destination to see a valid estimate.");
+    const selectedPickup = pickupTimestamp(pickupDate, pickupTime);
+    if (selectedPickup === null || selectedPickup <= Date.now()) {
+      setError("The requested pickup date and time has passed. Choose a future pickup time.");
+      return;
+    }
+    if (!unit || !quote || !rateRegion) {
+      setError("Choose a vehicle, pickup date, and rate area to see a valid estimate.");
       return;
     }
     if (!googleUser && (!challengeId || !verificationToken)) {
@@ -401,15 +340,13 @@ export default function BookingForm({ units, content, selectedUnitId, onUnitChan
         middleName,
         suffix,
         phone,
-        secondaryPhone,
         carId: String(unit.id),
         capacity: unit.capacity,
+        requestedCapacity: requestedSeatCount,
         pickupDate,
         pickupTime,
         returnDate: quote.returnDate,
         rateRegion,
-        targetLatitude: destination.latitude,
-        targetLongitude: destination.longitude,
         rentalMode,
         rentalPeriodHours: periodHours,
         estimatedRentalHours: quote.rentalHours,
@@ -421,7 +358,7 @@ export default function BookingForm({ units, content, selectedUnitId, onUnitChan
         notes,
       }, authHeaders);
       setStatus(result.emailNotificationQueued
-        ? `Inquiry #${result.inquiry.id} received. A confirmation email has been queued.`
+        ? "Thank you for your inquiry. Our team will take it from here and follow up by email."
         : `Inquiry #${result.inquiry.id} received. Our team will follow up by phone.`);
       requestId.current = null;
       setChallengeId("");
@@ -461,18 +398,45 @@ export default function BookingForm({ units, content, selectedUnitId, onUnitChan
             <form id="bookingForm" className="booking-form" onSubmit={(event) => void submitInquiry(event)}>
               <fieldset className="booking-fieldset">
                 <legend>Rental details</legend>
-            <div className="booking-fields">
+            <div className="booking-fields booking-vehicle-selection">
+              <label className="booking-field">
+                Minimum number of seats
+                <input
+                  type="number"
+                  min={1}
+                  max={8}
+                  step={1}
+                  inputMode="numeric"
+                  placeholder="Any number of seats"
+                  value={requestedSeats}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setRequestedSeats(value);
+                    const selected = units.find((item) => String(item.id) === selectedUnitId);
+                    const requiredSeats = value.trim() ? Number(value) : null;
+                    if (
+                      selected &&
+                      requiredSeats !== null &&
+                      (!Number.isInteger(requiredSeats) || requiredSeats < 1 || requiredSeats > 8 || selected.capacity < requiredSeats)
+                    ) onUnitChange("");
+                  }}
+                />
+              </label>
               <label className="booking-field">
                 Vehicle
                 <select required value={selectedUnitId} onChange={(event) => onUnitChange(event.target.value)}>
-                  <option value="">Choose a vehicle</option>
-                  {units.map((item) => (
+                  <option value="">
+                    {matchingUnits.length ? "Choose a vehicle" : "No Units Available"}
+                  </option>
+                  {matchingUnits.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.display_name} · {item.capacity} seats{item.status === "Available" ? "" : ` · ${item.status}`}
                     </option>
                   ))}
                 </select>
               </label>
+            </div>
+            <div className="booking-fields">
               <label className="booking-field">
                 Pickup date
                 <input required type="date" min={minDate} value={pickupDate} onChange={(event) => setPickupDate(event.target.value)} />
@@ -481,52 +445,25 @@ export default function BookingForm({ units, content, selectedUnitId, onUnitChan
                 Pickup time
                 <input required type="time" value={pickupTime} onChange={(event) => setPickupTime(event.target.value)} />
               </label>
-              <div className="booking-field booking-field-wide">
-                <label htmlFor="booking-destination-search">Destination</label>
-                <div className="booking-location-search">
-                  <input
-                    id="booking-destination-search"
-                    type="search"
-                    minLength={3}
-                    maxLength={200}
-                    autoComplete="off"
-                    placeholder="Search a city, barangay, or address in the Philippines"
-                    value={destinationQuery}
-                    onChange={(event) => {
-                      setDestinationQuery(event.target.value);
-                      clearDestination();
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        void searchDestinations();
-                      }
-                    }}
-                  />
-                  <button
-                    className="button button-ghost"
-                    type="button"
-                    disabled={searchingLocations}
-                    onClick={() => void searchDestinations()}
-                  >
-                    {searchingLocations ? "Searching…" : "Search"}
-                  </button>
-                </div>
-                {locationResults.length > 0 && (
-                  <ul className="booking-location-results" aria-label="Destination search results">
-                    {locationResults.map((result, index) => (
-                      <li key={`${result.latitude},${result.longitude},${index}`}>
-                        <button type="button" onClick={() => void chooseDestination(result)}>
-                          {result.label}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {locationStatus && <p className="booking-location-status" role="status">{locationStatus}</p>}
-              </div>
+              <label className="booking-field booking-field-wide">
+                Rate area
+                <select
+                  required
+                  value={rateRegion}
+                  onChange={(event) => {
+                    const selected = event.target.value as "in" | "out" | "luzon" | "";
+                    setRateRegion(selected);
+                    if (selected === "luzon") setRentalMode("custom_days");
+                  }}
+                >
+                  <option value="">Select a rate area</option>
+                  <option value="in">Metro Manila</option>
+                  <option value="out">Nearby areas</option>
+                  <option value="luzon">Other Luzon Areas</option>
+                </select>
+                <span className="booking-rate-area-hint">Choose the area where you plan to use the vehicle. Our team will confirm the final pickup and rental details.</span>
+              </label>
               <fieldset
-                ref={rentalModeField}
                 className={`booking-rental-panel booking-field-wide ${rateRegion === "luzon" ? "is-luzon" : ""} ${rentalMode === "hourly" ? "hourly-selected" : "custom-selected"} ${rentalModePreview === "hourly" ? "hourly-hover-preview" : ""} ${rentalModePreview === "custom_days" ? "custom-hover-preview" : ""}`}
                 onPointerLeave={() => setRentalModePreview(null)}
                 onFocusCapture={(event) => {
@@ -578,6 +515,7 @@ export default function BookingForm({ units, content, selectedUnitId, onUnitChan
                   >
                     <span className="booking-rental-mode-title">Custom day arrangement</span>
                     <span className="booking-rental-mode-description">Plan a 4–15 day trip</span>
+                    <span className="booking-rental-discount">Up to {highestDiscountPercent}% off!</span>
                   </button>
                 </div>
                 <div className="booking-rental-controls booking-hourly-controls" hidden={visibleRentalMode !== "hourly"}>
@@ -630,12 +568,15 @@ export default function BookingForm({ units, content, selectedUnitId, onUnitChan
               </fieldset>
             </div>
             {quote && (
-              <div className="booking-quote" aria-live="polite">
+              <div className={`booking-quote${pickupTimeInvalid ? " is-invalid" : ""}`} aria-live="polite">
+                {pickupTimeInvalid && (
+                  <h3 className="booking-quote-invalid-title">The requested pickup time is no longer valid</h3>
+                )}
                 <p>
                   Estimated rental subtotal: <strong>{formatCurrency(quote.total, content.settings.currency)}</strong>
                   {quote.discountPercent > 0 && ` · ${quote.discountPercent}% long-rental discount`}
                 </p>
-                <p>Destination: {destination?.label || "Verify a destination to calculate rates"} · Pickup {pickupDate} at {pickupTime} · Return {quote.returnDate} · Refundable deposit estimate ({content.settings.depositPercent}%): {formatCurrency(Math.round(quote.total * content.settings.depositPercent / 100), content.settings.currency)}</p>
+                <p>Rate area: {rateRegion === "in" ? "Metro Manila" : rateRegion === "out" ? "Nearby areas" : "Other Luzon"} · Pickup {pickupDate} at {pickupTime} · Return {quote.returnDate} · Refundable deposit estimate ({content.settings.depositPercent}%): {formatCurrency(Math.round(quote.total * content.settings.depositPercent / 100), content.settings.currency)}</p>
                 <small>Estimate only; the team will confirm availability and final pricing.</small>
               </div>
             )}
@@ -649,10 +590,25 @@ export default function BookingForm({ units, content, selectedUnitId, onUnitChan
                 {authLoading ? (
                   <p className="booking-auth-copy" role="status">Checking your sign-in…</p>
                 ) : googleUser ? (
-                  <>
-                    <p className="booking-auth-copy" role="status">Signed in with verified Google email: <strong>{googleUser.email}</strong></p>
-                    <button className="button button-ghost" type="button" disabled={busy} onClick={() => void signOutGoogle()}>Sign out</button>
-                  </>
+                  <button
+                    className="booking-google-account"
+                    type="button"
+                    aria-haspopup="dialog"
+                    aria-controls="accountDialog"
+                    aria-label={`View signed-in account details for ${googleUser.email}`}
+                    onClick={() => onAccountDialogOpenChange(true)}
+                  >
+                    <span className="booking-google-check" aria-hidden="true">
+                      <svg viewBox="0 0 20 20" fill="none">
+                        <path d="m5 10 3.2 3.2L15.5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                    <span className="booking-google-account-copy">
+                      <span className="booking-google-account-label">Verified Google account</span>
+                      <strong>{googleUser.email}</strong>
+                    </span>
+                    <span className="booking-google-account-action">Manage account <span aria-hidden="true">→</span></span>
+                  </button>
                 ) : (
                   <>
                     <p className="booking-auth-copy">Sign in with Google or provide your details below to send an inquiry.</p>
@@ -675,11 +631,34 @@ export default function BookingForm({ units, content, selectedUnitId, onUnitChan
                   <label className="booking-field">Suffix<input form="bookingForm" maxLength={24} value={suffix} onChange={(event) => setSuffix(event.target.value)} /></label>
                 </>
               )}
-              <label className="booking-field">Email<input form="bookingForm" ref={emailInput} required maxLength={254} type="email" autoComplete="email" disabled={Boolean(googleUser)} value={googleUser?.email || email} onChange={(event) => changeEmail(event.target.value)} /></label>
-              <label className="booking-field">Phone number<input form="bookingForm" required maxLength={24} type="tel" autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
-              <label className="booking-field">Secondary phone (optional)<input form="bookingForm" maxLength={24} type="tel" value={secondaryPhone} onChange={(event) => setSecondaryPhone(event.target.value)} /></label>
+              {!googleUser && (
+                <label className="booking-field">Email<input form="bookingForm" ref={emailInput} required maxLength={254} type="email" autoComplete="email" value={email} onChange={(event) => changeEmail(event.target.value)} /></label>
+              )}
+              <label className="booking-field">Phone number<input form="bookingForm" required maxLength={24} type="tel" autoComplete="tel" placeholder="09xxxxxxxxx" value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
               <label className="booking-field booking-field-wide">Notes (optional)<textarea form="bookingForm" maxLength={2000} rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
             </div>
+            <label className="booking-terms-consent">
+              <input
+                form="bookingForm"
+                type="checkbox"
+                required
+                checked={termsAccepted}
+                onChange={(event) => setTermsAccepted(event.target.checked)}
+              />
+              <span>
+                I have read and agree to the Terms &amp; Conditions.
+                {" "}
+                <a
+                  href="#booking-terms"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    setTermsOpen(true);
+                  }}
+                >
+                  View Terms &amp; Conditions
+                </a>
+              </span>
+            </label>
             {!googleUser && (
               <div className="booking-verification">
                 <button className="button button-ghost" type="button" disabled={busy} onClick={() => void requestCode()}>
@@ -702,7 +681,7 @@ export default function BookingForm({ units, content, selectedUnitId, onUnitChan
               className="button button-primary"
               type="submit"
               form="bookingForm"
-              disabled={busy || (!googleUser && !verificationToken) || !destination || !quote}
+              disabled={busy || pickupTimeInvalid || (!googleUser && !verificationToken) || !rateRegion || !quote}
             >
               {busy ? "Please wait…" : "Send inquiry"}
             </button>
@@ -712,6 +691,83 @@ export default function BookingForm({ units, content, selectedUnitId, onUnitChan
           </div>
         </div>
       </div>
+      <dialog
+        ref={accountDialogRef}
+        className="account-dialog"
+        id="accountDialog"
+        aria-labelledby="accountDialogTitle"
+        aria-describedby="accountDialogDescription"
+        onClose={() => onAccountDialogOpenChange(false)}
+        onCancel={() => onAccountDialogOpenChange(false)}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) onAccountDialogOpenChange(false);
+        }}
+      >
+        <div className="account-dialog-inner">
+          <div className="account-dialog-header">
+            <div className="account-dialog-avatar" aria-hidden="true"><i className="fa-regular fa-user" /></div>
+            <button
+              className="recap-close account-dialog-close"
+              type="button"
+              aria-label="Close account details"
+              autoFocus
+              onClick={() => onAccountDialogOpenChange(false)}
+            >
+              <i className="fa-solid fa-xmark" aria-hidden="true" />
+            </button>
+          </div>
+          <p className="eyebrow">Your account</p>
+          <h2 id="accountDialogTitle">Account details</h2>
+          <p className="account-dialog-description" id="accountDialogDescription">
+            {authLoading
+              ? "Checking your Google sign-in status."
+              : googleUser
+                ? "Your Google account details will be used automatically when you send a booking inquiry."
+                : "Sign in with Google to have your details ready when you send a booking inquiry."}
+          </p>
+          {googleUser && (
+            <div className="account-dialog-profile">
+              <span className="account-dialog-name">{accountName || "Google account"}</span>
+              <span className="account-dialog-email">{googleUser.email}</span>
+              <span className="account-dialog-verified">
+                <i className="fa-solid fa-circle-check" aria-hidden="true" /> Google account verified
+              </span>
+            </div>
+          )}
+          <button
+            className="button button-primary account-dialog-action"
+            type="button"
+            disabled={busy || authLoading}
+            onClick={() => {
+              onAccountDialogOpenChange(false);
+              if (googleUser) void signOutGoogle();
+              else void startGoogleSignIn();
+            }}
+          >
+            {googleUser ? (
+              <><i className="fa-solid fa-arrow-right-from-bracket" aria-hidden="true" /><span>Sign out</span></>
+            ) : (
+              <><i className="fa-brands fa-google" aria-hidden="true" /><span>Continue with Google</span></>
+            )}
+          </button>
+          {!googleUser && (
+            <p className="account-dialog-note">
+              <a
+                className="account-dialog-booking-link"
+                href="#booking"
+                onClick={() => onAccountDialogOpenChange(false)}
+              >
+                You can also send an inquiry as a guest.
+              </a>
+            </p>
+          )}
+        </div>
+      </dialog>
+      <TermsAndConditions
+        open={termsOpen}
+        onClose={() => setTermsOpen(false)}
+        termsAndConditions={termsAndConditions}
+      />
     </section>
   );
 }

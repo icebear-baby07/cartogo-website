@@ -14,10 +14,6 @@ import {
 import { createAuthRouter, createRequireAdmin } from "./auth.js";
 import { createAdminRouter } from "./admin-api.js";
 import { createPublicDataRouter } from "./public-data.js";
-import {
-  createGeocodingRouter,
-  createNominatimLocationServices,
-} from "./geocoding.js";
 import { createChatbotRouter } from "./chatbot.js";
 import {
   createBookingMailer,
@@ -43,16 +39,12 @@ const bookingEmailConfig = {
   verificationSecret: process.env.GUEST_EMAIL_VERIFICATION_SECRET
     || process.env.SMTP_APP_PASSWORD,
 };
-const locationServices = createNominatimLocationServices({
-  contactEmail: process.env.GEOCODING_CONTACT_EMAIL,
-});
 const bookingConfig = {
   ...bookingEmailConfig,
   supabaseUrl: supabaseAuthConfig.supabaseUrl,
   supabaseAnonKey: supabaseAuthConfig.supabaseAnonKey,
   verifyGoogleUser: (accessToken: string) =>
     verifyGoogleBookingUser(accessToken, supabaseAuthConfig),
-  validateTargetLocation: locationServices.validateTargetLocation,
 };
 const sendBookingMail = createBookingMailer(bookingEmailConfig);
 
@@ -73,13 +65,6 @@ app.use("/api/admin", createAdminRouter(getAdminDataRepository, {
 }));
 app.use("/api", createPublicDataRouter(getPublicDataRepository));
 app.use("/api", createBookingRouter(getBookingRepository, bookingConfig));
-app.use(
-  "/api",
-  createGeocodingRouter(
-    locationServices.searchLocations,
-    locationServices.validateTargetLocation,
-  ),
-);
 app.use("/api", createChatbotRouter({ baseUrl: process.env.CHATBOT_URL }));
 
 app.get("/api/health", (_request, response) => {

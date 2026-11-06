@@ -1,7 +1,7 @@
 import { createHash, createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import nodemailer, { type SendMailOptions } from "nodemailer";
-import type { TargetLocationValidation } from "./geocoding.js";
+import { emailVerificationEmail, inquiryConfirmationEmail } from "./email-templates.js";
 
 type BookingUnit = {
   id: number;
@@ -78,11 +78,6 @@ type BookingApiOptions = {
   supabaseUrl?: string;
   supabaseAnonKey?: string;
   verifyGoogleUser?: (accessToken: string) => Promise<VerifiedGoogleUser>;
-  validateTargetLocation?: (
-    latitude: number,
-    longitude: number,
-    snapInvalid?: boolean,
-  ) => Promise<TargetLocationValidation>;
   sendMail?: (options: SendMailOptions) => Promise<void>;
 };
 
@@ -182,21 +177,13 @@ export async function runInquiryConfirmationWorker(
   const item = await repository.claimInquiryConfirmation(now);
   if (!item) return false;
   const inquiry = item.inquiry;
-  const subject = `carTOGO inquiry received — ${inquiry.car_name}`;
-  const textBody = [
-    `Hi ${inquiry.name},`,
-    "",
-    "We received your vehicle rental inquiry. Our team will contact you to confirm availability and final pricing.",
-    "",
-    `Vehicle: ${inquiry.car_name}`,
-    `Pickup: ${inquiry.pickup_date} at ${inquiry.pickup_time}`,
-    `Return: ${inquiry.return_date}`,
-    `Estimated rental subtotal: PHP ${Number(inquiry.quoted_rate).toLocaleString("en-PH")}`,
-    "",
-    "This is an inquiry only; no payment has been taken.",
-  ].join("\n");
+  const message = inquiryConfirmationEmail(inquiry);
   try {
-    await sendMail({ to: inquiry.email, subject, text: textBody });
+    await sendMail({
+      to: inquiry.email,
+      subject: "We received your carTOGO.mnl inquiry",
+      ...message,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 500) : "Unknown email delivery error";
     await repository.retryInquiryConfirmation(item._id, item.attempts, message, new Date());
@@ -256,7 +243,6 @@ function normalizeInquiry(
   payload: Record<string, unknown>,
   unit: BookingUnit,
   rules: Array<{ minDays: number; maxDays: number; percent: number }>,
-  targetRateRegion: "in" | "out" | "luzon",
   googleUser: VerifiedGoogleUser | null,
 ): Inquiry {
   let name: string;
@@ -293,9 +279,6 @@ function normalizeInquiry(
 
   const rateRegion = text(payload.rateRegion, "Rate region", 16)!;
   if (!["in", "out", "luzon"].includes(rateRegion)) throw new BookingInputError("Choose a valid rate region.");
-  if (rateRegion !== targetRateRegion) {
-    throw new BookingInputError("The destination rate area changed. Verify your destination and refresh the estimate.");
-  }
   const rentalMode = payload.rentalMode;
   if (rentalMode !== "hourly" && rentalMode !== "custom_days") {
     throw new BookingInputError("Choose an hourly or custom-day rental arrangement.");
@@ -352,6 +335,15 @@ function normalizeInquiry(
     ? unit.capacity
     : finiteNumber(payload.capacity, "Capacity", 1, 2_147_483_647);
   if (clientCapacity !== unit.capacity) throw new BookingInputError("Vehicle capacity has changed. Please select it again.");
+  const requestedCapacity = payload.requestedCapacity === null || payload.requestedCapacity === undefined
+    ? null
+    : finiteNumber(payload.requestedCapacity, "Requested seats", 1, 2_147_483_647);
+  if (
+    requestedCapacity !== null &&
+    (!Number.isInteger(requestedCapacity) || requestedCapacity > unit.capacity)
+  ) {
+    throw new BookingInputError("The selected vehicle does not meet the requested seat count.");
+  }
 
   return {
     name,
@@ -361,6 +353,7 @@ function normalizeInquiry(
     car_id: String(unit.id),
     car_name: unit.display_name,
     capacity: unit.capacity,
+    requested_capacity: requestedCapacity,
     pickup_date: pickupDate,
     pickup_time: pickupTime,
     return_date: returnDate,
@@ -432,10 +425,11 @@ export function createBookingRouter(
         throw error;
       }
       try {
+        const message = emailVerificationEmail(code);
         await sendMail({
           to: email,
-          subject: "Your carTOGO email verification code",
-          text: `Your carTOGO verification code is ${code}. It expires in 10 minutes. If you did not request it, you can ignore this email.`,
+          subject: "Verify your email | carTOGO.mnl",
+          ...message,
         });
       } catch (error) {
         await repository.deleteGuestChallenge(challenge.id);
@@ -555,31 +549,10 @@ export function createBookingRouter(
         sendError(response, 400, "That vehicle is no longer available. Refresh and choose another.");
         return;
       }
-      const latitude = finiteNumber(request.body.targetLatitude, "Destination latitude", -90, 90);
-      const longitude = finiteNumber(request.body.targetLongitude, "Destination longitude", -180, 180);
-      if (!options.validateTargetLocation) {
-        console.error("Booking destination validation is not configured.");
-        sendError(response, 503, "Destination validation is temporarily unavailable.");
-        return;
-      }
-      const validatedLocation = await options.validateTargetLocation(latitude, longitude, true);
-      if (!validatedLocation.valid) {
-        throw new BookingInputError(
-          validatedLocation.reason || "Choose a verified, road-accessible destination.",
-        );
-      }
-      const targetRateRegion = validatedLocation.rateRegion;
-      if (targetRateRegion === "out_of_bounds") {
-        throw new BookingInputError("We currently accept destinations in Luzon only.");
-      }
-      if (targetRateRegion !== "in" && targetRateRegion !== "out" && targetRateRegion !== "luzon") {
-        throw new BookingInputError("The selected destination is outside our supported service area.");
-      }
       const inquiry = normalizeInquiry(
         request.body,
         unit,
         await repository.getDiscountRules(),
-        targetRateRegion,
         googleUser,
       );
       if (inquiry.email !== email) {
