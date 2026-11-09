@@ -33,6 +33,35 @@ function formatCurrency(value: number, currency: string): string {
   }).format(value)}`;
 }
 
+async function copyContactValue(value: string, label: string): Promise<void> {
+  let copied = false;
+  try {
+    await navigator.clipboard.writeText(value);
+    copied = true;
+  } catch {
+    const textarea = document.createElement("textarea");
+    textarea.value = value;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.append(textarea);
+    textarea.select();
+    try {
+      copied = document.execCommand("copy");
+    } catch {
+      copied = false;
+    } finally {
+      textarea.remove();
+    }
+  }
+
+  window.alert(
+    copied
+      ? `${label} copied to clipboard.`
+      : `Could not copy ${label.toLowerCase()}. Please copy it manually.`,
+  );
+}
+
 function inlineEmphasis(value: string) {
   const pieces = value.split(/<em>(.*?)<\/em>/gi);
   return pieces.map((piece, index) =>
@@ -52,6 +81,8 @@ export default function PublicSite({ units, assets, content }: PublicSiteProps) 
   const { settings, labels } = content;
   const locations = assets.filter(isLocation);
   const contact = assets.find(isContact);
+  const contactPhone = contact?.phone;
+  const contactEmail = contact?.email;
   const categories = ["All", ...new Set(units.map((unit) => unit.brand))];
   const [activeCategory, setActiveCategory] = useState("All");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -404,19 +435,15 @@ export default function PublicSite({ units, assets, content }: PublicSiteProps) 
                     {contact && <span className={`contact-status${contact.status === "closed" ? " is-closed" : ""}`}>{contact.status === "closed" ? "Closed" : "Open"}</span>}
                   </div>
                   {contact?.description && <p className="contact-description">{contact.description}</p>}
-                  {contact?.phone && (
-                    <div className="contact-channel"><i className="fa-solid fa-phone" aria-hidden="true" /><div><span>Phone</span><a href={`tel:${contact.phone.replace(/[^\d+]/g, "")}`}>{contact.phone}</a></div></div>
+                  {contactPhone && (
+                    <div className="contact-channel"><i className="fa-solid fa-phone" aria-hidden="true" /><div><span>Phone</span><a href={`tel:${contactPhone.replace(/[^\d+]/g, "")}`} onClick={(event) => { event.preventDefault(); void copyContactValue(contactPhone, "Phone number"); }}>{contactPhone}</a></div></div>
                   )}
-                  {contact?.email && (
-                    <div className="contact-channel"><i className="fa-solid fa-envelope" aria-hidden="true" /><div><span>Email</span><a href={`mailto:${contact.email}`}>{contact.email}</a></div></div>
+                  {contactEmail && (
+                    <div className="contact-channel"><i className="fa-solid fa-envelope" aria-hidden="true" /><div><span>Email</span><a href={`mailto:${contactEmail}`} onClick={(event) => { event.preventDefault(); void copyContactValue(contactEmail, "Email address"); }}>{contactEmail}</a></div></div>
                   )}
                   {contact?.operational_hours && (
                     <div className="contact-channel"><i className="fa-regular fa-clock" aria-hidden="true" /><div><span>Operational hours</span><p>{contact.operational_hours}</p></div></div>
                   )}
-                  <div className="contact-actions">
-                    {contact?.phone && <a className="button button-primary button-small" href={`tel:${contact.phone.replace(/[^\d+]/g, "")}`}>Call our team</a>}
-                    {contact?.email && <a className="button button-ghost button-small" href={`mailto:${contact.email}`}>Email us</a>}
-                  </div>
                 </article>
                 <article className="contact-card">
                   <h3>Pickup locations</h3>

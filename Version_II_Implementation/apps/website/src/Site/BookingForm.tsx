@@ -400,14 +400,14 @@ export default function BookingForm({
                 <legend>Rental details</legend>
             <div className="booking-fields booking-vehicle-selection">
               <label className="booking-field">
-                Minimum number of seats
+                Number of seats
                 <input
                   type="number"
                   min={1}
                   max={8}
                   step={1}
                   inputMode="numeric"
-                  placeholder="Any number of seats"
+                  placeholder=""
                   value={requestedSeats}
                   onChange={(event) => {
                     const value = event.target.value;

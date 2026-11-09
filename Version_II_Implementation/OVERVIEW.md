@@ -56,7 +56,11 @@ queue.
 The project is an npm workspace containing a browser application, a web API,
 and shared TypeScript contracts. The chatbot is a separate Python application.
 During local development, the browser app and API run together as separate
-processes, and the optional chatbot runs in its own process.
+processes, and the optional chatbot runs in its own process. The Vite website
+server listens on all network interfaces by default and prints the current
+LAN URLs, so other devices on the same network can open it. Set
+`CARTOGO_SITE_HOST=127.0.0.1` to restrict the website server to the local
+computer.
 
 ```text
 Browser
@@ -139,7 +143,9 @@ local configuration are already present.
    npm.cmd run dev
    ```
 
-3. Keep the terminal open. Visit <http://127.0.0.1:5173/>.
+3. Keep the terminal open. Use the `Network` URL printed by Vite to open the
+   site from another device on the same network, or visit
+   <http://127.0.0.1:5173/> on the host computer.
 
 This command builds the shared contracts and starts the API and website
 together. The API is available at <http://127.0.0.1:3001/>.
@@ -287,9 +293,10 @@ development credentials rather than using production credentials.
    npm.cmd run dev:chatbot
    ```
 
-3. Visit <http://127.0.0.1:5173/>. The API's liveness endpoint is
-   <http://127.0.0.1:3001/api/health>; its readiness endpoint is
-   <http://127.0.0.1:3001/api/health/ready>.
+3. Visit the `Network` URL printed by Vite from other devices on the same
+   network, or <http://127.0.0.1:5173/> on the host computer. The API's
+   liveness endpoint is <http://127.0.0.1:3001/api/health>; its readiness
+   endpoint is <http://127.0.0.1:3001/api/health/ready>.
 4. Run automated checks:
 
    ```powershell

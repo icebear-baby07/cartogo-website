@@ -491,7 +491,7 @@ export default function AdminDashboard({
     const assets = records(data);
     const emptyAsset = {
       asset_type: "location", display_name: "", description: "", status: "open",
-      loc_name: "", coordinates: { lat: 14.5995, lng: 120.9842 },
+      loc_name: "", coordinates: { lat: null, lng: null },
       opening_hours: "", closing_hours: "",
     };
     return (
@@ -513,7 +513,7 @@ export default function AdminDashboard({
         {editor ? (
           <form className="admin-card admin-json-editor" onSubmit={(event) => void submitJsonChange(event, "site_assets", editingId === null ? "add" : "update", true)}>
             <h2>{editingId === null ? "Add pickup location" : `Edit site asset #${editingId}`}</h2>
-            <p>Use a complete site asset record as JSON. The live-agent contact can be edited but not added or deleted here.</p>
+            <p>Enter the pickup location coordinates as latitude and longitude; there is no default location. After owner approval, the record is saved in MongoDB&apos;s <code>site_assets</code> collection and used by the public map. The live-agent contact can be edited but not added or deleted here.</p>
             <label className="admin-field">Asset data<textarea value={editor} onChange={(event) => setEditor(event.target.value)} rows={12} spellCheck={false} /></label>
             <div className="admin-actions"><button className="button button-primary" type="submit">Request owner approval</button><button className="button button-ghost" type="button" onClick={() => { setEditor(""); setEditingId(null); }}>Cancel</button></div>
           </form>

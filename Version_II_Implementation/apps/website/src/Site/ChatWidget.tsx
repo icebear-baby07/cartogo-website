@@ -22,7 +22,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function getStoredId(storage: Storage, key: string): string {
   const current = storage.getItem(key);
   if (current && /^[A-Za-z0-9_-]{1,128}$/.test(current)) return current;
-  const id = crypto.randomUUID().replaceAll("-", "");
+  const bytes = new Uint8Array(16);
+  if (globalThis.crypto?.getRandomValues) {
+    globalThis.crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+  const id = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
   storage.setItem(key, id);
   return id;
 }

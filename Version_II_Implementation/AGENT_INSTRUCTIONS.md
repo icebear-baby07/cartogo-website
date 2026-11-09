@@ -89,10 +89,15 @@ npm.cmd install
 npm.cmd run dev
 ```
 
-This starts the website at `http://127.0.0.1:5173` and API at
-`http://127.0.0.1:3001`. In another terminal, `npm.cmd run dev:chatbot`
-starts the chatbot at `http://127.0.0.1:8003`. If a port is already in use,
-inspect the existing service rather than blindly starting or stopping it.
+This starts the website on all network interfaces at port `5173` and the API
+at `http://127.0.0.1:3001`. Vite prints `Network` URLs for other devices on
+the same network; use the current URL shown there because the host's LAN IP
+may change. To limit the website to this computer, set
+`$env:CARTOGO_SITE_HOST = "127.0.0.1"` before starting. The API stays bound to
+loopback and remains reachable through the website's `/api` proxy. In another
+terminal, `npm.cmd run dev:chatbot` starts the chatbot at
+`http://127.0.0.1:8003`. If a port is already in use, inspect the existing
+service rather than blindly starting or stopping it.
 
 Useful checks:
 
@@ -173,8 +178,9 @@ launcher uses `.venv-chatbot`. Configure the chatbot's own `apps/chatbot/.env`
 for MongoDB and Bedrock/AWS access. Do not copy the official chatbot `.env` or
 virtual environment.
 
-Open the website at `http://127.0.0.1:5173/` and the separate chatbot at
-`http://127.0.0.1:8003/`.
+Open the website at `http://127.0.0.1:5173/` on the host computer, or use a
+Vite `Network` URL from another device on the same network. The separate
+chatbot is at `http://127.0.0.1:8003/`.
 
 The website's public data still requires a development MongoDB URI in
 `apps/api/.env`. The chatbot service has a separate `.env` because it uses

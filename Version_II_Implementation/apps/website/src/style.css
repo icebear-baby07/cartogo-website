@@ -332,8 +332,7 @@ p {
   font-size: clamp(1rem, 1.6vw, 1.12rem);
 }
 
-.hero-actions,
-.contact-actions {
+.hero-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.8rem;
@@ -1484,14 +1483,12 @@ p {
     grid-template-columns: 1fr;
   }
 
-  .hero-actions,
-  .contact-actions {
+  .hero-actions {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .hero-actions .button,
-  .contact-actions .button {
+  .hero-actions .button {
     width: 100%;
   }
 

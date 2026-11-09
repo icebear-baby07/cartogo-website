@@ -53,6 +53,7 @@ if not exist "node_modules" (
 )
 
 echo Starting Version II API and website...
+echo LAN access port: 5173. Use the Vite Network URL printed below on other devices on this network.
 call npm.cmd run dev
 set "EXIT_CODE=%ERRORLEVEL%"
 exit /b %EXIT_CODE%
