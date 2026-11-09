@@ -80,14 +80,29 @@ export function inquiryConfirmationEmail(inquiry: Record<string, unknown>): { ht
     ["Pickup", "pickup_date"],
     ["Pickup time", "pickup_time"],
     ["Return", "return_date"],
+    ["Rental subtotal", "rental_subtotal"],
     ["Estimated total", "quoted_rate"],
   ].flatMap(([label, key]) => {
     const value = inquiry[key];
     if (value === undefined || value === null || value === "") return [];
     return [{ label, value: key === "quoted_rate"
       ? `₱${Number(value).toLocaleString("en-PH")}`
+      : key === "rental_subtotal"
+        ? `₱${Number(value).toLocaleString("en-PH")}`
       : String(value) }];
   });
+  if (inquiry.extra_driver === true) {
+    details.splice(-1, 0, {
+      label: "Extra Driver",
+      value: `Selected · ₱${Number(inquiry.extra_driver_fee ?? 0).toLocaleString("en-PH")}`,
+    });
+  }
+  if (inquiry.child_seat === true) {
+    details.splice(-1, 0, {
+      label: "Child seat",
+      value: `Selected · ₱${Number(inquiry.child_seat_fee ?? 0).toLocaleString("en-PH")}`,
+    });
+  }
   return renderBrandedEmail({
     preheader: "We received your car rental inquiry.",
     eyebrow: "Inquiry received",

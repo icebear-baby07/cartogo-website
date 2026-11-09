@@ -1,0 +1,5 @@
+1. (BOOKING PROCESS) Have an inquiry confirmation window in the middle to allow users to verify their booking before processing an order. Call it Reservation Recap
+1.1. Upsell these inside that reservation recap: 1. Extra Driver, 2. Child seat
+
+2. (ADMIN PANEL) In "Fleets & Rates" tab, place the "Add Unit" button to the bottom of the list. Add a "+" icon to the left before the text.
+2.1. Place the Refresh button beside "(number) fleet units" text. Replace the text with a circular arrow that has a nice focus animation when hovered and a circular movement animation when clicked. Remove the redundant "Refresh Data" button entirely. Adjust for different screen sizes but keep it professional.

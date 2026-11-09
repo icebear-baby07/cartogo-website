@@ -166,12 +166,17 @@ export async function getBookingRepository(): Promise<BookingRepository> {
       if (!unit) return null;
       return PublicUnitSchema.parse(unit);
     },
-    async getDiscountRules() {
+    async getBookingPricing() {
       const siteContent = await content.findOne({ _id: "public" }, { projection: { _id: 0 } });
       if (!siteContent) {
-        throw new Error("Site discount rules are not initialized.");
+        throw new Error("Site booking pricing is not initialized.");
       }
-      return SiteContentSchema.parse(siteContent).discountRules;
+      const parsed = SiteContentSchema.parse(siteContent);
+      return {
+        discountRules: parsed.discountRules,
+        extraDriverFee: parsed.settings.extraDriverFee,
+        childSeatFee: parsed.settings.childSeatFee,
+      };
     },
     async findInquiryByRequestId(requestId) {
       return findInquiryByRequestId(requestId);

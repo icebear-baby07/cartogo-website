@@ -111,6 +111,11 @@ function exportInquiryCsv(inquiries: DataRecord[]): void {
     ["rate_per_period", "Rate per period"],
     ["discount_percent", "Discount percent"],
     ["discount_amount", "Discount amount"],
+    ["rental_subtotal", "Rental subtotal"],
+    ["extra_driver", "Extra Driver selected"],
+    ["extra_driver_fee", "Extra Driver fee"],
+    ["child_seat", "Child seat selected"],
+    ["child_seat_fee", "Child seat fee"],
     ["quoted_rate", "Quoted rate"],
     ["status", "Status"],
     ["rejection_reason", "Rejection reason"],
@@ -132,6 +137,11 @@ function exportInquiryCsv(inquiries: DataRecord[]): void {
     rate_per_period: "ratePerPeriod",
     discount_percent: "discountPercent",
     discount_amount: "discountAmount",
+    rental_subtotal: "rentalSubtotal",
+    extra_driver: "extraDriver",
+    extra_driver_fee: "extraDriverFee",
+    child_seat: "childSeat",
+    child_seat_fee: "childSeatFee",
     quoted_rate: "quotedRate",
     rejection_reason: "rejectionReason",
     rejection_email_sent: "rejectionEmailSent",
@@ -176,6 +186,7 @@ export default function AdminDashboard({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [filter, setFilter] = useState("all");
   const [rejection, setRejection] = useState<{ id: number; reason: string } | null>(null);
+  const [rejectionPendingId, setRejectionPendingId] = useState<number | null>(null);
   const loadSequence = useRef(0);
 
   const allowedPermissions = useMemo(
@@ -286,6 +297,8 @@ export default function AdminDashboard({
   }
 
   async function inquiryAction(id: number, action: string, extras: DataRecord = {}) {
+    const isRejection = action === "reject" || action === "resend_rejection";
+    if (isRejection) setRejectionPendingId(id);
     setError("");
     setNotice("");
     try {
@@ -306,6 +319,8 @@ export default function AdminDashboard({
       const message = actionError instanceof Error ? actionError.message : "Could not update the inquiry.";
       if (action === "reject" || action === "resend_rejection") await loadTab("inquiries");
       setError(message);
+    } finally {
+      if (isRejection) setRejectionPendingId(null);
     }
   }
 
@@ -376,7 +391,6 @@ export default function AdminDashboard({
               <option value="pending_review">Pending review</option>
               <option value="contacted">Contacted</option>
               <option value="confirmed">Confirmed</option>
-              <option value="rejected">Rejected</option>
             </select>
           </label>
           <button
@@ -395,7 +409,10 @@ export default function AdminDashboard({
               const id = Number(inquiry.id);
               const currentStatus = status(inquiry);
               return (
-                <article className="admin-card" key={String(inquiry.id ?? index)}>
+                <article
+                  className={`admin-card${currentStatus === "confirmed" ? " admin-inquiry-confirmed" : ""}`}
+                  key={String(inquiry.id ?? index)}
+                >
                   <div className="admin-card-heading">
                     <div>
                       <p className="eyebrow">{currentStatus.replaceAll("_", " ")}</p>
@@ -410,7 +427,10 @@ export default function AdminDashboard({
                     <div><dt>Pickup</dt><dd>{text(inquiry.pickup_date ?? inquiry.pickupDate)} {text(inquiry.pickup_time ?? inquiry.pickupTime, "")}</dd></div>
                     <div><dt>Return</dt><dd>{text(inquiry.return_date ?? inquiry.returnDate)}</dd></div>
                     {typeof inquiry.requested_capacity === "number" ? <div><dt>Requested seats</dt><dd>{text(inquiry.requested_capacity)}</dd></div> : null}
-                    <div><dt>Quoted rate</dt><dd>{text(inquiry.quoted_rate)}</dd></div>
+                    <div><dt>Rental subtotal</dt><dd>{text(inquiry.rental_subtotal ?? inquiry.rentalSubtotal ?? inquiry.quoted_rate ?? inquiry.quotedRate)}</dd></div>
+                    {inquiry.extra_driver === true || inquiry.extraDriver === true ? <div><dt>Extra Driver</dt><dd>Selected · {text(inquiry.extra_driver_fee ?? inquiry.extraDriverFee, "0")}</dd></div> : null}
+                    {inquiry.child_seat === true || inquiry.childSeat === true ? <div><dt>Child seat</dt><dd>Selected · {text(inquiry.child_seat_fee ?? inquiry.childSeatFee, "0")}</dd></div> : null}
+                    <div><dt>Estimated total</dt><dd>{text(inquiry.quoted_rate ?? inquiry.quotedRate)}</dd></div>
                     {typeof inquiry.notes === "string" && inquiry.notes ? <div className="admin-detail-wide"><dt>Notes</dt><dd>{inquiry.notes}</dd></div> : null}
                     {typeof inquiry.rejection_reason === "string" && inquiry.rejection_reason ? <div className="admin-detail-wide"><dt>Rejection reason</dt><dd>{inquiry.rejection_reason}</dd></div> : null}
                   </dl>
@@ -421,8 +441,8 @@ export default function AdminDashboard({
                     {currentStatus !== "rejected" ? (
                       <button className="button button-ghost" type="button" onClick={() => setRejection({ id, reason: "" })}>Reject</button>
                     ) : typeof inquiry.rejection_reason === "string" && inquiry.rejection_reason.trim() ? (
-                      <button className="button button-danger" type="button" onClick={() => void inquiryAction(id, "reject")}>
-                        {inquiry.rejection_email_sent === true ? "Finish deletion" : "Retry email & delete"}
+                      <button className="button button-danger" type="button" disabled={rejectionPendingId !== null} aria-busy={rejectionPendingId === id} onClick={() => void inquiryAction(id, "reject")}>
+                        {rejectionPendingId === id ? "Rejecting inquiry…" : inquiry.rejection_email_sent === true ? "Finish deletion" : "Retry email & delete"}
                       </button>
                     ) : (
                       <button className="button button-danger" type="button" onClick={() => setRejection({ id, reason: "" })}>Add reason and finish rejection</button>
@@ -434,12 +454,14 @@ export default function AdminDashboard({
                       void inquiryAction(id, "reject", { reason: rejection.reason });
                     }}>
                       <label className="admin-field">Reason (required, max 250 words)
-                        <textarea required maxLength={3000} rows={3} value={rejection.reason} onChange={(event) => setRejection({ id, reason: event.target.value })} />
+                        <textarea required maxLength={3000} rows={3} disabled={rejectionPendingId !== null} value={rejection.reason} onChange={(event) => setRejection({ id, reason: event.target.value })} />
                       </label>
                       <p>The inquiry is deleted only after the email is accepted by the configured mail server.</p>
                       <div className="admin-actions">
-                        <button className="button button-primary" type="submit">Email customer and delete inquiry</button>
-                        <button className="button button-ghost" type="button" onClick={() => setRejection(null)}>Cancel</button>
+                        <button className="button button-primary" type="submit" disabled={rejectionPendingId !== null} aria-busy={rejectionPendingId === id}>
+                          {rejectionPendingId === id ? <><span className="admin-rejection-spinner" aria-hidden="true" /> Rejecting inquiry…</> : "Email customer and delete inquiry"}
+                        </button>
+                        <button className="button button-ghost" type="button" disabled={rejectionPendingId !== null} onClick={() => setRejection(null)}>Cancel</button>
                       </div>
                     </form>
                   ) : null}
@@ -461,9 +483,25 @@ export default function AdminDashboard({
     };
     return (
       <>
-        <div className="admin-toolbar"><p>{units.length} fleet units</p><button className="button button-ghost" type="button" onClick={() => { setEditingId(null); setEditor(pretty(emptyUnit)); }}>Add unit</button><button className="button button-ghost" type="button" onClick={() => void refresh()}>Refresh</button></div>
+        <div className="admin-toolbar admin-fleet-toolbar">
+          <div className="admin-fleet-count">
+            <p>{units.length} fleet units</p>
+            <button
+              className={`admin-fleet-refresh${loading ? " is-refreshing" : ""}`}
+              type="button"
+              aria-label="Refresh fleet units"
+              title="Refresh fleet units"
+              disabled={loading}
+              onClick={() => void refresh()}
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M20 7v5h-5M4 17v-5h5m-4.1-3A7.5 7.5 0 0 1 17.6 6L20 12M4 12l2.4 6a7.5 7.5 0 0 0 12.7-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
+        </div>
         {units.map((unit, index) => (
-          <article className="admin-list-row" key={String(unit.id ?? index)}>
+          <article className="admin-list-row admin-fleet-row" key={String(unit.id ?? index)}>
             <div><strong>{text(unit.display_name)}</strong><span>#{text(unit.id)} · {text(unit.status)} · {text(unit.capacity)} seats</span><span>{text(unit.brand)} {text(unit.model)}</span></div>
             <div className="admin-actions">
               <button className="button button-ghost" type="button" onClick={() => beginEdit(unit)}>Edit</button>
@@ -475,6 +513,10 @@ export default function AdminDashboard({
             </div>
           </article>
         ))}
+        <button className="button button-ghost admin-add-unit" type="button" onClick={() => { setEditingId(null); setEditor(pretty(emptyUnit)); }}>
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v14M3 10h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+          <span>Add unit</span>
+        </button>
         {editor ? (
           <form className="admin-card admin-json-editor" onSubmit={(event) => void submitJsonChange(event, "unit", editingId === null ? "add" : "update", true)}>
             <h2>{editingId === null ? "Add fleet unit" : `Edit fleet unit #${editingId}`}</h2>
@@ -662,8 +704,13 @@ export default function AdminDashboard({
       <section className="admin-main">
         <header className="admin-header">
           <div><p className="eyebrow">{profile?.titles.join(" · ") || "Administrator"}</p><h1>{activeTab?.label ?? "Admin"}</h1></div>
-          <button className="button button-ghost" type="button" onClick={() => void refresh()} disabled={loading}>Refresh data</button>
         </header>
+        {rejectionPendingId !== null ? (
+          <p className="admin-rejection-progress" role="status" aria-live="polite">
+            <span className="admin-rejection-spinner" aria-hidden="true" />
+            Rejecting inquiry #{rejectionPendingId} and notifying the customer…
+          </p>
+        ) : null}
         {notice ? <p className="admin-notice" role="status">{notice}</p> : null}
         {error ? <p className="admin-error" role="alert">{error}</p> : null}
         {approval ? (

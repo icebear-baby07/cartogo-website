@@ -22,7 +22,7 @@ type VerificationResponse = {
 };
 
 function formatCurrency(value: number, currency: string): string {
-  return `${currency}${new Intl.NumberFormat("en-PH", { maximumFractionDigits: 0 }).format(value)}`;
+  return `${currency}${new Intl.NumberFormat("en-PH", { maximumFractionDigits: 2 }).format(value)}`;
 }
 
 function dateAfter(date: string, days: number): string {
@@ -48,6 +48,21 @@ function pickupTimestamp(date: string, time: string): number | null {
     || selected.getMinutes() !== Number(minute)
   ) return null;
   return selected.getTime();
+}
+
+function createRequestId(): string {
+  const bytes = new Uint8Array(16);
+  if (globalThis.crypto?.getRandomValues) {
+    globalThis.crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 function isVerifiedGoogleUser(user: User | null): user is User {
@@ -110,6 +125,9 @@ export default function BookingForm({
   const [rentalDays, setRentalDays] = useState(4);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [termsOpen, setTermsOpen] = useState(false);
+  const [recapOpen, setRecapOpen] = useState(false);
+  const [extraDriver, setExtraDriver] = useState(false);
+  const [childSeat, setChildSeat] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [middleName, setMiddleName] = useState("");
@@ -124,11 +142,14 @@ export default function BookingForm({
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [progressMessage, setProgressMessage] = useState("");
+  const [authNotice, setAuthNotice] = useState("");
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(Boolean(supabase));
   const [currentTime, setCurrentTime] = useState(() => new Date());
   const emailInput = useRef<HTMLInputElement>(null);
   const accountDialogRef = useRef<HTMLDialogElement>(null);
+  const recapDialogRef = useRef<HTMLDialogElement>(null);
   const requestId = useRef<string | null>(null);
 
   useEffect(() => {
@@ -137,10 +158,14 @@ export default function BookingForm({
       return;
     }
     let active = true;
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setAuthUser(session?.user ?? null);
       setAuthLoading(false);
+      if (event === "SIGNED_IN" && isVerifiedGoogleUser(session?.user ?? null)) {
+        setAuthNotice("Successfully signed in with Google.");
+      }
       if (!session) {
+        setAuthNotice("");
         setVerificationToken("");
         setChallengeId("");
       }
@@ -175,9 +200,25 @@ export default function BookingForm({
   }, [accountDialogOpen]);
 
   useEffect(() => {
+    const dialog = recapDialogRef.current;
+    if (!dialog) return;
+    if (recapOpen && !dialog.open) dialog.showModal();
+    else if (!recapOpen && dialog.open) dialog.close();
+  }, [recapOpen]);
+
+  useEffect(() => {
     const timer = window.setInterval(() => setCurrentTime(new Date()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!authNotice) return;
+    const timer = window.setTimeout(() => setAuthNotice(""), 5000);
+    return () => window.clearTimeout(timer);
+  }, [authNotice]);
+
+  const promptMessage = progressMessage || (authLoading ? "Checking your sign-in…" : authNotice);
+  const promptIsLoading = Boolean(progressMessage || (authLoading && !authNotice));
 
   const requestedSeatCount = requestedSeats.trim() ? Number(requestedSeats) : null;
   const matchingUnits = useMemo(() => {
@@ -213,6 +254,9 @@ export default function BookingForm({
       rentalDays: rentalMode === "custom_days" ? rentalDays : 1,
     };
   }, [unit, rateRegion, pickupDate, pickupTime, periodHours, rentalMode, rentalDays, content.discountRules]);
+  const extraDriverFee = extraDriver ? content.settings.extraDriverFee : 0;
+  const childSeatFee = childSeat ? content.settings.childSeatFee : 0;
+  const reservationTotal = (quote?.total ?? 0) + extraDriverFee + childSeatFee;
   const visibleRentalMode = rentalModePreview ?? rentalMode;
   const highestDiscountPercent = Math.max(0, ...content.discountRules.map((rule) => rule.percent));
   const rentalDiscountPercent = content.discountRules.find((rule) =>
@@ -230,6 +274,7 @@ export default function BookingForm({
   const requestCode = async () => {
     if (!emailInput.current?.reportValidity()) return;
     setBusy(true);
+    setProgressMessage("Sending verification code…");
     setError("");
     setVerificationMessage("Sending verification code…");
     try {
@@ -245,6 +290,7 @@ export default function BookingForm({
       setError(requestError instanceof Error ? requestError.message : "Could not send a verification code.");
     } finally {
       setBusy(false);
+      setProgressMessage("");
     }
   };
 
@@ -254,6 +300,7 @@ export default function BookingForm({
       return;
     }
     setBusy(true);
+    setProgressMessage("Signing in with Google…");
     setError("");
     try {
       const { error: signInError } = await supabase.auth.signInWithOAuth({
@@ -264,12 +311,14 @@ export default function BookingForm({
     } catch (signInError) {
       setError(signInError instanceof Error ? signInError.message : "Could not start Google sign-in.");
       setBusy(false);
+      setProgressMessage("");
     }
   };
 
   const signOutGoogle = async () => {
     if (!supabase) return;
     setBusy(true);
+    setProgressMessage("Signing out…");
     setError("");
     try {
       const { error: signOutError } = await supabase.auth.signOut();
@@ -280,11 +329,13 @@ export default function BookingForm({
       setError(signOutError instanceof Error ? signOutError.message : "Could not sign out.");
     } finally {
       setBusy(false);
+      setProgressMessage("");
     }
   };
 
   const verifyCode = async () => {
     setBusy(true);
+    setProgressMessage("Verifying email…");
     setError("");
     try {
       const result = await postJson<VerificationResponse>(
@@ -297,10 +348,11 @@ export default function BookingForm({
       setError(requestError instanceof Error ? requestError.message : "Could not verify that code.");
     } finally {
       setBusy(false);
+      setProgressMessage("");
     }
   };
 
-  const submitInquiry = async (event: FormEvent<HTMLFormElement>) => {
+  const submitInquiry = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
     setStatus("");
@@ -318,9 +370,31 @@ export default function BookingForm({
       setError("Verify your email address before sending this inquiry.");
       return;
     }
-    requestId.current ??= crypto.randomUUID();
+    setRecapOpen(true);
+  };
+
+  const confirmInquiry = async () => {
+    setError("");
+    setStatus("");
+    const selectedPickup = pickupTimestamp(pickupDate, pickupTime);
+    if (selectedPickup === null || selectedPickup <= Date.now()) {
+      setError("The requested pickup date and time has passed. Choose a future pickup time.");
+      return;
+    }
+    if (!unit || !quote || !rateRegion) {
+      setError("Choose a vehicle, pickup date, and rate area to see a valid estimate.");
+      setRecapOpen(false);
+      return;
+    }
+    if (!googleUser && (!challengeId || !verificationToken)) {
+      setError("Verify your email address before sending this inquiry.");
+      setRecapOpen(false);
+      return;
+    }
     setBusy(true);
+    setProgressMessage("Sending your inquiry…");
     try {
+      requestId.current ??= createRequestId();
       const authHeaders: Record<string, string> = {};
       if (googleUser && supabase) {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -354,22 +428,28 @@ export default function BookingForm({
         rentalDays: quote.rentalDays,
         discountPercent: quote.discountPercent,
         discountAmount: quote.discount,
-        quotedRate: quote.total,
+        extraDriver,
+        childSeat,
+        quotedRate: reservationTotal,
         notes,
       }, authHeaders);
       setStatus(result.emailNotificationQueued
         ? "Thank you for your inquiry. Our team will take it from here and follow up by email."
         : `Inquiry #${result.inquiry.id} received. Our team will follow up by phone.`);
+      setRecapOpen(false);
       requestId.current = null;
       setChallengeId("");
       setVerificationToken("");
       setEmail("");
       setCode("");
       setVerificationMessage("");
+      setExtraDriver(false);
+      setChildSeat(false);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Could not submit your inquiry.");
     } finally {
       setBusy(false);
+      setProgressMessage("");
     }
   };
 
@@ -378,6 +458,16 @@ export default function BookingForm({
 
   return (
     <section className="section bg-paper" id="booking">
+      {promptMessage && (
+        <div
+          className={`auth-toast show${promptIsLoading ? " is-loading" : ""}`}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {promptMessage}
+        </div>
+      )}
       <div className="wrap">
         <div className="booking-panel">
           <div className="booking-overview">
@@ -681,9 +771,11 @@ export default function BookingForm({
               className="button button-primary"
               type="submit"
               form="bookingForm"
+              aria-busy={busy}
               disabled={busy || pickupTimeInvalid || (!googleUser && !verificationToken) || !rateRegion || !quote}
             >
-              {busy ? "Please wait…" : "Send inquiry"}
+              {busy && <span className="booking-submit-spinner" aria-hidden="true" />}
+              <span>{busy ? "Sending inquiry…" : "Send inquiry"}</span>
             </button>
             <p>Submitting an inquiry does not reserve a vehicle or take payment.</p>
           </div>
@@ -691,6 +783,96 @@ export default function BookingForm({
           </div>
         </div>
       </div>
+      <dialog
+        ref={recapDialogRef}
+        className="reservation-recap"
+        aria-labelledby="reservationRecapTitle"
+        aria-describedby="reservationRecapDescription"
+        onClose={() => setRecapOpen(false)}
+        onCancel={(event) => {
+          if (busy) event.preventDefault();
+          else setRecapOpen(false);
+        }}
+        onClick={(event) => {
+          if (event.target === event.currentTarget && !busy) setRecapOpen(false);
+        }}
+      >
+        <div className="reservation-recap-inner">
+          <header className="recap-header">
+            <div>
+              <p className="eyebrow">Review before sending</p>
+              <h2 id="reservationRecapTitle">Reservation Recap</h2>
+            </div>
+            <button
+              className="recap-close"
+              type="button"
+              aria-label="Return to booking form"
+              disabled={busy}
+              onClick={() => setRecapOpen(false)}
+            >
+              <i className="fa-solid fa-xmark" aria-hidden="true" />
+            </button>
+          </header>
+          <p className="recap-intro" id="reservationRecapDescription">
+            Please review your trip details and optional add-ons. Your request is not a confirmed reservation, and no payment is taken.
+          </p>
+          <dl className="recap-list">
+            <div className="recap-row"><dt>Vehicle</dt><dd>{unit?.display_name ?? "Not selected"}</dd></div>
+            <div className="recap-row"><dt>Renter</dt><dd>{googleUser ? accountName || googleUser.email : `${firstName} ${lastName}`.trim()}</dd></div>
+            <div className="recap-row"><dt>Email</dt><dd>{googleUser?.email ?? email}</dd></div>
+            <div className="recap-row"><dt>Phone</dt><dd>{phone}</dd></div>
+            {requestedSeatCount !== null && <div className="recap-row"><dt>Requested seats</dt><dd>{requestedSeatCount}</dd></div>}
+            <div className="recap-row"><dt>Pickup</dt><dd>{pickupDate} at {pickupTime}</dd></div>
+            <div className="recap-row"><dt>Return</dt><dd>{quote?.returnDate ?? "—"}</dd></div>
+            <div className="recap-row"><dt>Rate area</dt><dd>{rateRegion === "in" ? "Metro Manila" : rateRegion === "out" ? "Nearby areas" : rateRegion === "luzon" ? "Other Luzon areas" : "Not selected"}</dd></div>
+            <div className="recap-row"><dt>Rental arrangement</dt><dd>{rentalMode === "custom_days" ? `${rentalDays} days` : `${periodHours} hours`}</dd></div>
+            {quote && quote.discount > 0 && <div className="recap-row"><dt>Long-rental discount</dt><dd>−{formatCurrency(quote.discount, content.settings.currency)}</dd></div>}
+            <div className="recap-row"><dt>Rental subtotal</dt><dd>{formatCurrency(quote?.total ?? 0, content.settings.currency)}</dd></div>
+          </dl>
+          <fieldset className="recap-addon-options">
+            <legend>Optional add-ons</legend>
+            <label className={`recap-addon-option${extraDriver ? " is-selected" : ""}`}>
+              <input
+                type="checkbox"
+                checked={extraDriver}
+                disabled={busy}
+                onChange={(event) => setExtraDriver(event.target.checked)}
+              />
+              <span><strong>Extra Driver</strong><small>Per-trip fee to add another approved driver.</small></span>
+              <b>{formatCurrency(content.settings.extraDriverFee, content.settings.currency)}</b>
+            </label>
+            <label className={`recap-addon-option${childSeat ? " is-selected" : ""}`}>
+              <input
+                type="checkbox"
+                checked={childSeat}
+                disabled={busy}
+                onChange={(event) => setChildSeat(event.target.checked)}
+              />
+              <span><strong>Child seat</strong><small>Request a child seat for your trip; charged per trip.</small></span>
+              <b>{formatCurrency(content.settings.childSeatFee, content.settings.currency)}</b>
+            </label>
+          </fieldset>
+          <dl className="recap-list recap-total-list">
+            {extraDriver && <div className="recap-row"><dt>Extra Driver</dt><dd>{formatCurrency(extraDriverFee, content.settings.currency)}</dd></div>}
+            {childSeat && <div className="recap-row"><dt>Child seat</dt><dd>{formatCurrency(childSeatFee, content.settings.currency)}</dd></div>}
+            <div className="recap-row recap-total-row"><dt>Estimated total</dt><dd>{formatCurrency(reservationTotal, content.settings.currency)}</dd></div>
+          </dl>
+          {error && <p className="recap-error" role="alert">{error}</p>}
+          {busy && (
+            <div className="recap-loading" role="status" aria-live="polite">
+              <span className="recap-loading-spinner" aria-hidden="true" />
+              <div><p className="recap-loading-title">Sending your inquiry…</p><p className="recap-loading-copy">Please keep this window open while we submit your request.</p></div>
+            </div>
+          )}
+          <div className="recap-actions">
+            <button className="button button-ghost" type="button" disabled={busy} onClick={() => setRecapOpen(false)}>Back to edit</button>
+            <button className="button button-primary" type="button" disabled={busy} aria-busy={busy} onClick={() => void confirmInquiry()}>
+              {busy && <span className="booking-submit-spinner" aria-hidden="true" />}
+              <span>{busy ? "Sending inquiry…" : "Confirm and send inquiry"}</span>
+            </button>
+          </div>
+        </div>
+      </dialog>
       <dialog
         ref={accountDialogRef}
         className="account-dialog"

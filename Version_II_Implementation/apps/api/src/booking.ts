@@ -34,7 +34,11 @@ export type VerifiedGoogleUser = {
 
 export type BookingRepository = {
   getUnit(id: number): Promise<BookingUnit | null>;
-  getDiscountRules(): Promise<Array<{ minDays: number; maxDays: number; percent: number }>>;
+  getBookingPricing(): Promise<{
+    discountRules: Array<{ minDays: number; maxDays: number; percent: number }>;
+    extraDriverFee: number;
+    childSeatFee: number;
+  }>;
   findInquiryByRequestId(requestId: string): Promise<Inquiry | null>;
   createGuestChallenge(challenge: GuestChallenge): Promise<void>;
   getGuestChallenge(id: string): Promise<GuestChallenge | null>;
@@ -242,7 +246,7 @@ function validDate(value: string, label: string): Date {
 function normalizeInquiry(
   payload: Record<string, unknown>,
   unit: BookingUnit,
-  rules: Array<{ minDays: number; maxDays: number; percent: number }>,
+  pricing: Awaited<ReturnType<BookingRepository["getBookingPricing"]>>,
   googleUser: VerifiedGoogleUser | null,
 ): Inquiry {
   let name: string;
@@ -309,11 +313,19 @@ function normalizeInquiry(
       ? (period === 12 ? unit.out12_rate : unit.out24_rate)
       : unit.luzon_rate;
   const discountPercent = rentalMode === "custom_days"
-    ? rules.find((rule) => rentalDays >= rule.minDays && rentalDays <= rule.maxDays)?.percent ?? 0
+    ? pricing.discountRules.find((rule) => rentalDays >= rule.minDays && rentalDays <= rule.maxDays)?.percent ?? 0
     : 0;
   const undiscounted = rate * (rentalMode === "custom_days" ? rentalDays : 1);
   const discountAmount = Math.round(undiscounted * discountPercent) / 100;
-  const quotedRate = undiscounted - discountAmount;
+  const rentalSubtotal = undiscounted - discountAmount;
+  const extraDriver = payload.extraDriver ?? false;
+  const childSeat = payload.childSeat ?? false;
+  if (typeof extraDriver !== "boolean" || typeof childSeat !== "boolean") {
+    throw new BookingInputError("Choose valid options for the optional add-ons.");
+  }
+  const extraDriverFee = extraDriver ? pricing.extraDriverFee : 0;
+  const childSeatFee = childSeat ? pricing.childSeatFee : 0;
+  const quotedRate = rentalSubtotal + extraDriverFee + childSeatFee;
   const reportedRate = finiteNumber(payload.ratePerPeriod, "Rate per period", 0, 99_999_999.99);
   const reportedDiscount = finiteNumber(payload.discountAmount, "Discount amount", 0, 9_999_999_999.99);
   const reportedQuote = finiteNumber(payload.quotedRate, "Quoted rate", 0, 9_999_999_999.99);
@@ -365,6 +377,11 @@ function normalizeInquiry(
     rental_days: rentalDays,
     discount_percent: discountPercent,
     discount_amount: discountAmount,
+    rental_subtotal: rentalSubtotal,
+    extra_driver: extraDriver,
+    extra_driver_fee: extraDriverFee,
+    child_seat: childSeat,
+    child_seat_fee: childSeatFee,
     quoted_rate: quotedRate,
     notes: text(payload.notes, "Notes", 2000, false),
     status: "pending_review",
@@ -552,7 +569,7 @@ export function createBookingRouter(
       const inquiry = normalizeInquiry(
         request.body,
         unit,
-        await repository.getDiscountRules(),
+        await repository.getBookingPricing(),
         googleUser,
       );
       if (inquiry.email !== email) {

@@ -14,11 +14,19 @@ test("formats a clear branded inquiry confirmation with the rental summary", () 
     pickup_date: "2026-11-10",
     pickup_time: "09:00",
     return_date: "2026-11-11",
+    rental_subtotal: 3000,
+    extra_driver: true,
+    extra_driver_fee: 300,
+    child_seat: true,
+    child_seat_fee: 200,
     quoted_rate: 3500,
   });
 
   assert.match(message.text, /Thank you for reaching out/);
   assert.match(message.text, /Honda City/);
+  assert.match(message.text, /Rental subtotal: ₱3,000/);
+  assert.match(message.text, /Extra Driver: Selected · ₱300/);
+  assert.match(message.text, /Child seat: Selected · ₱200/);
   assert.match(message.text, /Estimated total: ₱3,500/);
   assert.match(message.text, /no payment has been taken/i);
   assert.match(message.html, /carTOGO<span/);

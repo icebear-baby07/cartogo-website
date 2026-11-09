@@ -33,11 +33,15 @@ function createRepository(): BookingRepository {
         luzon_rate: 3000,
       } : null;
     },
-    async getDiscountRules() {
-      return [
-        { minDays: 4, maxDays: 7, percent: 5 },
-        { minDays: 8, maxDays: 15, percent: 10 },
-      ];
+    async getBookingPricing() {
+      return {
+        discountRules: [
+          { minDays: 4, maxDays: 7, percent: 5 },
+          { minDays: 8, maxDays: 15, percent: 10 },
+        ],
+        extraDriverFee: 300,
+        childSeatFee: 150,
+      };
     },
     async findInquiryByRequestId(id) {
       return inquiries.get(id) ?? null;
@@ -153,6 +157,8 @@ function inquiryPayload(challengeId: string, verificationToken: string) {
     rentalDays: 1,
     discountPercent: 0,
     discountAmount: 0,
+    extraDriver: false,
+    childSeat: false,
     quotedRate: 1000,
     notes: "",
   };
@@ -236,6 +242,20 @@ test("rejects a client quote that differs from database rates", async () => {
   assert.match((await response.json() as { error: string }).error, /out of date/);
 });
 
+test("rejects an add-on quote that omits its server-configured fee", async () => {
+  const router = createBookingRouter(async () => createRepository(), {
+    verificationSecret: "test-verification-secret",
+    sendMail: async () => {},
+  });
+  const payload = {
+    ...inquiryPayload("unverified-challenge", "unverified-token"),
+    extraDriver: true,
+  };
+  const response = await post(router, "/public/inquiries", payload);
+  assert.equal(response.status, 400);
+  assert.match((await response.json() as { error: string }).error, /out of date/);
+});
+
 test("does not submit an inquiry without a verified email", async () => {
   const repository = createRepository();
   const router = createBookingRouter(async () => repository, {
@@ -266,7 +286,9 @@ test("uses the renter-selected rate area and calculates the quote from database 
     ...inquiryPayload(challengeId, verificationToken),
     rateRegion: "out",
     ratePerPeriod: 1400,
-    quotedRate: 1400,
+    extraDriver: true,
+    childSeat: true,
+    quotedRate: 1850,
   };
   const response = await post(
     router,
@@ -277,7 +299,12 @@ test("uses the renter-selected rate area and calculates the quote from database 
   const result = await response.json() as { inquiry: Record<string, unknown> };
   assert.equal(result.inquiry.rate_region, "out");
   assert.equal(result.inquiry.rate_per_period, 1400);
-  assert.equal(result.inquiry.quoted_rate, 1400);
+  assert.equal(result.inquiry.extra_driver, true);
+  assert.equal(result.inquiry.extra_driver_fee, 300);
+  assert.equal(result.inquiry.child_seat, true);
+  assert.equal(result.inquiry.child_seat_fee, 150);
+  assert.equal(result.inquiry.rental_subtotal, 1400);
+  assert.equal(result.inquiry.quoted_rate, 1850);
 });
 
 test("rejects unsupported renter-selected rate areas", async () => {

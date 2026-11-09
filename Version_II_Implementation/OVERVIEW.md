@@ -28,9 +28,10 @@ For visitors, the website:
 - Shows the rental fleet and lets visitors browse/filter available vehicles.
 - Displays rental rates, pickup and contact information, and other public
   website content.
-- Lets a visitor enter trip details and request a rental. It displays an
-  estimate, while the API independently validates the inquiry and calculates
-  pricing from the configured database rates and discount rules.
+- Lets a visitor enter trip details, review a Reservation Recap, optionally
+  request an extra driver or child seat, and then send a rental inquiry. The API
+  independently validates the inquiry and calculates rental and add-on pricing
+  from the configured database rates, discount rules, and site-content fees.
 - Supports guest email verification and an optional verified Google sign-in
   for booking inquiries. An inquiry is a request, not a confirmed reservation;
   the team still needs to confirm availability.

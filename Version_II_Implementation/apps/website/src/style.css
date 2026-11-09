@@ -1077,6 +1077,68 @@ p {
   margin: 0;
 }
 
+.admin-fleet-count {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.admin-fleet-count > p {
+  margin: 0;
+}
+
+.admin-fleet-refresh {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--asphalt);
+  cursor: pointer;
+  transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease;
+}
+
+.admin-fleet-refresh svg,
+.admin-add-unit svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.admin-fleet-refresh:hover:not(:disabled) {
+  border-color: var(--signal);
+  background: #fff1f0;
+  color: var(--signal);
+}
+
+.admin-fleet-refresh:focus-visible,
+.admin-add-unit:focus-visible {
+  outline: 3px solid var(--route-blue);
+  outline-offset: 3px;
+}
+
+.admin-fleet-refresh:disabled {
+  cursor: wait;
+}
+
+.admin-fleet-refresh.is-refreshing svg {
+  animation: admin-fleet-refresh-spin 800ms linear infinite;
+}
+
+@keyframes admin-fleet-refresh-spin {
+  to { transform: rotate(360deg); }
+}
+
+.admin-add-unit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0.25rem 0 1.25rem;
+}
+
 .admin-field {
   display: grid;
   min-width: 0;
@@ -1205,6 +1267,10 @@ p {
   background: var(--paper);
 }
 
+.admin-fleet-row {
+  flex-wrap: wrap;
+}
+
 .admin-list-row > div:first-child {
   display: grid;
   gap: 0.2rem;
@@ -1284,6 +1350,48 @@ p {
 .admin-notice {
   border-left: 4px solid #287a3d;
   color: #205b31;
+}
+
+.admin-card.admin-inquiry-confirmed {
+  background: #dcebdd;
+}
+
+.admin-rejection-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0.9rem 1rem;
+  border-left: 4px solid var(--signal);
+  border-radius: 4px;
+  background: var(--paper);
+  color: var(--asphalt);
+}
+
+.admin-rejection-spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  flex: none;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  vertical-align: middle;
+  animation: admin-rejection-spin 0.75s linear infinite;
+}
+
+@keyframes admin-rejection-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-rejection-spinner {
+    animation: none;
+  }
+
+  .admin-fleet-refresh.is-refreshing svg {
+    animation: none;
+  }
 }
 
 .admin-error {
@@ -2012,9 +2120,36 @@ p {
   gap: 1rem;
 }
 
+.booking-submit .button[aria-busy="true"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+}
+
+.booking-submit-spinner {
+  width: 1em;
+  height: 1em;
+  flex: none;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: booking-submit-spin 0.75s linear infinite;
+}
+
+@keyframes booking-submit-spin {
+  to { transform: rotate(360deg); }
+}
+
 .booking-submit p {
   margin: 0;
   font-size: 0.82rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .booking-submit-spinner {
+    animation: none;
+  }
 }
 
 .booking-submit button:disabled,
