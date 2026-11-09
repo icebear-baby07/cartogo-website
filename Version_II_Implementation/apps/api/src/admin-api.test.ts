@@ -13,10 +13,8 @@ function createRepository(): AdminDataRepository {
     async listInquiries() { return []; },
     async listChatSessions() { return []; },
     async getAdminRole(email) { return { email, titles: ["Moderator"] }; },
-    async listAdminRoles(emails) { return emails.map((email) => ({ email, titles: ["Moderator"] })); },
     async hasPermission(_email, permission) { return ["fleet", "inquiries"].includes(permission); },
     async listOwnerEmails() { return ["owner@example.com"]; },
-    async setAdminTitles() { return null; },
     async saveApproval() {},
     async getApproval() { return null; },
     async incrementApprovalAttempts() { return 1; },
@@ -30,7 +28,6 @@ function createRepository(): AdminDataRepository {
     async getInquiry() { return null; },
     async markInquiryRejectionEmailSent() { return null; },
     async deleteInquiry(id) { return { id }; },
-    async removeAdminRole() {},
     async deleteChatSession(id) { return { id }; },
   };
 }
@@ -117,6 +114,37 @@ test("enforces role permissions for admin endpoints", async () => {
     assert.equal(response.status, 403);
     assert.deepEqual(await response.json(), {
       error: "Your administrator title does not allow this action.",
+    });
+  } finally {
+    await server.close();
+  }
+});
+
+test("does not expose the retired administrator-accounts panel endpoint", async () => {
+  const server = await createServer(createRepository());
+  try {
+    const response = await fetch(`${server.baseUrl}/roles`);
+    assert.equal(response.status, 404);
+  } finally {
+    await server.close();
+  }
+});
+
+test("rejects owner changes for retired administrator-account resources", async () => {
+  const server = await createServer(createRepository());
+  try {
+    const response = await fetch(`${server.baseUrl}/owner-change/request`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        resource: "admin_accounts",
+        action: "add",
+        data: { email: "new-admin@example.com" },
+      }),
+    });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+      error: "Choose a supported owner-approved change.",
     });
   } finally {
     await server.close();

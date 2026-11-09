@@ -245,9 +245,9 @@ ignored by Git, and must not be committed.
 Configure the API file (`apps/api/.env`) as needed:
 
 - `MONGODB_URI`: authorized non-production MongoDB connection string.
-- `MONGODB_DATABASE` and `MONGODB_SITE_DATABASE`, plus collection settings,
-  only if the approved database differs from the defaults in
-  `apps/api/.env.example`.
+- `MONGODB_SITE_DATABASE` and collection settings only if the approved
+  database differs from the defaults in `apps/api/.env.example`. The API uses
+  this database for site data and booking operations.
 - `SUPABASE_URL` and `SUPABASE_ANON_KEY` to match the browser's Supabase
   project when authentication is required.
 - `SUPABASE_SERVICE_ROLE_KEY` and `CARTOGO_INITIAL_OWNER_EMAIL` only for

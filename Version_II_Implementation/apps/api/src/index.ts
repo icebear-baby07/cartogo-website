@@ -54,9 +54,6 @@ app.use(express.json({ limit: "16kb" }));
 app.use("/api/admin", createRequireAdmin(supabaseAuthConfig));
 app.use("/api", createAuthRouter(supabaseAuthConfig));
 app.use("/api/admin", createAdminRouter(getAdminDataRepository, {
-  ...supabaseAuthConfig,
-  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-  initialOwnerEmail: process.env.CARTOGO_INITIAL_OWNER_EMAIL || "remuelfernan07@gmail.com",
   smtpUser: process.env.SMTP_USER,
   smtpPassword: process.env.SMTP_APP_PASSWORD,
   smtpHost: process.env.SMTP_HOST,

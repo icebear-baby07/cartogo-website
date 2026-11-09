@@ -29,7 +29,7 @@ AWS_REGION = (
 )
 MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "global.amazon.nova-2-lite-v1:0")
 MONGODB_URI = os.environ.get("MONGODB_URI", "").strip()
-MONGODB_DATABASE = os.environ.get("MONGODB_DATABASE", "cartogo")
+MONGODB_DATABASE = os.environ.get("MONGODB_DATABASE", "Site")
 MONGODB_COLLECTION = os.environ.get("MONGODB_COLLECTION", "chat_logs")
 MONGODB_UNITS_DATABASE = os.environ.get("MONGODB_UNITS_DATABASE", "Site")
 MONGODB_UNITS_COLLECTION = os.environ.get("MONGODB_UNITS_COLLECTION", "vehicles")

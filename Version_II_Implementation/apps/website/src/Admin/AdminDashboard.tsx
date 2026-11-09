@@ -4,7 +4,7 @@ import defaultSiteContent from "./site-content-defaults.json";
 
 type AdminProfile = { email: string; titles: string[] };
 type DataRecord = Record<string, unknown>;
-type DashboardTab = "inquiries" | "fleet" | "assets" | "content" | "chat" | "roles";
+type DashboardTab = "inquiries" | "fleet" | "assets" | "content" | "chat" | "analytics";
 type OwnerChange = {
   resource: string;
   action: string;
@@ -22,12 +22,12 @@ const tabs: { id: DashboardTab; label: string; permission: string }[] = [
   { id: "assets", label: "Site assets", permission: "site_assets" },
   { id: "content", label: "Site content", permission: "site_content" },
   { id: "chat", label: "Chat monitor", permission: "chat" },
-  { id: "roles", label: "Admin accounts", permission: "admin_accounts" },
+  { id: "analytics", label: "Analytics", permission: "analytics" },
 ];
 
 const permissionsByTitle: Record<string, string[]> = {
-  Owner: ["inquiries", "fleet", "site_assets", "site_content", "chat", "admin_accounts"],
-  Moderator: ["inquiries", "fleet", "site_assets", "site_content", "chat"],
+  Owner: ["inquiries", "fleet", "site_assets", "site_content", "chat", "analytics"],
+  Moderator: ["inquiries", "fleet", "site_assets", "site_content", "chat", "analytics"],
 };
 
 function isRecord(value: unknown): value is DataRecord {
@@ -179,9 +179,9 @@ export default function AdminDashboard({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [approval, setApproval] = useState<ApprovalChallenge | null>(null);
-  const [approvalCode, setApprovalCode] = useState("");
-  const [approvalPending, setApprovalPending] = useState(false);
+  const [approvals, setApprovals] = useState<Partial<Record<DashboardTab, ApprovalChallenge>>>({});
+  const [approvalCodes, setApprovalCodes] = useState<Partial<Record<DashboardTab, string>>>({});
+  const [approvalPendingByTab, setApprovalPendingByTab] = useState<Partial<Record<DashboardTab, boolean>>>({});
   const [ownerChangePending, setOwnerChangePending] = useState(false);
   const [editor, setEditor] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -189,7 +189,7 @@ export default function AdminDashboard({
   const [rejection, setRejection] = useState<{ id: number; reason: string } | null>(null);
   const [rejectionPendingId, setRejectionPendingId] = useState<number | null>(null);
   const [scrollToEditor, setScrollToEditor] = useState(false);
-  const [scrollToApproval, setScrollToApproval] = useState(false);
+  const [scrollToApprovalTab, setScrollToApprovalTab] = useState<DashboardTab | null>(null);
   const loadSequence = useRef(0);
   const initialTab = useRef(tab);
   const recordEditorRef = useRef<HTMLFormElement>(null);
@@ -200,6 +200,9 @@ export default function AdminDashboard({
     [profile],
   );
   const visibleTabs = tabs.filter((item) => allowedPermissions.has(item.permission));
+  const approval = approvals[tab] ?? null;
+  const approvalCode = approvalCodes[tab] ?? "";
+  const approvalPending = approvalPendingByTab[tab] ?? false;
 
   useEffect(() => {
     if (!scrollToEditor || !editor || (tab !== "fleet" && tab !== "assets")) return;
@@ -211,13 +214,13 @@ export default function AdminDashboard({
   }, [editor, scrollToEditor, tab]);
 
   useEffect(() => {
-    if (!scrollToApproval || !approval) return;
+    if (scrollToApprovalTab !== tab || !approval) return;
     approvalFormRef.current?.scrollIntoView({
       behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
       block: "start",
     });
-    setScrollToApproval(false);
-  }, [approval, scrollToApproval]);
+    setScrollToApprovalTab(null);
+  }, [approval, scrollToApprovalTab, tab]);
 
   const loadTab = useCallback(async (selected: DashboardTab) => {
     const requestId = ++loadSequence.current;
@@ -234,8 +237,12 @@ export default function AdminDashboard({
         assets: "/api/admin/site-assets",
         content: "/api/admin/site-content",
         chat: "/api/admin/chat-sessions",
-        roles: "/api/admin/roles",
+        analytics: "",
       };
+      if (selected === "analytics") {
+        if (requestId === loadSequence.current) setData([]);
+        return;
+      }
       const result = await adminRequest(path[selected]);
       if (requestId === loadSequence.current) setData(result);
     } catch (loadError) {
@@ -278,6 +285,7 @@ export default function AdminDashboard({
 
   async function requestOwnerChange(change: OwnerChange) {
     if (ownerChangePending) return;
+    const requestTab = tab;
     setOwnerChangePending(true);
     setError("");
     setNotice("");
@@ -289,13 +297,13 @@ export default function AdminDashboard({
       if (!isRecord(result) || typeof result.challengeId !== "string" || typeof result.ownerEmail !== "string") {
         throw new Error("The API returned an invalid owner-approval response.");
       }
-      setApproval({
+      setApprovals((current) => ({ ...current, [requestTab]: {
         challengeId: result.challengeId,
         ownerEmail: result.ownerEmail,
         expiresIn: typeof result.expiresIn === "number" ? result.expiresIn : 300,
-      });
-      setApprovalCode("");
-      setScrollToApproval(true);
+      } }));
+      setApprovalCodes((current) => ({ ...current, [requestTab]: "" }));
+      setScrollToApprovalTab(requestTab);
       setNotice(`Approval PIN sent to ${result.ownerEmail}.`);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Could not request owner approval.");
@@ -306,22 +314,31 @@ export default function AdminDashboard({
 
   async function approveChange(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!approval) return;
-    setApprovalPending(true);
+    const approvalForTab = approvals[tab];
+    if (!approvalForTab) return;
+    setApprovalPendingByTab((current) => ({ ...current, [tab]: true }));
     setError("");
     try {
       await adminRequest("/api/admin/owner-change/approve", {
         method: "POST",
-        body: JSON.stringify({ challengeId: approval.challengeId, code: approvalCode }),
+        body: JSON.stringify({ challengeId: approvalForTab.challengeId, code: approvalCodes[tab] ?? "" }),
       });
-      setApproval(null);
-      setApprovalCode("");
+      setApprovals((current) => {
+        const next = { ...current };
+        delete next[tab];
+        return next;
+      });
+      setApprovalCodes((current) => {
+        const next = { ...current };
+        delete next[tab];
+        return next;
+      });
       await loadTab(tab);
       setNotice("The approved change was applied.");
     } catch (approvalError) {
       setError(approvalError instanceof Error ? approvalError.message : "Could not approve this change.");
     } finally {
-      setApprovalPending(false);
+      setApprovalPendingByTab((current) => ({ ...current, [tab]: false }));
     }
   }
 
@@ -372,14 +389,6 @@ export default function AdminDashboard({
     } catch (parseError) {
       setError(parseError instanceof Error ? parseError.message : "Could not prepare this change.");
     }
-  }
-
-  async function roleChange(emailToChange: string, action: string, titles?: string[]) {
-    await requestOwnerChange({
-      resource: action === "update" ? "admin_roles" : "admin_accounts",
-      action,
-      data: action === "update" ? { email: emailToChange, titles: titles ?? [] } : { email: emailToChange },
-    });
   }
 
   async function submitContentChange(event: FormEvent<HTMLFormElement>) {
@@ -674,7 +683,23 @@ export default function AdminDashboard({
     const sessions = records(data);
     return (
       <>
-        <div className="admin-toolbar"><p>{sessions.length} chat sessions</p><button className="button button-ghost" type="button" onClick={() => void refresh()}>Refresh</button></div>
+        <div className="admin-toolbar admin-fleet-toolbar">
+          <div className="admin-fleet-count">
+            <p>{sessions.length} chat sessions</p>
+            <button
+              className={`admin-fleet-refresh${loading ? " is-refreshing" : ""}`}
+              type="button"
+              aria-label="Refresh chat sessions"
+              title="Refresh chat sessions"
+              disabled={loading}
+              onClick={() => void refresh()}
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M20 7v5h-5M4 17v-5h5m-4.1-3A7.5 7.5 0 0 1 17.6 6L20 12M4 12l2.4 6a7.5 7.5 0 0 0 12.7-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
+        </div>
         {sessions.length ? sessions.map((session, index) => (
           <article className="admin-list-row" key={text(session.id, String(index))}>
             <div>
@@ -702,48 +727,13 @@ export default function AdminDashboard({
     );
   }
 
-  function renderRoles() {
-    const roles = records(data);
+  function renderAnalytics() {
     return (
-      <>
-        <form className="admin-card admin-add-account" onSubmit={(event) => {
-          event.preventDefault();
-          const form = event.currentTarget;
-          const emailInput = new FormData(form).get("adminEmail");
-          if (typeof emailInput === "string") {
-            void roleChange(emailInput, "add");
-            form.reset();
-          }
-        }}>
-          <h2>Add administrator</h2>
-          <p>Owner approval is required. The account must also be on the Supabase administrator allowlist.</p>
-          <div className="admin-toolbar">
-            <label className="admin-field">Google account email<input name="adminEmail" type="email" required maxLength={254} /></label>
-            <button className="button button-primary" type="submit">Request account access</button>
-          </div>
-        </form>
-        {roles.map((role, index) => {
-          const roleEmail = text(role.email);
-          const titles = Array.isArray(role.titles)
-            ? role.titles.filter((title): title is string => typeof title === "string")
-            : [];
-          return (
-            <article className="admin-list-row" key={roleEmail || String(index)}>
-              <div><strong>{roleEmail}</strong><span>{titles.join(", ") || "No title assigned"}</span></div>
-              <div className="admin-actions">
-                <label className="admin-field admin-title-select">Title
-                  <select value={titles.includes("Owner") ? "Owner" : "Moderator"} onChange={(event) => void roleChange(roleEmail, "update", [event.target.value])}>
-                    <option value="Moderator">Moderator</option><option value="Owner">Owner</option>
-                  </select>
-                </label>
-                <button className="button button-danger" type="button" onClick={() => {
-                  if (window.confirm(`Remove administrator access for ${roleEmail}?`)) void roleChange(roleEmail, "remove");
-                }}>Remove</button>
-              </div>
-            </article>
-          );
-        })}
-      </>
+      <section className="admin-card admin-maintenance" role="status">
+        <p className="eyebrow">Analytics</p>
+        <h2>Under maintenance</h2>
+        <p>Analytics is being prepared and will be available here in a future update.</p>
+      </section>
     );
   }
 
@@ -753,7 +743,7 @@ export default function AdminDashboard({
     assets: renderAssets,
     content: renderContent,
     chat: renderChat,
-    roles: renderRoles,
+    analytics: renderAnalytics,
   }[tab]();
   const activeTab = tabs.find((item) => item.id === tab);
 
@@ -792,8 +782,19 @@ export default function AdminDashboard({
         {approval ? (
           <form ref={approvalFormRef} className="admin-approval-card" onSubmit={(event) => void approveChange(event)}>
             <div><p className="eyebrow">Owner approval required</p><h2>Enter the six-digit PIN</h2><p>Sent to {approval.ownerEmail}. It expires in {Math.ceil(approval.expiresIn / 60)} minutes and can be used once.</p></div>
-            <label className="admin-field">Approval PIN<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required value={approvalCode} onChange={(event) => setApprovalCode(event.target.value.replace(/\D/g, "").slice(0, 6))} /></label>
-            <div className="admin-actions admin-approval-actions"><button className="button button-primary" type="submit" disabled={approvalPending}>{approvalPending ? "Applying…" : "Approve change"}</button><button className="button button-ghost" type="button" onClick={() => { setApproval(null); setApprovalCode(""); }}>Cancel</button></div>
+            <label className="admin-field">Approval PIN<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required value={approvalCode} onChange={(event) => setApprovalCodes((current) => ({ ...current, [tab]: event.target.value.replace(/\D/g, "").slice(0, 6) }))} /></label>
+            <div className="admin-actions admin-approval-actions"><button className="button button-primary" type="submit" disabled={approvalPending}>{approvalPending ? "Applying…" : "Approve change"}</button><button className="button button-ghost" type="button" disabled={approvalPending} onClick={() => {
+              setApprovals((current) => {
+                const next = { ...current };
+                delete next[tab];
+                return next;
+              });
+              setApprovalCodes((current) => {
+                const next = { ...current };
+                delete next[tab];
+                return next;
+              });
+            }}>Cancel</button></div>
           </form>
         ) : null}
         {loading ? <p className="admin-empty" role="status">Loading {activeTab?.label.toLowerCase()}…</p> : null}

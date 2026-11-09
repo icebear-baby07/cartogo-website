@@ -12,7 +12,6 @@ import type { BookingRepository, GuestChallenge } from "./booking.js";
 
 type MongoDatabases = {
   client: MongoClient;
-  bookingOperations: Db;
   site: Db;
 };
 
@@ -56,7 +55,6 @@ export async function getMongoDatabases(): Promise<MongoDatabases> {
   const connectedClient = await connectToMongo();
   return {
     client: connectedClient,
-    bookingOperations: connectedClient.db(process.env.MONGODB_DATABASE?.trim() || "cartogo"),
     site: connectedClient.db(process.env.MONGODB_SITE_DATABASE?.trim() || "Site"),
   };
 }
@@ -99,7 +97,7 @@ export async function getPublicDataRepository(): Promise<PublicDataRepository> {
 }
 
 export async function getBookingRepository(): Promise<BookingRepository> {
-  const { bookingOperations, site } = await getMongoDatabases();
+  const { site } = await getMongoDatabases();
   const units = site.collection<Document & { _id: number; id: number }>(
     process.env.MONGODB_UNITS_COLLECTION?.trim() || "vehicles",
   );
@@ -112,10 +110,10 @@ export async function getBookingRepository(): Promise<BookingRepository> {
   const sequences = site.collection<Document & { _id: string; value: number }>(
     process.env.MONGODB_SEQUENCES_COLLECTION?.trim() || "site_sequences",
   );
-  const challenges = bookingOperations.collection<Document & { _id: string }>(
+  const challenges = site.collection<Document & { _id: string }>(
     process.env.MONGODB_GUEST_CHALLENGES_COLLECTION?.trim() || "guest_email_challenges",
   );
-  const emailOutbox = bookingOperations.collection<Document & { _id: string }>(
+  const emailOutbox = site.collection<Document & { _id: string }>(
     process.env.MONGODB_EMAIL_OUTBOX_COLLECTION?.trim() || "email_outbox",
   );
 
@@ -366,7 +364,7 @@ export async function getAdminDataRepository(): Promise<AdminDataRepository> {
     const normalizedEmail = email.trim().toLowerCase();
     await Promise.all(
       Object.entries({
-        Owner: ["inquiries", "fleet", "site_assets", "site_content", "chat", "admin_accounts"],
+        Owner: ["inquiries", "fleet", "site_assets", "site_content", "chat"],
         Moderator: ["inquiries", "fleet", "site_assets", "site_content", "chat"],
       }).map(([title, permissions]) =>
         adminRoles.updateOne(
@@ -411,10 +409,6 @@ export async function getAdminDataRepository(): Promise<AdminDataRepository> {
       return chatSessions.find({}).project({ _id: 0 }).sort({ last_message_at: -1 }).toArray();
     },
     getAdminRole,
-    async listAdminRoles(emails) {
-      const roles = await Promise.all(emails.map(getAdminRole));
-      return roles.sort((left, right) => left.email.localeCompare(right.email));
-    },
     async hasPermission(email, permission) {
       const role = await getAdminRole(email);
       if (!role) return false;
@@ -431,23 +425,6 @@ export async function getAdminDataRepository(): Promise<AdminDataRepository> {
         .toArray();
       return records.map((record) => String(record.email ?? "").trim().toLowerCase()).filter(Boolean);
     },
-    async setAdminTitles(email, titles) {
-      const normalizedEmail = email.trim().toLowerCase();
-      const existing = await adminRoles.findOne({ _id: `account:${normalizedEmail}` });
-      if (!existing) throw new Error("That administrator account was not found.");
-      if (!titles.includes("Owner") && existing.titles?.includes("Owner")) {
-        const ownerCount = await adminRoles.countDocuments({
-          _id: { $regex: "^account:" },
-          titles: "Owner",
-        });
-        if (ownerCount <= 1) throw new Error("At least one Owner account must remain.");
-      }
-      await adminRoles.updateOne(
-        { _id: `account:${normalizedEmail}` },
-        { $set: { titles } },
-      );
-      return getAdminRole(normalizedEmail);
-    },
     async saveApproval(challenge) {
       await ownerApprovals.insertOne({ ...challenge, _id: challenge.id });
     },
@@ -456,9 +433,9 @@ export async function getAdminDataRepository(): Promise<AdminDataRepository> {
       if (!record) return null;
       const { _id, ...challenge } = record;
       const validResource = [
-        "unit", "site_assets", "site_content", "admin_accounts", "admin_roles", "chat_sessions",
+        "unit", "site_assets", "site_content", "chat_sessions",
       ].includes(String(challenge.resource));
-      const validAction = ["add", "update", "delete", "remove"].includes(String(challenge.action));
+      const validAction = ["add", "update", "delete"].includes(String(challenge.action));
       if (
         !validResource ||
         typeof challenge.requester_id !== "string" ||
@@ -625,9 +602,6 @@ export async function getAdminDataRepository(): Promise<AdminDataRepository> {
       const result = await inquiryCollection.deleteOne({ _id: id });
       if (!result.deletedCount) throw new Error("That inquiry no longer exists.");
       return { id };
-    },
-    async removeAdminRole(email) {
-      await adminRoles.deleteOne({ _id: `account:${email.trim().toLowerCase()}` });
     },
     async deleteChatSession(id) {
       const result = await chatSessions.deleteOne({ _id: id });

@@ -13,10 +13,8 @@ type ApprovalResource =
   | "unit"
   | "site_assets"
   | "site_content"
-  | "admin_accounts"
-  | "admin_roles"
   | "chat_sessions";
-type ChangeAction = "add" | "update" | "delete" | "remove";
+type ChangeAction = "add" | "update" | "delete";
 
 export type ApprovalChallenge = {
   id: string;
@@ -41,10 +39,8 @@ export type AdminDataRepository = {
   listInquiries(): Promise<unknown[]>;
   listChatSessions(): Promise<unknown[]>;
   getAdminRole(email: string): Promise<AdminRole | null>;
-  listAdminRoles(emails: string[]): Promise<AdminRole[]>;
   hasPermission(email: string, permission: string): Promise<boolean>;
   listOwnerEmails(): Promise<string[]>;
-  setAdminTitles(email: string, titles: string[]): Promise<unknown>;
   saveApproval(challenge: ApprovalChallenge): Promise<void>;
   getApproval(id: string): Promise<ApprovalChallenge | null>;
   incrementApprovalAttempts(id: string): Promise<number | null>;
@@ -58,15 +54,10 @@ export type AdminDataRepository = {
   getInquiry(id: number): Promise<Record<string, unknown> | null>;
   markInquiryRejectionEmailSent(id: number): Promise<unknown>;
   deleteInquiry(id: number): Promise<unknown>;
-  removeAdminRole(email: string): Promise<void>;
   deleteChatSession(id: string): Promise<unknown>;
 };
 
 type AdminApiConfig = {
-  supabaseUrl?: string;
-  supabaseAnonKey?: string;
-  supabaseServiceRoleKey?: string;
-  initialOwnerEmail?: string;
   smtpUser?: string;
   smtpPassword?: string;
   smtpHost?: string;
@@ -78,15 +69,12 @@ type AdminApiConfig = {
 type ResourcePermission = {
   resource: ApprovalResource;
   permission: string;
-  ownerOnly?: boolean;
 };
 
 const resourcePermissions: Record<string, ResourcePermission> = {
   unit: { resource: "unit", permission: "fleet" },
   site_assets: { resource: "site_assets", permission: "site_assets" },
   site_content: { resource: "site_content", permission: "site_content" },
-  admin_accounts: { resource: "admin_accounts", permission: "admin_accounts", ownerOnly: true },
-  admin_roles: { resource: "admin_roles", permission: "admin_accounts", ownerOnly: true },
   chat_sessions: { resource: "chat_sessions", permission: "chat" },
 };
 
@@ -140,15 +128,6 @@ function requireOwner(
       sendError(response, 503, "Administrator roles are unavailable.");
     });
   };
-}
-
-function normalizedEmail(value: unknown): string {
-  if (typeof value !== "string") throw new Error("Enter a valid administrator email.");
-  const email = value.trim().toLowerCase();
-  if (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-    throw new Error("Enter a valid administrator email.");
-  }
-  return email;
 }
 
 function normalizeUnitChange(action: unknown, data: unknown): [ChangeAction, Record<string, unknown>] {
@@ -312,23 +291,6 @@ function normalizeOwnerChange(body: unknown): {
     if (action !== "update") throw new Error("Choose valid site content changes.");
     return { resource: configuredResource, action, data: normalizeSiteContent(data) };
   }
-  if (configuredResource.resource === "admin_roles") {
-    if (action !== "update" || !isRecord(data) || !Array.isArray(data.titles) ||
-        !data.titles.length || data.titles.some((title) => title !== "Owner" && title !== "Moderator")) {
-      throw new Error("Choose a valid administrator-title change.");
-    }
-    return {
-      resource: configuredResource,
-      action,
-      data: { email: normalizedEmail(data.email), titles: [...new Set(data.titles)] },
-    };
-  }
-  if (configuredResource.resource === "admin_accounts") {
-    if ((action !== "add" && action !== "remove") || !isRecord(data)) {
-      throw new Error("Choose a valid administrator account change.");
-    }
-    return { resource: configuredResource, action, data: { email: normalizedEmail(data.email) } };
-  }
   if (configuredResource.resource === "chat_sessions") {
     if (action !== "delete" || !isRecord(data) || typeof data.id !== "string" ||
         !data.id || data.id.length > 200) {
@@ -365,82 +327,14 @@ async function sendMail(config: AdminApiConfig, to: string, subject: string, tex
   });
 }
 
-async function getAllowlistedAdminEmails(
-  config: AdminApiConfig,
-  request: Request,
-): Promise<string[]> {
-  const baseUrl = config.supabaseUrl?.trim().replace(/\/+$/, "");
-  const anonKey = config.supabaseAnonKey?.trim();
-  const token = request.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!baseUrl || !anonKey || !token) throw new Error("Supabase administrator list is unavailable.");
-  const response = await fetch(`${baseUrl}/rest/v1/rpc/get_cartogo_admin_emails`, {
-    method: "POST",
-    headers: {
-      apikey: anonKey,
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: "{}",
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!response.ok) throw new Error("Supabase administrator list is unavailable.");
-  const emails: unknown = await response.json();
-  if (!Array.isArray(emails) || emails.some((email) => typeof email !== "string")) {
-    throw new Error("Supabase returned an invalid administrator list.");
-  }
-  return [...new Set(emails.map((email) => email.trim().toLowerCase()))];
-}
-
-async function changeSupabaseAdminAccount(
-  config: AdminApiConfig,
-  action: ChangeAction,
-  email: string,
-): Promise<void> {
-  const baseUrl = config.supabaseUrl?.trim().replace(/\/+$/, "");
-  const serviceKey = config.supabaseServiceRoleKey?.trim();
-  if (!baseUrl || !serviceKey) throw new Error("Supabase admin-account management is not configured on the API.");
-  const rpc = action === "add" ? "add_cartogo_admin_email" : "remove_cartogo_admin_email";
-  const response = await fetch(`${baseUrl}/rest/v1/rpc/${rpc}`, {
-    method: "POST",
-    headers: {
-      apikey: serviceKey,
-      Authorization: `Bearer ${serviceKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ p_email: email }),
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!response.ok) throw new Error("Supabase could not apply the administrator-account change.");
-}
-
 async function applyApprovedChange(
   repository: AdminDataRepository,
-  config: AdminApiConfig,
   challenge: ApprovalChallenge,
 ): Promise<unknown> {
   const { resource, action, data } = challenge;
   if (resource === "unit") return repository.applyUnitChange(action, data);
   if (resource === "site_assets") return repository.applySiteAssetChange(action, data);
   if (resource === "site_content") return repository.updateSiteContent(data as Record<string, Record<string, unknown>>);
-  if (resource === "admin_roles") {
-    return repository.setAdminTitles(String(data.email), data.titles as string[]);
-  }
-  if (resource === "admin_accounts") {
-    const email = String(data.email);
-    const currentOwners = await repository.listOwnerEmails();
-    if (action === "remove" && currentOwners.length === 1 && currentOwners[0] === email) {
-      throw new Error("At least one Owner account must remain.");
-    }
-    await changeSupabaseAdminAccount(config, action, email);
-    if (action === "add") {
-      const titles = config.initialOwnerEmail?.trim().toLowerCase() === email ? ["Owner"] : ["Moderator"];
-      await repository.getAdminRole(email);
-      if (titles.includes("Owner")) await repository.setAdminTitles(email, titles);
-    } else {
-      await repository.removeAdminRole(email);
-    }
-    return { email };
-  }
   if (resource === "chat_sessions") {
     return repository.deleteChatSession(String(data.id));
   }
@@ -461,17 +355,6 @@ export function createAdminRouter(
     } catch (error) {
       console.error("Could not read administrator identity.", error instanceof Error ? error.name : "UnknownError");
       sendError(response, 503, "MongoDB administrator roles are unavailable.");
-    }
-  });
-
-  router.get("/roles", requireOwner(getRepository), async (request, response) => {
-    try {
-      const emails = await getAllowlistedAdminEmails(config, request);
-      const roles = await (await getRepository()).listAdminRoles(emails);
-      response.json(roles);
-    } catch (error) {
-      console.error("Could not read administrator roles.", error instanceof Error ? error.name : "UnknownError");
-      sendError(response, 503, "Administrator roles are unavailable.");
     }
   });
 
@@ -604,13 +487,6 @@ export function createAdminRouter(
     try {
       const admin = authenticatedAdmin(request);
       const repository = await getRepository();
-      if (change.resource.ownerOnly) {
-        const role = await repository.getAdminRole(admin.email);
-        if (!role?.titles.includes("Owner")) {
-          sendError(response, 403, "Only an Owner can manage administrator accounts and titles.");
-          return;
-        }
-      }
       if (!await repository.hasPermission(admin.email, change.resource.permission)) {
         sendError(response, 403, "Your administrator title does not allow this action.");
         return;
@@ -668,7 +544,7 @@ export function createAdminRouter(
         attempts: 0,
       };
       await repository.saveApproval(approval);
-      const operation = { add: "Add", update: "Update", delete: "Delete", remove: "Remove" }[change.action];
+      const operation = { add: "Add", update: "Update", delete: "Delete" }[change.action];
       const subjectResource = change.resource.resource.replaceAll("_", " ");
       try {
         for (const email of ownerEmails) {
@@ -745,7 +621,7 @@ export function createAdminRouter(
         sendError(response, 403, "That approval code has already been used.");
         return;
       }
-      const result = await applyApprovedChange(repository, config, challenge);
+      const result = await applyApprovedChange(repository, challenge);
       response.json({ data: result, resource: challenge.resource });
     } catch (error) {
       console.error("Owner-approved change failed.", error instanceof Error ? error.name : "UnknownError");
