@@ -101,7 +101,7 @@ export default function BookingForm({
   onGoogleAuthChange,
 }: BookingFormProps) {
   const [pickupDate, setPickupDate] = useState("");
-  const [pickupTime, setPickupTime] = useState("09:00");
+  const [pickupTime, setPickupTime] = useState("");
   const [requestedSeats, setRequestedSeats] = useState("");
   const [rateRegion, setRateRegion] = useState<"in" | "out" | "luzon" | "">("");
   const [rentalMode, setRentalMode] = useState<"hourly" | "custom_days">("hourly");
