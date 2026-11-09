@@ -171,6 +171,51 @@ test("accepts new fleet units without client-generated IDs", async () => {
   }
 });
 
+test("accepts Terms and Conditions in owner-approved site content", async () => {
+  const repository = createRepository();
+  repository.hasPermission = async (_email, permission) => permission === "site_content";
+  repository.getSiteContent = async () => ({
+    settings: {
+      companyName: "carTOGO.mnl",
+      tagline: "Rent. Drive. Go.",
+      currency: "₱",
+      depositPercent: 20,
+      extraDriverFee: 300,
+      childSeatFee: 150,
+      lateFeePerHour: 250,
+    },
+    labels: {
+      hero: { title: "Welcome", subtitle: "Reliable rentals." },
+      trustStrip: [],
+      howItWorks: [],
+      whyChooseUs: [],
+      about: { title: "About", body: "About carTOGO." },
+      faq: [],
+      testimonials: [],
+    },
+    discountRules: [],
+    socialLinks: [],
+  });
+  const server = await createServer(repository);
+  try {
+    const response = await fetch(`${server.baseUrl}/owner-change/request`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        resource: "site_content",
+        action: "update",
+        data: { labels: { termsAndConditions: "Updated rental terms." } },
+      }),
+    });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), {
+      error: "Configure SMTP credentials in apps/api/.env before requesting owner approval.",
+    });
+  } finally {
+    await server.close();
+  }
+});
+
 test("confirms an inquiry when the admin sends the confirmed status", async () => {
   const server = await createServer(createRepository());
   try {

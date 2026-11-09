@@ -264,8 +264,14 @@ function normalizeSiteContent(data: unknown): Record<string, unknown> {
   }
   if ("labels" in data) {
     if (!isRecord(data.labels) || !Object.keys(data.labels).length ||
-        Object.keys(data.labels).some((key) => !["hero", "trustStrip", "howItWorks", "whyChooseUs", "about", "faq", "testimonials"].includes(key))) {
+        Object.keys(data.labels).some((key) => !["termsAndConditions", "hero", "trustStrip", "howItWorks", "whyChooseUs", "about", "faq", "testimonials"].includes(key))) {
       throw new Error("Labels contain unsupported fields. Contact and pickup details are managed in site assets.");
+    }
+    if (
+      "termsAndConditions" in data.labels &&
+      (typeof data.labels.termsAndConditions !== "string" || data.labels.termsAndConditions.length > 50_000)
+    ) {
+      throw new Error("Terms and Conditions must be text no longer than 50,000 characters.");
     }
     update.labels = data.labels;
   }
@@ -634,8 +640,8 @@ export function createAdminRouter(
       const now = Date.now();
       const rateKey = ownerEmails.join(",");
       const lastRequest = lastApprovalRequest.get(rateKey) ?? 0;
-      if (now - lastRequest < 60_000) {
-        sendError(response, 429, "Wait one minute before requesting another owner approval PIN.");
+      if (now - lastRequest < 15_000) {
+        sendError(response, 429, "Wait 15 seconds before requesting another owner approval PIN.");
         return;
       }
       if (!config.smtpUser?.trim() || !config.smtpPassword?.trim()) {

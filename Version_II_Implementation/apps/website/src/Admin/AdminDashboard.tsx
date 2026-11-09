@@ -182,18 +182,42 @@ export default function AdminDashboard({
   const [approval, setApproval] = useState<ApprovalChallenge | null>(null);
   const [approvalCode, setApprovalCode] = useState("");
   const [approvalPending, setApprovalPending] = useState(false);
+  const [ownerChangePending, setOwnerChangePending] = useState(false);
   const [editor, setEditor] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [filter, setFilter] = useState("all");
   const [rejection, setRejection] = useState<{ id: number; reason: string } | null>(null);
   const [rejectionPendingId, setRejectionPendingId] = useState<number | null>(null);
+  const [scrollToEditor, setScrollToEditor] = useState(false);
+  const [scrollToApproval, setScrollToApproval] = useState(false);
   const loadSequence = useRef(0);
+  const initialTab = useRef(tab);
+  const recordEditorRef = useRef<HTMLFormElement>(null);
+  const approvalFormRef = useRef<HTMLFormElement>(null);
 
   const allowedPermissions = useMemo(
     () => new Set((profile?.titles ?? []).flatMap((title) => permissionsByTitle[title] ?? [])),
     [profile],
   );
   const visibleTabs = tabs.filter((item) => allowedPermissions.has(item.permission));
+
+  useEffect(() => {
+    if (!scrollToEditor || !editor || (tab !== "fleet" && tab !== "assets")) return;
+    recordEditorRef.current?.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      block: "start",
+    });
+    setScrollToEditor(false);
+  }, [editor, scrollToEditor, tab]);
+
+  useEffect(() => {
+    if (!scrollToApproval || !approval) return;
+    approvalFormRef.current?.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      block: "start",
+    });
+    setScrollToApproval(false);
+  }, [approval, scrollToApproval]);
 
   const loadTab = useCallback(async (selected: DashboardTab) => {
     const requestId = ++loadSequence.current;
@@ -242,7 +266,7 @@ export default function AdminDashboard({
       .catch((profileError: unknown) => {
         if (active) setError(profileError instanceof Error ? profileError.message : "Could not load admin access.");
       });
-    void loadTab("inquiries");
+    void loadTab(initialTab.current);
     return () => {
       active = false;
     };
@@ -253,6 +277,8 @@ export default function AdminDashboard({
   }
 
   async function requestOwnerChange(change: OwnerChange) {
+    if (ownerChangePending) return;
+    setOwnerChangePending(true);
     setError("");
     setNotice("");
     try {
@@ -269,9 +295,12 @@ export default function AdminDashboard({
         expiresIn: typeof result.expiresIn === "number" ? result.expiresIn : 300,
       });
       setApprovalCode("");
+      setScrollToApproval(true);
       setNotice(`Approval PIN sent to ${result.ownerEmail}.`);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Could not request owner approval.");
+    } finally {
+      setOwnerChangePending(false);
     }
   }
 
@@ -360,12 +389,25 @@ export default function AdminDashboard({
       if (!isRecord(value.settings) || !isRecord(value.labels)) {
         throw new Error("Site content must include settings and labels objects.");
       }
+      const editableLabelFields = [
+        "termsAndConditions",
+        "hero",
+        "trustStrip",
+        "howItWorks",
+        "whyChooseUs",
+        "about",
+        "faq",
+        "testimonials",
+      ];
+      const labels = Object.fromEntries(
+        Object.entries(value.labels).filter(([key]) => editableLabelFields.includes(key)),
+      );
       await requestOwnerChange({
         resource: "site_content",
         action: "update",
         data: {
           settings: value.settings,
-          labels: value.labels,
+          labels,
           discountRules: value.discountRules,
           socialLinks: value.socialLinks,
         },
@@ -504,25 +546,32 @@ export default function AdminDashboard({
           <article className="admin-list-row admin-fleet-row" key={String(unit.id ?? index)}>
             <div><strong>{text(unit.display_name)}</strong><span>#{text(unit.id)} · {text(unit.status)} · {text(unit.capacity)} seats</span><span>{text(unit.brand)} {text(unit.model)}</span></div>
             <div className="admin-actions">
-              <button className="button button-ghost" type="button" onClick={() => beginEdit(unit)}>Edit</button>
-              <button className="button button-danger" type="button" onClick={() => {
+              <button className="button button-ghost" type="button" onClick={() => {
+                beginEdit(unit);
+                setScrollToEditor(true);
+              }}>Edit</button>
+              <button className="button button-danger" type="button" disabled={ownerChangePending} aria-busy={ownerChangePending} onClick={() => {
                 if (window.confirm(`Delete ${text(unit.display_name)} from the fleet?`)) {
                   void requestOwnerChange({ resource: "unit", action: "delete", data: { id: unit.id, display_name: unit.display_name } });
                 }
-              }}>Delete</button>
+              }}>{ownerChangePending && <span className="admin-request-spinner" aria-hidden="true" />}{ownerChangePending ? "Requesting approval…" : "Delete"}</button>
             </div>
           </article>
         ))}
-        <button className="button button-ghost admin-add-unit" type="button" onClick={() => { setEditingId(null); setEditor(pretty(emptyUnit)); }}>
+        <button className="button button-ghost admin-add-unit" type="button" onClick={() => {
+          setEditingId(null);
+          setEditor(pretty(emptyUnit));
+          setScrollToEditor(true);
+        }}>
           <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v14M3 10h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
           <span>Add unit</span>
         </button>
         {editor ? (
-          <form className="admin-card admin-json-editor" onSubmit={(event) => void submitJsonChange(event, "unit", editingId === null ? "add" : "update", true)}>
+          <form ref={recordEditorRef} className="admin-card admin-json-editor" onSubmit={(event) => void submitJsonChange(event, "unit", editingId === null ? "add" : "update", true)}>
             <h2>{editingId === null ? "Add fleet unit" : `Edit fleet unit #${editingId}`}</h2>
             <p>Enter the complete unit record as JSON. New unit IDs are assigned by the API.</p>
             <label className="admin-field">Unit data<textarea value={editor} onChange={(event) => setEditor(event.target.value)} rows={13} spellCheck={false} /></label>
-            <div className="admin-actions"><button className="button button-primary" type="submit">Request owner approval</button><button className="button button-ghost" type="button" onClick={() => { setEditor(""); setEditingId(null); }}>Cancel</button></div>
+            <div className="admin-actions"><button className="button button-primary" type="submit" disabled={ownerChangePending} aria-busy={ownerChangePending}>{ownerChangePending && <span className="admin-request-spinner" aria-hidden="true" />}{ownerChangePending ? "Requesting approval…" : "Request owner approval"}</button><button className="button button-ghost" type="button" disabled={ownerChangePending} onClick={() => { setEditor(""); setEditingId(null); }}>Cancel</button></div>
           </form>
         ) : null}
       </>
@@ -538,26 +587,53 @@ export default function AdminDashboard({
     };
     return (
       <>
-        <div className="admin-toolbar"><p>{assets.length} site assets</p><button className="button button-ghost" type="button" onClick={() => { setEditingId(null); setEditor(pretty(emptyAsset)); }}>Add pickup location</button><button className="button button-ghost" type="button" onClick={() => void refresh()}>Refresh</button></div>
+        <div className="admin-toolbar admin-fleet-toolbar">
+          <div className="admin-fleet-count">
+            <p>{assets.length} site assets</p>
+            <button
+              className={`admin-fleet-refresh${loading ? " is-refreshing" : ""}`}
+              type="button"
+              aria-label="Refresh site assets"
+              title="Refresh site assets"
+              disabled={loading}
+              onClick={() => void refresh()}
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M20 7v5h-5M4 17v-5h5m-4.1-3A7.5 7.5 0 0 1 17.6 6L20 12M4 12l2.4 6a7.5 7.5 0 0 0 12.7-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
+        </div>
         {assets.map((asset, index) => (
           <article className="admin-list-row" key={String(asset.id ?? index)}>
             <div><strong>{text(asset.display_name)}</strong><span>#{text(asset.id)} · {text(asset.asset_type)} · {text(asset.status)}</span><span>{text(asset.description)}</span></div>
             <div className="admin-actions">
-              <button className="button button-ghost" type="button" onClick={() => beginEdit(asset)}>Edit</button>
-              {asset.asset_type === "location" ? <button className="button button-danger" type="button" onClick={() => {
+              <button className="button button-ghost" type="button" onClick={() => {
+                beginEdit(asset);
+                setScrollToEditor(true);
+              }}>Edit</button>
+              {asset.asset_type === "location" ? <button className="button button-danger" type="button" disabled={ownerChangePending} aria-busy={ownerChangePending} onClick={() => {
                 if (window.confirm(`Delete pickup location ${text(asset.display_name)}?`)) {
                   void requestOwnerChange({ resource: "site_assets", action: "delete", data: { id: asset.id, asset_type: "location" } });
                 }
-              }}>Delete</button> : null}
+              }}>{ownerChangePending && <span className="admin-request-spinner" aria-hidden="true" />}{ownerChangePending ? "Requesting approval…" : "Delete"}</button> : null}
             </div>
           </article>
         ))}
+        <button className="button button-ghost admin-add-asset" type="button" onClick={() => {
+          setEditingId(null);
+          setEditor(pretty(emptyAsset));
+          setScrollToEditor(true);
+        }}>
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v14M3 10h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+          <span>Add pickup location</span>
+        </button>
         {editor ? (
-          <form className="admin-card admin-json-editor" onSubmit={(event) => void submitJsonChange(event, "site_assets", editingId === null ? "add" : "update", true)}>
+          <form ref={recordEditorRef} className="admin-card admin-json-editor" onSubmit={(event) => void submitJsonChange(event, "site_assets", editingId === null ? "add" : "update", true)}>
             <h2>{editingId === null ? "Add pickup location" : `Edit site asset #${editingId}`}</h2>
             <p>Enter the pickup location coordinates as latitude and longitude; there is no default location. After owner approval, the record is saved in MongoDB&apos;s <code>site_assets</code> collection and used by the public map. The live-agent contact can be edited but not added or deleted here.</p>
             <label className="admin-field">Asset data<textarea value={editor} onChange={(event) => setEditor(event.target.value)} rows={12} spellCheck={false} /></label>
-            <div className="admin-actions"><button className="button button-primary" type="submit">Request owner approval</button><button className="button button-ghost" type="button" onClick={() => { setEditor(""); setEditingId(null); }}>Cancel</button></div>
+            <div className="admin-actions"><button className="button button-primary" type="submit" disabled={ownerChangePending} aria-busy={ownerChangePending}>{ownerChangePending && <span className="admin-request-spinner" aria-hidden="true" />}{ownerChangePending ? "Requesting approval…" : "Request owner approval"}</button><button className="button button-ghost" type="button" disabled={ownerChangePending} onClick={() => { setEditor(""); setEditingId(null); }}>Cancel</button></div>
           </form>
         ) : null}
       </>
@@ -569,14 +645,14 @@ export default function AdminDashboard({
       <>
         <form className="admin-card admin-json-editor" onSubmit={(event) => void submitContentChange(event)}>
           <h2>Edit public site content</h2>
-          <p>Preserve the complete settings and labels structure. Only these fields are submitted for owner approval.</p>
+          <p>Preserve the complete settings and labels structure. Contact and pickup fields are managed in Site assets; legacy unmanaged labels are left unchanged.</p>
           <label className="admin-field">Site content JSON<textarea value={editor || pretty(data)} onChange={(event) => setEditor(event.target.value)} rows={25} spellCheck={false} /></label>
-          <div className="admin-actions"><button className="button button-primary" type="submit">Request owner approval</button><button className="button button-ghost" type="button" onClick={() => setEditor(pretty(data))}>Reset editor</button></div>
+          <div className="admin-actions"><button className="button button-primary" type="submit" disabled={ownerChangePending} aria-busy={ownerChangePending}>{ownerChangePending && <span className="admin-request-spinner" aria-hidden="true" />}{ownerChangePending ? "Requesting approval…" : "Request owner approval"}</button><button className="button button-ghost" type="button" disabled={ownerChangePending} onClick={() => setEditor(pretty(data))}>Reset editor</button></div>
         </form>
         <section className="admin-card">
           <h2>Reset public site content</h2>
           <p>This restores public settings and page copy. Fleet, site assets, inquiries, chat sessions, and administrator access are unchanged. Owner approval is required.</p>
-          <button className="button button-danger" type="button" onClick={() => {
+          <button className="button button-danger" type="button" disabled={ownerChangePending} aria-busy={ownerChangePending} onClick={() => {
             if (!window.confirm("Reset public settings and page copy to defaults? Fleet, site assets, booking inquiries, and chat sessions will remain unchanged.")) return;
             void requestOwnerChange({
               resource: "site_content",
@@ -588,7 +664,7 @@ export default function AdminDashboard({
                 socialLinks: defaultSiteContent.socialLinks,
               },
             });
-          }}>Request reset to defaults</button>
+          }}>{ownerChangePending && <span className="admin-request-spinner" aria-hidden="true" />}{ownerChangePending ? "Requesting approval…" : "Request reset to defaults"}</button>
         </section>
       </>
     );
@@ -615,11 +691,11 @@ export default function AdminDashboard({
                 </details>
               ) : null}
             </div>
-            <button className="button button-danger" type="button" onClick={() => {
+            <button className="button button-danger" type="button" disabled={ownerChangePending} aria-busy={ownerChangePending} onClick={() => {
               if (window.confirm("Delete this chat session?")) {
                 void requestOwnerChange({ resource: "chat_sessions", action: "delete", data: { id: session.id } });
               }
-            }}>Delete</button>
+            }}>{ownerChangePending && <span className="admin-request-spinner" aria-hidden="true" />}{ownerChangePending ? "Requesting approval…" : "Delete"}</button>
           </article>
         )) : <p className="admin-empty">No chat sessions found.</p>}
       </>
@@ -714,10 +790,10 @@ export default function AdminDashboard({
         {notice ? <p className="admin-notice" role="status">{notice}</p> : null}
         {error ? <p className="admin-error" role="alert">{error}</p> : null}
         {approval ? (
-          <form className="admin-approval-card" onSubmit={(event) => void approveChange(event)}>
+          <form ref={approvalFormRef} className="admin-approval-card" onSubmit={(event) => void approveChange(event)}>
             <div><p className="eyebrow">Owner approval required</p><h2>Enter the six-digit PIN</h2><p>Sent to {approval.ownerEmail}. It expires in {Math.ceil(approval.expiresIn / 60)} minutes and can be used once.</p></div>
             <label className="admin-field">Approval PIN<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required value={approvalCode} onChange={(event) => setApprovalCode(event.target.value.replace(/\D/g, "").slice(0, 6))} /></label>
-            <div className="admin-actions"><button className="button button-primary" type="submit" disabled={approvalPending}>{approvalPending ? "Applying…" : "Approve change"}</button><button className="button button-ghost" type="button" onClick={() => { setApproval(null); setApprovalCode(""); }}>Cancel</button></div>
+            <div className="admin-actions admin-approval-actions"><button className="button button-primary" type="submit" disabled={approvalPending}>{approvalPending ? "Applying…" : "Approve change"}</button><button className="button button-ghost" type="button" onClick={() => { setApproval(null); setApprovalCode(""); }}>Cancel</button></div>
           </form>
         ) : null}
         {loading ? <p className="admin-empty" role="status">Loading {activeTab?.label.toLowerCase()}…</p> : null}

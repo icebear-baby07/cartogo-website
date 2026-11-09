@@ -1103,7 +1103,8 @@ p {
 }
 
 .admin-fleet-refresh svg,
-.admin-add-unit svg {
+.admin-add-unit svg,
+.admin-add-asset svg {
   width: 1.1rem;
   height: 1.1rem;
 }
@@ -1115,7 +1116,8 @@ p {
 }
 
 .admin-fleet-refresh:focus-visible,
-.admin-add-unit:focus-visible {
+.admin-add-unit:focus-visible,
+.admin-add-asset:focus-visible {
   outline: 3px solid var(--route-blue);
   outline-offset: 3px;
 }
@@ -1132,7 +1134,8 @@ p {
   to { transform: rotate(360deg); }
 }
 
-.admin-add-unit {
+.admin-add-unit,
+.admin-add-asset {
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
@@ -1324,7 +1327,7 @@ p {
 
 .admin-approval-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(150px, 220px);
+  grid-template-columns: minmax(0, 1fr) max-content;
   align-items: end;
   gap: 0.75rem 1rem;
   border-color: #d3a547;
@@ -1336,7 +1339,17 @@ p {
 }
 
 .admin-approval-card .admin-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.55rem;
   margin: 0;
+}
+
+.admin-approval-actions .button {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .admin-notice,
@@ -1380,12 +1393,35 @@ p {
   animation: admin-rejection-spin 0.75s linear infinite;
 }
 
+.admin-request-spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  flex: none;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  vertical-align: middle;
+  animation: admin-rejection-spin 0.75s linear infinite;
+}
+
+.admin-actions .button[aria-busy="true"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+}
+
 @keyframes admin-rejection-spin {
   to { transform: rotate(360deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .admin-rejection-spinner {
+    animation: none;
+  }
+
+  .admin-request-spinner {
     animation: none;
   }
 
@@ -1617,7 +1653,7 @@ p {
 
 .chatbot-widget {
   position: fixed;
-  z-index: 1000;
+  z-index: 1202;
   right: max(1.25rem, env(safe-area-inset-right));
   bottom: max(1.25rem, env(safe-area-inset-bottom));
   color: #242323;
