@@ -198,8 +198,9 @@ MongoDB for bot identity, company knowledge, and chat logs.
 ## Section 2 — MongoDB connection
 
 - The API loads `apps/api/.env` and requires the server-only `MONGODB_URI`.
-- API application data, including booking verification challenges and the
-  email outbox, uses `MONGODB_SITE_DATABASE`, which defaults to `Site`.
+- API site data, booking verification challenges, and the email outbox use
+  `MONGODB_SITE_DATABASE`, which defaults to `Site`. Booking inquiries use
+  `MONGODB_INQUIRIES_DATABASE`, which defaults to `Sessions`.
 - `/api/health/ready` pings MongoDB and reports readiness without exposing
   connection details. The starter UI shows MongoDB connection status.
 - The API remains available for liveness checks when MongoDB is not configured

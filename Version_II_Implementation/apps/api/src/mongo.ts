@@ -13,6 +13,7 @@ import type { BookingRepository, GuestChallenge } from "./booking.js";
 type MongoDatabases = {
   client: MongoClient;
   site: Db;
+  inquiries: Db;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -56,6 +57,7 @@ export async function getMongoDatabases(): Promise<MongoDatabases> {
   return {
     client: connectedClient,
     site: connectedClient.db(process.env.MONGODB_SITE_DATABASE?.trim() || "Site"),
+    inquiries: connectedClient.db(process.env.MONGODB_INQUIRIES_DATABASE?.trim() || "Sessions"),
   };
 }
 
@@ -97,17 +99,17 @@ export async function getPublicDataRepository(): Promise<PublicDataRepository> {
 }
 
 export async function getBookingRepository(): Promise<BookingRepository> {
-  const { site } = await getMongoDatabases();
+  const { site, inquiries } = await getMongoDatabases();
   const units = site.collection<Document & { _id: number; id: number }>(
     process.env.MONGODB_UNITS_COLLECTION?.trim() || "vehicles",
   );
   const content = site.collection<Document & { _id: string }>(
     process.env.MONGODB_SITE_CONTENT_COLLECTION?.trim() || "site_content",
   );
-  const inquiryCollection = site.collection<Document & { _id: number; id: number }>(
+  const inquiryCollection = inquiries.collection<Document & { _id: number; id: number }>(
     process.env.MONGODB_INQUIRIES_COLLECTION?.trim() || "inquiries",
   );
-  const sequences = site.collection<Document & { _id: string; value: number }>(
+  const sequences = inquiries.collection<Document & { _id: string; value: number }>(
     process.env.MONGODB_SEQUENCES_COLLECTION?.trim() || "site_sequences",
   );
   const challenges = site.collection<Document & { _id: string }>(
@@ -315,7 +317,7 @@ export async function getBookingRepository(): Promise<BookingRepository> {
 }
 
 export async function getAdminDataRepository(): Promise<AdminDataRepository> {
-  const { site } = await getMongoDatabases();
+  const { site, inquiries } = await getMongoDatabases();
   const units = site.collection<Document & { _id: number; id: number }>(
     process.env.MONGODB_UNITS_COLLECTION?.trim() || "vehicles",
   );
@@ -325,7 +327,7 @@ export async function getAdminDataRepository(): Promise<AdminDataRepository> {
   const siteContent = site.collection<Document & { _id: string }>(
     process.env.MONGODB_SITE_CONTENT_COLLECTION?.trim() || "site_content",
   );
-  const inquiryCollection = site.collection<Document & { _id: number }>(
+  const inquiryCollection = inquiries.collection<Document & { _id: number }>(
     process.env.MONGODB_INQUIRIES_COLLECTION?.trim() || "inquiries",
   );
   const sequences = site.collection<Document & { _id: string; value: number }>(

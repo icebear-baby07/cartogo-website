@@ -559,8 +559,8 @@
 
 .booking-period-option.is-selected {
   border-color: var(--signal);
-  background: #fff0ed;
-  color: var(--signal-deep);
+  background: var(--signal);
+  color: var(--paper);
 }
 
 .booking-rental-range {
