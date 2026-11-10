@@ -249,6 +249,9 @@ Configure the API file (`apps/api/.env`) as needed:
   settings only if the approved databases differ from the defaults in
   `apps/api/.env.example`. Site data and booking operations use `Site`;
   inquiries use `Sessions`.
+- Email analytics activity events are stored in the `email_activities`
+  collection in the inquiries database. Events contain type, activity, and
+  timestamp only; they do not contain recipient addresses or message content.
 - `SUPABASE_URL` and `SUPABASE_ANON_KEY` to match the browser's Supabase
   project when authentication is required.
 - `SUPABASE_SERVICE_ROLE_KEY` and `CARTOGO_INITIAL_OWNER_EMAIL` only for

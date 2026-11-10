@@ -1,5 +1,19 @@
-1. (BOOKING PROCESS) Have an inquiry confirmation window in the middle to allow users to verify their booking before processing an order. Call it Reservation Recap
-1.1. Upsell these inside that reservation recap: 1. Extra Driver, 2. Child seat
+1. Layout
+- In widescreens (i.e. Desktops, etc.), Section each analytics report by 4.
+- Make it dynamically resizable (can be by 2s horizontally in smaller screens). Turn it into 1s for full vertical in phone screens.
 
-2. (ADMIN PANEL) In "Fleets & Rates" tab, place the "Add Unit" button to the bottom of the list. Add a "+" icon to the left before the text.
-2.1. Place the Refresh button beside "(number) fleet units" text. Replace the text with a circular arrow that has a nice focus animation when hovered and a circular movement animation when clicked. Remove the redundant "Refresh Data" button entirely. Adjust for different screen sizes but keep it professional.
+2. Let's start with email health:
+- Make it a dynamic and interactive line graph, with time in x-axis, and frequency in y-axis.
+- Name this section "Email Activities"
+
+X-Axis:
+- By default, it should be on a span of 7 days
+- Can be zoomed; the max zoomed in should report the total span of 24 hours
+- Can be pan in horizontally, with indefinite hours
+
+Y-Axis
+- By default, it should be on a span of 100 email counts (activity based)
+- By default, It should start from 0 (bottom), 50 (middle), and 100 (top)
+- By default, it should be able to pan vertically to see past 100th-count
+- By default, it should display indicators by 20s til 100
+- When zoomed in, the max indicator number should be by 5s til 100 (indefinite height)

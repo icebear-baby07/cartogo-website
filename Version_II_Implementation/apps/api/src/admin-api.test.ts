@@ -11,9 +11,20 @@ function createRepository(): AdminDataRepository {
     async listSiteAssets() { return []; },
     async getSiteContent() { return null; },
     async listInquiries() { return []; },
+    async listEmailActivities() {
+      return [{
+        timestamp: new Date("2026-11-10T00:00:00.000Z"),
+        email_type: "email_verification",
+        activity: "sent",
+        count: 3,
+      }];
+    },
+    async listVehicleDemand() {
+      return [{ vehicle_id: "1", vehicle_name: "Honda City", inquiry_count: 8 }];
+    },
     async listChatSessions() { return []; },
     async getAdminRole(email) { return { email, titles: ["Moderator"] }; },
-    async hasPermission(_email, permission) { return ["fleet", "inquiries"].includes(permission); },
+    async hasPermission(_email, permission) { return ["fleet", "inquiries", "analytics"].includes(permission); },
     async listOwnerEmails() { return ["owner@example.com"]; },
     async saveApproval() {},
     async getApproval() { return null; },
@@ -115,6 +126,54 @@ test("enforces role permissions for admin endpoints", async () => {
     assert.deepEqual(await response.json(), {
       error: "Your administrator title does not allow this action.",
     });
+  } finally {
+    await server.close();
+  }
+});
+
+test("serves aggregated email activity to administrators with analytics permission", async () => {
+  const server = await createServer(createRepository());
+  try {
+    const response = await fetch(
+      `${server.baseUrl}/analytics/email-activities?start=2026-11-09T00%3A00%3A00.000Z&end=2026-11-10T00%3A00%3A00.000Z&bucketMinutes=60`,
+    );
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), [{
+      timestamp: "2026-11-10T00:00:00.000Z",
+      email_type: "email_verification",
+      activity: "sent",
+      count: 3,
+    }]);
+  } finally {
+    await server.close();
+  }
+});
+
+test("validates email activity analytics time ranges", async () => {
+  const server = await createServer(createRepository());
+  try {
+    const response = await fetch(
+      `${server.baseUrl}/analytics/email-activities?start=2026-11-10T00%3A00%3A00.000Z&end=2026-11-09T00%3A00%3A00.000Z&bucketMinutes=60`,
+    );
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+      error: "Provide a valid time range and a bucket interval of at least five minutes.",
+    });
+  } finally {
+    await server.close();
+  }
+});
+
+test("serves aggregated vehicle demand to administrators with analytics permission", async () => {
+  const server = await createServer(createRepository());
+  try {
+    const response = await fetch(`${server.baseUrl}/analytics/vehicle-demand`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), [{
+      vehicle_id: "1",
+      vehicle_name: "Honda City",
+      inquiry_count: 8,
+    }]);
   } finally {
     await server.close();
   }
@@ -262,6 +321,7 @@ test("confirms an inquiry when the admin sends the confirmed status", async () =
 
 test("emails the customer before deleting a rejected inquiry", async () => {
   const state = createInquiryRepository();
+  const emailActivities: string[] = [];
   const server = await createServer(state.repository, {
     sendEmail: async (to, subject, text, html) => {
       assert.equal(to, "customer@example.com");
@@ -269,6 +329,9 @@ test("emails the customer before deleting a rejected inquiry", async () => {
       assert.match(text, /unable to proceed/i);
       assert.match(String(html), /carTOGO<span/);
       state.events.push("email-accepted");
+    },
+    recordEmailActivity: async (type, activity) => {
+      emailActivities.push(`${type}:${activity}`);
     },
   });
   try {
@@ -285,6 +348,7 @@ test("emails the customer before deleting a rejected inquiry", async () => {
       deleted: true,
     });
     assert.deepEqual(state.events, ["rejected", "email-accepted", "email-marked", "delete"]);
+    assert.deepEqual(emailActivities, ["inquiry_rejection:attempted", "inquiry_rejection:sent"]);
     assert.equal(state.inquiry, null);
   } finally {
     await server.close();

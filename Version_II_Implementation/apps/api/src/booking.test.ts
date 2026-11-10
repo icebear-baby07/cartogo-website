@@ -167,9 +167,11 @@ function inquiryPayload(challengeId: string, verificationToken: string) {
 test("sends a guest verification code and accepts it once", async () => {
   const repository = createRepository();
   let sentMessage: SendMailOptions | undefined;
+  const emailActivities: string[] = [];
   const router = createBookingRouter(async () => repository, {
     verificationSecret: "test-verification-secret",
     sendMail: async (message) => { sentMessage = message; },
+    recordEmailActivity: async (type, activity) => { emailActivities.push(`${type}:${activity}`); },
   });
   const requested = await post(router, "/public/email-verification/request", { email: "Renter@example.com" });
   assert.equal(requested.status, 201);
@@ -177,6 +179,7 @@ test("sends a guest verification code and accepts it once", async () => {
   assert.equal(sentMessage?.to, "renter@example.com");
   assert.match(String(sentMessage?.subject), /Verify your email/);
   assert.match(String(sentMessage?.html), /carTOGO<span/);
+  assert.deepEqual(emailActivities, ["email_verification:attempted", "email_verification:sent"]);
   const code = String(sentMessage?.text).match(/\b\d{6}\b/)?.[0];
   assert.ok(code);
 
@@ -406,7 +409,15 @@ test("sends queued confirmation email and records retry state on delivery failur
     retry = { id, attempts, error };
   };
   let message: SendMailOptions | undefined;
-  assert.equal(await runInquiryConfirmationWorker(repository, async (value) => { message = value; }), true);
+  const emailActivities: string[] = [];
+  const recordEmailActivity = async (type: string, activity: string) => {
+    emailActivities.push(`${type}:${activity}`);
+  };
+  assert.equal(await runInquiryConfirmationWorker(
+    repository,
+    async (value) => { message = value; },
+    recordEmailActivity,
+  ), true);
   assert.equal(message?.to, "renter@example.com");
   assert.match(String(message?.text), /no payment has been taken/i);
   assert.match(String(message?.subject), /We received your carTOGO.mnl inquiry/);
@@ -414,10 +425,20 @@ test("sends queued confirmation email and records retry state on delivery failur
   assert.equal(completed, item._id);
 
   const failure = new Error("temporary SMTP failure");
-  assert.equal(await runInquiryConfirmationWorker(repository, async () => { throw failure; }), true);
+  assert.equal(await runInquiryConfirmationWorker(
+    repository,
+    async () => { throw failure; },
+    recordEmailActivity,
+  ), true);
   assert.deepEqual(retry, {
     id: item._id,
     attempts: item.attempts,
     error: "temporary SMTP failure",
   });
+  assert.deepEqual(emailActivities, [
+    "inquiry_confirmation:attempted",
+    "inquiry_confirmation:sent",
+    "inquiry_confirmation:attempted",
+    "inquiry_confirmation:failed",
+  ]);
 });

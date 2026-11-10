@@ -8,6 +8,10 @@ import {
 } from "@cartogo/contracts";
 import type { AuthenticatedAdmin } from "./auth.js";
 import { inquiryRejectionEmail, ownerApprovalEmail } from "./email-templates.js";
+import {
+  withEmailActivity,
+  type EmailActivityRecorder,
+} from "./email-activity.js";
 
 type ApprovalResource =
   | "unit"
@@ -37,6 +41,8 @@ export type AdminDataRepository = {
   listSiteAssets(): Promise<unknown[]>;
   getSiteContent(): Promise<unknown | null>;
   listInquiries(): Promise<unknown[]>;
+  listEmailActivities(start: Date, end: Date, bucketMinutes: number): Promise<unknown[]>;
+  listVehicleDemand(): Promise<unknown[]>;
   listChatSessions(): Promise<unknown[]>;
   getAdminRole(email: string): Promise<AdminRole | null>;
   hasPermission(email: string, permission: string): Promise<boolean>;
@@ -64,6 +70,7 @@ type AdminApiConfig = {
   smtpPort?: string;
   smtpFrom?: string;
   sendEmail?: (to: string, subject: string, text: string, html?: string) => Promise<void>;
+  recordEmailActivity?: EmailActivityRecorder;
 };
 
 type ResourcePermission = {
@@ -400,6 +407,43 @@ export function createAdminRouter(
     }
   });
 
+  router.get("/analytics/email-activities", requirePermission(getRepository, "analytics"), async (request, response) => {
+    const startValue = typeof request.query.start === "string" ? Date.parse(request.query.start) : NaN;
+    const endValue = typeof request.query.end === "string" ? Date.parse(request.query.end) : NaN;
+    const bucketMinutes = typeof request.query.bucketMinutes === "string"
+      ? Number(request.query.bucketMinutes)
+      : NaN;
+    if (
+      !Number.isFinite(startValue) ||
+      !Number.isFinite(endValue) ||
+      endValue <= startValue ||
+      !Number.isSafeInteger(bucketMinutes) ||
+      bucketMinutes < 5
+    ) {
+      sendError(response, 400, "Provide a valid time range and a bucket interval of at least five minutes.");
+      return;
+    }
+    try {
+      response.json(await (await getRepository()).listEmailActivities(
+        new Date(startValue),
+        new Date(endValue),
+        bucketMinutes,
+      ));
+    } catch (error) {
+      console.error("Could not read email activity analytics.", error instanceof Error ? error.name : "UnknownError");
+      sendError(response, 503, "Email activity analytics are unavailable.");
+    }
+  });
+
+  router.get("/analytics/vehicle-demand", requirePermission(getRepository, "analytics"), async (_request, response) => {
+    try {
+      response.json(await (await getRepository()).listVehicleDemand());
+    } catch (error) {
+      console.error("Could not read vehicle demand analytics.", error instanceof Error ? error.name : "UnknownError");
+      sendError(response, 503, "Vehicle demand analytics are unavailable.");
+    }
+  });
+
   router.get("/chat-sessions", requirePermission(getRepository, "chat"), async (_request, response) => {
     try {
       response.json(await (await getRepository()).listChatSessions());
@@ -452,8 +496,13 @@ export function createAdminRouter(
               String(inquiry.firstName || inquiry.name || "there"),
               reason,
             );
-            if (config.sendEmail) await config.sendEmail(to, subject, message.text, message.html);
-            else await sendMail(config, to, subject, message.text, message.html);
+            await withEmailActivity(
+              config.recordEmailActivity,
+              "inquiry_rejection",
+              () => config.sendEmail
+                ? config.sendEmail(to, subject, message.text, message.html)
+                : sendMail(config, to, subject, message.text, message.html),
+            );
           } catch (emailError) {
             console.error("Inquiry rejection email could not be sent.", emailError instanceof Error ? emailError.name : "UnknownError");
             throw new Error("The rejection email could not be sent. The inquiry was kept; retry to send the email and complete deletion.");
@@ -555,12 +604,16 @@ export function createAdminRouter(
             data: change.data,
             code,
           });
-          await sendMail(
-            config,
-            email,
-            `Approval needed: ${operation} ${subjectResource} | carTOGO.mnl`,
-            message.text,
-            message.html,
+          await withEmailActivity(
+            config.recordEmailActivity,
+            "owner_approval",
+            () => sendMail(
+              config,
+              email,
+              `Approval needed: ${operation} ${subjectResource} | carTOGO.mnl`,
+              message.text,
+              message.html,
+            ),
           );
         }
       } catch (error) {

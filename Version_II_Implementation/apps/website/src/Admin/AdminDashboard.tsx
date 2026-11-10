@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { supabase } from "../supabase";
+import EmailActivities from "./EmailActivities";
 import defaultSiteContent from "./site-content-defaults.json";
 
 type AdminProfile = { email: string; titles: string[] };
 type DataRecord = Record<string, unknown>;
+type GoogleAccount = { name: string; email: string; verified: boolean };
 type DashboardTab = "inquiries" | "fleet" | "assets" | "content" | "chat" | "analytics";
 type OwnerChange = {
   resource: string;
@@ -42,6 +44,10 @@ function text(value: unknown, fallback = "—"): string {
   if (typeof value === "string" && value.trim()) return value;
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   return fallback;
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function date(value: unknown): string {
@@ -175,6 +181,11 @@ export default function AdminDashboard({
     return tabs.find((item) => item.id === savedTab)?.id ?? "inquiries";
   });
   const [profile, setProfile] = useState<AdminProfile | null>(null);
+  const [googleAccount, setGoogleAccount] = useState<GoogleAccount | null>(null);
+  const [accountError, setAccountError] = useState("");
+  const [accountDialogOpen, setAccountDialogOpen] = useState(false);
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
+  const [showMobileAdminNotice, setShowMobileAdminNotice] = useState(true);
   const [data, setData] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -194,6 +205,8 @@ export default function AdminDashboard({
   const initialTab = useRef(tab);
   const recordEditorRef = useRef<HTMLFormElement>(null);
   const approvalFormRef = useRef<HTMLFormElement>(null);
+  const accountDialogRef = useRef<HTMLDialogElement>(null);
+  const logoutDialogRef = useRef<HTMLDialogElement>(null);
 
   const allowedPermissions = useMemo(
     () => new Set((profile?.titles ?? []).flatMap((title) => permissionsByTitle[title] ?? [])),
@@ -257,6 +270,38 @@ export default function AdminDashboard({
   useEffect(() => {
     document.title = "Admin dashboard — carTOGO.mnl";
     let active = true;
+    void supabase?.auth.getUser()
+      .then(({ data, error: userError }) => {
+        if (!active) return;
+        if (userError) {
+          setAccountError(`Could not load Google account details: ${userError.message}`);
+          return;
+        }
+        const user = data.user;
+        const metadata = user?.user_metadata;
+        const fullName = metadata && typeof metadata === "object"
+          ? stringValue(metadata.full_name) ||
+            stringValue(metadata.name) ||
+            [metadata.given_name, metadata.middle_name, metadata.family_name]
+              .map(stringValue)
+              .filter(Boolean)
+              .join(" ")
+          : "";
+        setGoogleAccount({
+          name: fullName || "Google account",
+          email: user?.email ?? email,
+          verified: Boolean(user?.email_confirmed_at || user?.confirmed_at),
+        });
+      })
+      .catch((userError: unknown) => {
+        if (active) {
+          setAccountError(
+            userError instanceof Error
+              ? `Could not load Google account details: ${userError.message}`
+              : "Could not load Google account details.",
+          );
+        }
+      });
     void adminRequest("/api/admin/me")
       .then((result) => {
         if (!active) return;
@@ -277,7 +322,21 @@ export default function AdminDashboard({
     return () => {
       active = false;
     };
-  }, [loadTab]);
+  }, [email, loadTab]);
+
+  useEffect(() => {
+    const dialog = accountDialogRef.current;
+    if (!dialog) return;
+    if (accountDialogOpen && !dialog.open) dialog.showModal();
+    else if (!accountDialogOpen && dialog.open) dialog.close();
+  }, [accountDialogOpen]);
+
+  useEffect(() => {
+    const dialog = logoutDialogRef.current;
+    if (!dialog) return;
+    if (logoutDialogOpen && !dialog.open) dialog.showModal();
+    else if (!logoutDialogOpen && dialog.open) dialog.close();
+  }, [logoutDialogOpen]);
 
   async function refresh() {
     await loadTab(tab);
@@ -729,11 +788,7 @@ export default function AdminDashboard({
 
   function renderAnalytics() {
     return (
-      <section className="admin-card admin-maintenance" role="status">
-        <p className="eyebrow">Analytics</p>
-        <h2>Under maintenance</h2>
-        <p>Analytics is being prepared and will be available here in a future update.</p>
-      </section>
+      <EmailActivities request={adminRequest} />
     );
   }
 
@@ -750,7 +805,36 @@ export default function AdminDashboard({
   return (
     <main className="admin-dashboard admin-shell visible">
       <aside className="admin-sidebar">
-        <a className="logo" href="/">carTOGO.mnl</a>
+        <div className="admin-sidebar-topbar">
+          <a className="logo" href="/">carTOGO.mnl</a>
+          <div className="admin-sidebar-account-actions">
+            <button
+              className="admin-sidebar-icon-button"
+              type="button"
+              aria-label="View account details"
+              title="Account details"
+              aria-haspopup="dialog"
+              aria-controls="admin-account-dialog"
+              onClick={() => setAccountDialogOpen(true)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.8" />
+                <path d="M5 20a7 7 0 0 1 14 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </button>
+            <button
+              className="admin-sidebar-icon-button"
+              type="button"
+              aria-label="Sign out"
+              title="Sign out"
+              onClick={() => setLogoutDialogOpen(true)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M10 17l5-5-5-5m5 5H3m9-9h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
+        </div>
         <p className="eyebrow">Admin workspace</p>
         <nav className="admin-nav admin-tabs" aria-label="Admin sections">
           {visibleTabs.map((item) => (
@@ -762,12 +846,101 @@ export default function AdminDashboard({
           ))}
         </nav>
         <div className="admin-sidebar-footer">
-          <span>{profile?.email ?? email}</span>
           <a href="/">View public site</a>
-          <button type="button" onClick={onSignOut}>Sign out</button>
         </div>
+        <dialog
+          ref={accountDialogRef}
+          id="admin-account-dialog"
+          className="admin-account-dialog"
+          aria-labelledby="admin-account-title"
+          onClose={() => setAccountDialogOpen(false)}
+          onCancel={() => setAccountDialogOpen(false)}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setAccountDialogOpen(false);
+          }}
+        >
+          <div className="admin-dialog-content">
+            <div className="admin-dialog-topline">
+              <div className="admin-dialog-avatar" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M5 20a7 7 0 0 1 14 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </div>
+              <button
+                className="admin-dialog-close"
+                type="button"
+                aria-label="Close account details"
+                onClick={() => setAccountDialogOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+            <p className="eyebrow">Your account</p>
+            <h2 id="admin-account-title">Account details</h2>
+            <p className="admin-dialog-description">
+              Details for the Google account used to access the admin workspace.
+            </p>
+            {accountError ? <p className="admin-error" role="alert">{accountError}</p> : (
+              <dl className="admin-account-details">
+                <div><dt>Name</dt><dd>{googleAccount?.name ?? "Loading account…"}</dd></div>
+                <div><dt>Email</dt><dd>{googleAccount?.email ?? profile?.email ?? email}</dd></div>
+                <div><dt>Provider</dt><dd>Google</dd></div>
+                <div><dt>Email status</dt><dd>{googleAccount?.verified ? "Verified" : "Not verified"}</dd></div>
+                <div><dt>Admin access</dt><dd>{profile?.titles.join(" · ") || "Administrator"}</dd></div>
+              </dl>
+            )}
+          </div>
+        </dialog>
+        <dialog
+          ref={logoutDialogRef}
+          className="admin-logout-dialog"
+          aria-labelledby="admin-logout-title"
+          aria-describedby="admin-logout-description"
+          onClose={() => setLogoutDialogOpen(false)}
+          onCancel={() => setLogoutDialogOpen(false)}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setLogoutDialogOpen(false);
+          }}
+        >
+          <div className="admin-dialog-content">
+            <div className="admin-dialog-avatar admin-dialog-avatar-logout" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M10 17l5-5-5-5m5 5H3m9-9h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <p className="eyebrow">Sign out</p>
+            <h2 id="admin-logout-title">Sign out of your account?</h2>
+            <p className="admin-dialog-description" id="admin-logout-description">
+              You will need to sign in again to access the admin workspace.
+            </p>
+            <div className="admin-dialog-actions">
+              <button className="button button-ghost" type="button" onClick={() => setLogoutDialogOpen(false)}>
+                Cancel
+              </button>
+              <button className="button button-primary" type="button" onClick={() => {
+                setLogoutDialogOpen(false);
+                onSignOut();
+              }}>
+                Sign out
+              </button>
+            </div>
+          </div>
+        </dialog>
       </aside>
       <section className="admin-main">
+        {showMobileAdminNotice ? (
+          <div className="admin-mobile-notice" role="status">
+            <p>The use of a desktop computer or a laptop is recommended for admin.</p>
+            <button
+              type="button"
+              aria-label="Dismiss desktop recommendation"
+              onClick={() => setShowMobileAdminNotice(false)}
+            >
+              ×
+            </button>
+          </div>
+        ) : null}
         <header className="admin-header">
           <div><p className="eyebrow">{profile?.titles.join(" · ") || "Administrator"}</p><h1>{activeTab?.label ?? "Admin"}</h1></div>
         </header>

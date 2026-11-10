@@ -2,6 +2,10 @@ import { createHash, createHmac, randomBytes, randomInt, randomUUID, timingSafeE
 import { Router, type Request, type Response } from "express";
 import nodemailer, { type SendMailOptions } from "nodemailer";
 import { emailVerificationEmail, inquiryConfirmationEmail } from "./email-templates.js";
+import {
+  withEmailActivity,
+  type EmailActivityRecorder,
+} from "./email-activity.js";
 
 type BookingUnit = {
   id: number;
@@ -83,6 +87,7 @@ type BookingApiOptions = {
   supabaseAnonKey?: string;
   verifyGoogleUser?: (accessToken: string) => Promise<VerifiedGoogleUser>;
   sendMail?: (options: SendMailOptions) => Promise<void>;
+  recordEmailActivity?: EmailActivityRecorder;
 };
 
 export async function verifyGoogleBookingUser(
@@ -176,6 +181,7 @@ export function createBookingMailer(options: BookingApiOptions): (message: SendM
 export async function runInquiryConfirmationWorker(
   repository: BookingRepository,
   sendMail: (message: SendMailOptions) => Promise<void>,
+  recordActivity?: EmailActivityRecorder,
 ): Promise<boolean> {
   const now = new Date();
   const item = await repository.claimInquiryConfirmation(now);
@@ -183,11 +189,11 @@ export async function runInquiryConfirmationWorker(
   const inquiry = item.inquiry;
   const message = inquiryConfirmationEmail(inquiry);
   try {
-    await sendMail({
+    await withEmailActivity(recordActivity, "inquiry_confirmation", () => sendMail({
       to: inquiry.email,
       subject: "We received your carTOGO.mnl inquiry",
       ...message,
-    });
+    }));
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 500) : "Unknown email delivery error";
     await repository.retryInquiryConfirmation(item._id, item.attempts, message, new Date());
@@ -443,11 +449,11 @@ export function createBookingRouter(
       }
       try {
         const message = emailVerificationEmail(code);
-        await sendMail({
+        await withEmailActivity(options.recordEmailActivity, "email_verification", () => sendMail({
           to: email,
           subject: "Verify your email | carTOGO.mnl",
           ...message,
-        });
+        }));
       } catch (error) {
         await repository.deleteGuestChallenge(challenge.id);
         console.error("Could not send booking email verification.", error instanceof Error ? error.name : "UnknownError");

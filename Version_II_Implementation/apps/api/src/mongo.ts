@@ -9,6 +9,11 @@ import { PublicUnitSchema, SiteContentSchema } from "@cartogo/contracts";
 import type { PublicDataRepository } from "./public-data.js";
 import type { AdminDataRepository, ApprovalChallenge } from "./admin-api.js";
 import type { BookingRepository, GuestChallenge } from "./booking.js";
+import {
+  recordEmailActivitySafely,
+  type EmailActivityAction,
+  type EmailActivityType,
+} from "./email-activity.js";
 
 type MongoDatabases = {
   client: MongoClient;
@@ -23,6 +28,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 let client: MongoClient | undefined;
 let connection: Promise<MongoClient> | undefined;
 let bookingIndexes: Promise<void> | undefined;
+let emailActivityIndexes: Promise<void> | undefined;
 
 export async function connectToMongo(): Promise<MongoClient> {
   if (connection) return connection;
@@ -59,6 +65,38 @@ export async function getMongoDatabases(): Promise<MongoDatabases> {
     site: connectedClient.db(process.env.MONGODB_SITE_DATABASE?.trim() || "Site"),
     inquiries: connectedClient.db(process.env.MONGODB_INQUIRIES_DATABASE?.trim() || "Sessions"),
   };
+}
+
+async function getEmailActivitiesCollection() {
+  const { inquiries } = await getMongoDatabases();
+  const collection = inquiries.collection<Document & {
+    email_type: EmailActivityType;
+    activity: EmailActivityAction;
+    occurred_at: Date;
+  }>("email_activities");
+  if (!emailActivityIndexes) {
+    emailActivityIndexes = collection.createIndex(
+      { occurred_at: 1 },
+      { name: "email_activity_time" },
+    ).then(() => undefined).catch((error: unknown) => {
+      emailActivityIndexes = undefined;
+      throw error;
+    });
+  }
+  await emailActivityIndexes;
+  return collection;
+}
+
+export async function recordEmailActivity(
+  emailType: EmailActivityType,
+  activity: EmailActivityAction,
+): Promise<void> {
+  const collection = await getEmailActivitiesCollection();
+  await collection.insertOne({
+    email_type: emailType,
+    activity,
+    occurred_at: new Date(),
+  });
 }
 
 export async function getPublicDataRepository(): Promise<PublicDataRepository> {
@@ -259,7 +297,7 @@ export async function getBookingRepository(): Promise<BookingRepository> {
     },
     async enqueueInquiryConfirmation(inquiry) {
       const now = new Date();
-      await emailOutbox.updateOne(
+      const result = await emailOutbox.updateOne(
         { _id: `inquiry-confirmation:${inquiry.id}` },
         {
           $setOnInsert: {
@@ -273,6 +311,9 @@ export async function getBookingRepository(): Promise<BookingRepository> {
         },
         { upsert: true },
       );
+      if (result.upsertedCount) {
+        await recordEmailActivitySafely(recordEmailActivity, "inquiry_confirmation", "queued");
+      }
     },
     async claimInquiryConfirmation(now) {
       const item = await emailOutbox.findOneAndUpdate(
@@ -330,6 +371,7 @@ export async function getAdminDataRepository(): Promise<AdminDataRepository> {
   const inquiryCollection = inquiries.collection<Document & { _id: number }>(
     process.env.MONGODB_INQUIRIES_COLLECTION?.trim() || "inquiries",
   );
+  const emailActivities = await getEmailActivitiesCollection();
   const sequences = site.collection<Document & { _id: string; value: number }>(
     process.env.MONGODB_SEQUENCES_COLLECTION?.trim() || "site_sequences",
   );
@@ -366,8 +408,8 @@ export async function getAdminDataRepository(): Promise<AdminDataRepository> {
     const normalizedEmail = email.trim().toLowerCase();
     await Promise.all(
       Object.entries({
-        Owner: ["inquiries", "fleet", "site_assets", "site_content", "chat"],
-        Moderator: ["inquiries", "fleet", "site_assets", "site_content", "chat"],
+        Owner: ["inquiries", "fleet", "site_assets", "site_content", "chat", "analytics"],
+        Moderator: ["inquiries", "fleet", "site_assets", "site_content", "chat", "analytics"],
       }).map(([title, permissions]) =>
         adminRoles.updateOne(
           { _id: `title:${title}` },
@@ -406,6 +448,78 @@ export async function getAdminDataRepository(): Promise<AdminDataRepository> {
     },
     async listInquiries() {
       return inquiryCollection.find({}).project({ _id: 0 }).sort({ created_at: -1 }).toArray();
+    },
+    async listEmailActivities(start, end, bucketMinutes) {
+      const bucketMilliseconds = bucketMinutes * 60_000;
+      const occurredAt = { $toLong: "$occurred_at" };
+      return emailActivities.aggregate<{
+        timestamp: Date;
+        email_type: EmailActivityType;
+        activity: EmailActivityAction;
+        count: number;
+      }>([
+        { $match: { occurred_at: { $gte: start, $lt: end } } },
+        {
+          $group: {
+            _id: {
+              bucket: {
+                $toDate: {
+                  $subtract: [
+                    occurredAt,
+                    { $mod: [occurredAt, bucketMilliseconds] },
+                  ],
+                },
+              },
+              email_type: "$email_type",
+              activity: "$activity",
+            },
+            count: { $sum: 1 },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            timestamp: "$_id.bucket",
+            email_type: "$_id.email_type",
+            activity: "$_id.activity",
+            count: 1,
+          },
+        },
+        { $sort: { timestamp: 1 } },
+      ]).toArray();
+    },
+    async listVehicleDemand() {
+      return inquiryCollection.aggregate<{
+        vehicle_id: string;
+        vehicle_name: string;
+        inquiry_count: number;
+      }>([
+        {
+          $group: {
+            _id: {
+              vehicle_id: { $ifNull: ["$car_id", "$carId"] },
+              vehicle_name: { $ifNull: ["$car_name", "$carName"] },
+            },
+            inquiry_count: { $sum: 1 },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            vehicle_id: { $ifNull: ["$_id.vehicle_id", ""] },
+            vehicle_name: {
+              $cond: [
+                { $ne: ["$_id.vehicle_name", null] },
+                "$_id.vehicle_name",
+                { $concat: ["Vehicle ", { $toString: "$_id.vehicle_id" }] },
+              ],
+            },
+            inquiry_count: 1,
+          },
+        },
+        { $sort: { inquiry_count: -1, vehicle_name: 1 } },
+        { $limit: 10 },
+      ]).toArray();
     },
     async listChatSessions() {
       return chatSessions.find({}).project({ _id: 0 }).sort({ last_message_at: -1 }).toArray();

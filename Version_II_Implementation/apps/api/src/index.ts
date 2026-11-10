@@ -10,6 +10,7 @@ import {
   getBookingRepository,
   getAdminDataRepository,
   getPublicDataRepository,
+  recordEmailActivity,
 } from "./mongo.js";
 import { createAuthRouter, createRequireAdmin } from "./auth.js";
 import { createAdminRouter } from "./admin-api.js";
@@ -43,6 +44,7 @@ const bookingConfig = {
   ...bookingEmailConfig,
   supabaseUrl: supabaseAuthConfig.supabaseUrl,
   supabaseAnonKey: supabaseAuthConfig.supabaseAnonKey,
+  recordEmailActivity,
   verifyGoogleUser: (accessToken: string) =>
     verifyGoogleBookingUser(accessToken, supabaseAuthConfig),
 };
@@ -59,6 +61,7 @@ app.use("/api/admin", createAdminRouter(getAdminDataRepository, {
   smtpHost: process.env.SMTP_HOST,
   smtpPort: process.env.SMTP_PORT,
   smtpFrom: process.env.SMTP_FROM,
+  recordEmailActivity,
 }));
 app.use("/api", createPublicDataRouter(getPublicDataRepository));
 app.use("/api", createBookingRouter(getBookingRepository, bookingConfig));
@@ -134,7 +137,7 @@ const emailWorkerTimer = setInterval(() => {
     try {
       const repository = await getBookingRepository();
       stage = "claiming or updating the confirmation-email outbox";
-      await runInquiryConfirmationWorker(repository, sendBookingMail);
+      await runInquiryConfirmationWorker(repository, sendBookingMail, recordEmailActivity);
     } catch (error) {
       const details: Record<string, string | number> = {
         stage,
