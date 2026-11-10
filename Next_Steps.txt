@@ -1,19 +1,9 @@
-1. Layout
-- In widescreens (i.e. Desktops, etc.), Section each analytics report by 4.
-- Make it dynamically resizable (can be by 2s horizontally in smaller screens). Turn it into 1s for full vertical in phone screens.
-
-2. Let's start with email health:
-- Make it a dynamic and interactive line graph, with time in x-axis, and frequency in y-axis.
-- Name this section "Email Activities"
-
-X-Axis:
-- By default, it should be on a span of 7 days
-- Can be zoomed; the max zoomed in should report the total span of 24 hours
-- Can be pan in horizontally, with indefinite hours
-
-Y-Axis
-- By default, it should be on a span of 100 email counts (activity based)
-- By default, It should start from 0 (bottom), 50 (middle), and 100 (top)
-- By default, it should be able to pan vertically to see past 100th-count
-- By default, it should display indicators by 20s til 100
-- When zoomed in, the max indicator number should be by 5s til 100 (indefinite height)
+1. Apply this in admin panel (Adjust differently for desktop and smaller devices mode)
+1.1. In "Inquiries" Tab, have the "Export CSV" and "Refresh" button into icons. Bring the refresh icon beside the inquiries spinner, while having the export csv icon to the rightmost part (level it vertically with the right margins of each record underneath)
+- Shorten the reports into smaller units by default, then display every part of it when an expand button (represented by an icon) is clicked.
+- The shorten version should only have the following; 1. Status (i.e. pending, confirmed, etc.), 2. name of the inquiree, 3. Date, time, and model. Do it in a horizontal single line strip
+- It should display the current UI version (before these changes) when a fullscreen button is toggled. 
+1.2. In "fleets and rates" tab, have the "edit" and "delete" buttons into icons
+1.3. Do the same with "Site Assets" tab.
+1.4. In "Site Content" tab, minimize the json content editor by default, then add a fullscreen icon button.
+1.5. In "Chat Monitor" tab, replace the "delete" text inside that button into an icon. Keep it in the same place when "View Transcript" is clicked.

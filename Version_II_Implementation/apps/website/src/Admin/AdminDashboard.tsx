@@ -17,6 +17,24 @@ type ApprovalChallenge = {
   ownerEmail: string;
   expiresIn: number;
 };
+type AdminIconName = "refresh" | "download" | "edit" | "delete" | "expand" | "collapse" | "fullscreen";
+
+function AdminIcon({ name }: { name: AdminIconName }) {
+  const paths: Record<AdminIconName, string> = {
+    refresh: "M20 7v5h-5M4 17v-5h5m-4.1-3A7.5 7.5 0 0 1 17.6 6L20 12M4 12l2.4 6a7.5 7.5 0 0 0 12.7-3",
+    download: "M12 3v12m0 0 4-4m-4 4-4-4M5 17v3h14v-3",
+    edit: "M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z",
+    delete: "M3 6h18m-2 0-.9 14H5.9L5 6m4 0V4h6v2m-5 4v6m4-6v6",
+    expand: "M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3m8 0h3a2 2 0 0 0 2-2v-3",
+    collapse: "M8 3v5H3m13-5v5h5M8 21v-5H3m13 5v-5h5",
+    fullscreen: "M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3m8 0h3a2 2 0 0 0 2-2v-3",
+  };
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d={paths[name]} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 const tabs: { id: DashboardTab; label: string; permission: string }[] = [
   { id: "inquiries", label: "Inquiries", permission: "inquiries" },
@@ -186,6 +204,10 @@ export default function AdminDashboard({
   const [accountDialogOpen, setAccountDialogOpen] = useState(false);
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const [showMobileAdminNotice, setShowMobileAdminNotice] = useState(true);
+  const [expandedInquiryId, setExpandedInquiryId] = useState<string | null>(null);
+  const [siteContentExpanded, setSiteContentExpanded] = useState(false);
+  const [siteContentIsFullscreen, setSiteContentIsFullscreen] = useState(false);
+  const [siteContentFullscreenError, setSiteContentFullscreenError] = useState("");
   const [data, setData] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -207,6 +229,7 @@ export default function AdminDashboard({
   const approvalFormRef = useRef<HTMLFormElement>(null);
   const accountDialogRef = useRef<HTMLDialogElement>(null);
   const logoutDialogRef = useRef<HTMLDialogElement>(null);
+  const siteContentEditorRef = useRef<HTMLElement>(null);
 
   const allowedPermissions = useMemo(
     () => new Set((profile?.titles ?? []).flatMap((title) => permissionsByTitle[title] ?? [])),
@@ -338,8 +361,38 @@ export default function AdminDashboard({
     else if (!logoutDialogOpen && dialog.open) dialog.close();
   }, [logoutDialogOpen]);
 
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isFullscreen = document.fullscreenElement === siteContentEditorRef.current;
+      setSiteContentIsFullscreen(isFullscreen);
+      if (isFullscreen) setSiteContentExpanded(true);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
   async function refresh() {
     await loadTab(tab);
+  }
+
+  async function toggleSiteContentFullscreen() {
+    const editorElement = siteContentEditorRef.current;
+    if (!editorElement) return;
+    setSiteContentFullscreenError("");
+    setSiteContentExpanded(true);
+    try {
+      if (document.fullscreenElement === editorElement) {
+        await document.exitFullscreen();
+      } else {
+        await editorElement.requestFullscreen();
+      }
+    } catch (fullscreenError) {
+      setSiteContentFullscreenError(
+        fullscreenError instanceof Error
+          ? `Could not open the editor full screen: ${fullscreenError.message}`
+          : "Could not open the editor full screen.",
+      );
+    }
   }
 
   async function requestOwnerChange(change: OwnerChange) {
@@ -493,87 +546,126 @@ export default function AdminDashboard({
     const status = (item: DataRecord) => text(item.status, "pending_review");
     return (
       <>
-        <div className="admin-toolbar">
-          <label className="admin-field admin-filter">
-            Status
-            <select value={filter} onChange={(event) => setFilter(event.target.value)}>
-              <option value="all">All inquiries ({inquiries.length})</option>
-              <option value="pending_review">Pending review</option>
-              <option value="contacted">Contacted</option>
-              <option value="confirmed">Confirmed</option>
-            </select>
-          </label>
+        <div className="admin-toolbar admin-inquiry-toolbar">
+          <div className="admin-inquiry-toolbar-start">
+            <label className="admin-field admin-filter">
+              Status
+              <select value={filter} onChange={(event) => setFilter(event.target.value)}>
+                <option value="all">All inquiries ({inquiries.length})</option>
+                <option value="pending_review">Pending review</option>
+                <option value="contacted">Contacted</option>
+                <option value="confirmed">Confirmed</option>
+              </select>
+            </label>
+            <button
+              className={`admin-fleet-refresh${loading ? " is-refreshing" : ""}`}
+              type="button"
+              aria-label="Refresh inquiries"
+              title="Refresh inquiries"
+              disabled={loading}
+              onClick={() => void refresh()}
+            >
+              <AdminIcon name="refresh" />
+            </button>
+          </div>
           <button
-            className="button button-ghost"
+            className="admin-icon-button admin-inquiry-export"
             type="button"
             disabled={!visible.length}
+            aria-label="Export inquiries as CSV"
+            title="Export CSV"
             onClick={() => exportInquiryCsv(visible)}
           >
-            Export CSV
+            <AdminIcon name="download" />
           </button>
-          <button className="button button-ghost" type="button" onClick={() => void refresh()}>Refresh</button>
         </div>
         {visible.length ? (
           <div className="admin-card-list">
             {visible.map((inquiry, index) => {
               const id = Number(inquiry.id);
               const currentStatus = status(inquiry);
+              const inquiryKey = String(inquiry.id ?? index);
+              const isExpanded = expandedInquiryId === inquiryKey;
               return (
                 <article
-                  className={`admin-card${currentStatus === "confirmed" ? " admin-inquiry-confirmed" : ""}`}
-                  key={String(inquiry.id ?? index)}
+                  className={`admin-card admin-inquiry-card${currentStatus === "confirmed" ? " admin-inquiry-confirmed" : ""}${isExpanded ? " is-expanded" : ""}`}
+                  key={inquiryKey}
                 >
-                  <div className="admin-card-heading">
-                    <div>
-                      <p className="eyebrow">{currentStatus.replaceAll("_", " ")}</p>
-                      <h2>{text(inquiry.name ?? inquiry.firstName, "Unnamed customer")}</h2>
-                      <p>{date(inquiry.created_at ?? inquiry.submittedAt)} · {text(inquiry.car_name ?? inquiry.carName, "Vehicle not specified")}</p>
-                    </div>
-                    <span className="admin-record-id">#{text(inquiry.id)}</span>
+                  <div className="admin-inquiry-summary">
+                    <span className="admin-inquiry-counter" aria-label={`Inquiry ${index + 1}`}>
+                      {index + 1}
+                    </span>
+                    <span className="admin-inquiry-status">{currentStatus.replaceAll("_", " ")}</span>
+                    <strong>{text(inquiry.name ?? inquiry.firstName, "Unnamed customer")}</strong>
+                    <span>{date(inquiry.created_at ?? inquiry.submittedAt)}</span>
+                    <span>{text(inquiry.car_name ?? inquiry.carName, "Vehicle not specified")}</span>
+                    <button
+                      className="admin-icon-button"
+                      type="button"
+                      aria-label={`${isExpanded ? "Collapse" : "Expand"} inquiry ${text(inquiry.id, String(index))}`}
+                      aria-expanded={isExpanded}
+                      aria-controls={`inquiry-details-${index}`}
+                      title={isExpanded ? "Collapse inquiry details" : "Expand inquiry details"}
+                      onClick={() => setExpandedInquiryId((current) => current === inquiryKey ? null : inquiryKey)}
+                    >
+                      <AdminIcon name={isExpanded ? "collapse" : "expand"} />
+                    </button>
                   </div>
-                  <dl className="admin-detail-grid">
-                    <div><dt>Email</dt><dd>{text(inquiry.email)}</dd></div>
-                    <div><dt>Phone</dt><dd>{text(inquiry.phone)}</dd></div>
-                    <div><dt>Pickup</dt><dd>{text(inquiry.pickup_date ?? inquiry.pickupDate)} {text(inquiry.pickup_time ?? inquiry.pickupTime, "")}</dd></div>
-                    <div><dt>Return</dt><dd>{text(inquiry.return_date ?? inquiry.returnDate)}</dd></div>
-                    {typeof inquiry.requested_capacity === "number" ? <div><dt>Requested seats</dt><dd>{text(inquiry.requested_capacity)}</dd></div> : null}
-                    <div><dt>Rental subtotal</dt><dd>{text(inquiry.rental_subtotal ?? inquiry.rentalSubtotal ?? inquiry.quoted_rate ?? inquiry.quotedRate)}</dd></div>
-                    {inquiry.extra_driver === true || inquiry.extraDriver === true ? <div><dt>Extra Driver</dt><dd>Selected · {text(inquiry.extra_driver_fee ?? inquiry.extraDriverFee, "0")}</dd></div> : null}
-                    {inquiry.child_seat === true || inquiry.childSeat === true ? <div><dt>Child seat</dt><dd>Selected · {text(inquiry.child_seat_fee ?? inquiry.childSeatFee, "0")}</dd></div> : null}
-                    <div><dt>Estimated total</dt><dd>{text(inquiry.quoted_rate ?? inquiry.quotedRate)}</dd></div>
-                    {typeof inquiry.notes === "string" && inquiry.notes ? <div className="admin-detail-wide"><dt>Notes</dt><dd>{inquiry.notes}</dd></div> : null}
-                    {typeof inquiry.rejection_reason === "string" && inquiry.rejection_reason ? <div className="admin-detail-wide"><dt>Rejection reason</dt><dd>{inquiry.rejection_reason}</dd></div> : null}
-                  </dl>
-                  <div className="admin-actions">
-                    {currentStatus !== "confirmed" && currentStatus !== "rejected" ? (
-                      <button className="button button-primary" type="button" onClick={() => void inquiryAction(id, "update", { status: "confirmed" })}>Confirm</button>
-                    ) : null}
-                    {currentStatus !== "rejected" ? (
-                      <button className="button button-ghost" type="button" onClick={() => setRejection({ id, reason: "" })}>Reject</button>
-                    ) : typeof inquiry.rejection_reason === "string" && inquiry.rejection_reason.trim() ? (
-                      <button className="button button-danger" type="button" disabled={rejectionPendingId !== null} aria-busy={rejectionPendingId === id} onClick={() => void inquiryAction(id, "reject")}>
-                        {rejectionPendingId === id ? "Rejecting inquiry…" : inquiry.rejection_email_sent === true ? "Finish deletion" : "Retry email & delete"}
-                      </button>
-                    ) : (
-                      <button className="button button-danger" type="button" onClick={() => setRejection({ id, reason: "" })}>Add reason and finish rejection</button>
-                    )}
-                  </div>
-                  {rejection?.id === id ? (
-                    <form className="admin-rejection-form" onSubmit={(event) => {
-                      event.preventDefault();
-                      void inquiryAction(id, "reject", { reason: rejection.reason });
-                    }}>
-                      <label className="admin-field">Reason (required, max 250 words)
-                        <textarea required maxLength={3000} rows={3} disabled={rejectionPendingId !== null} value={rejection.reason} onChange={(event) => setRejection({ id, reason: event.target.value })} />
-                      </label>
-                      <p>The inquiry is deleted only after the email is accepted by the configured mail server.</p>
-                      <div className="admin-actions">
-                        <button className="button button-primary" type="submit" disabled={rejectionPendingId !== null} aria-busy={rejectionPendingId === id}>
-                          {rejectionPendingId === id ? <><span className="admin-rejection-spinner" aria-hidden="true" /> Rejecting inquiry…</> : "Email customer and delete inquiry"}
-                        </button>
-                        <button className="button button-ghost" type="button" disabled={rejectionPendingId !== null} onClick={() => setRejection(null)}>Cancel</button>
+                  {isExpanded ? (
+                    <div className="admin-inquiry-details" id={`inquiry-details-${index}`}>
+                      <div className="admin-card-heading">
+                        <div>
+                          <p className="eyebrow">{currentStatus.replaceAll("_", " ")}</p>
+                          <h2>{text(inquiry.name ?? inquiry.firstName, "Unnamed customer")}</h2>
+                          <p>{date(inquiry.created_at ?? inquiry.submittedAt)} · {text(inquiry.car_name ?? inquiry.carName, "Vehicle not specified")}</p>
+                        </div>
+                        <span className="admin-record-id">#{text(inquiry.id)}</span>
                       </div>
-                    </form>
+                      <dl className="admin-detail-grid">
+                        <div><dt>Email</dt><dd>{text(inquiry.email)}</dd></div>
+                        <div><dt>Phone</dt><dd>{text(inquiry.phone)}</dd></div>
+                        <div><dt>Pickup</dt><dd>{text(inquiry.pickup_date ?? inquiry.pickupDate)} {text(inquiry.pickup_time ?? inquiry.pickupTime, "")}</dd></div>
+                        <div><dt>Return</dt><dd>{text(inquiry.return_date ?? inquiry.returnDate)}</dd></div>
+                        {typeof inquiry.requested_capacity === "number" ? <div><dt>Requested seats</dt><dd>{text(inquiry.requested_capacity)}</dd></div> : null}
+                        <div><dt>Rental subtotal</dt><dd>{text(inquiry.rental_subtotal ?? inquiry.rentalSubtotal ?? inquiry.quoted_rate ?? inquiry.quotedRate)}</dd></div>
+                        {inquiry.extra_driver === true || inquiry.extraDriver === true ? <div><dt>Extra Driver</dt><dd>Selected · {text(inquiry.extra_driver_fee ?? inquiry.extraDriverFee, "0")}</dd></div> : null}
+                        {inquiry.child_seat === true || inquiry.childSeat === true ? <div><dt>Child seat</dt><dd>Selected · {text(inquiry.child_seat_fee ?? inquiry.childSeatFee, "0")}</dd></div> : null}
+                        <div><dt>Estimated total</dt><dd>{text(inquiry.quoted_rate ?? inquiry.quotedRate)}</dd></div>
+                        {typeof inquiry.notes === "string" && inquiry.notes ? <div className="admin-detail-wide"><dt>Notes</dt><dd>{inquiry.notes}</dd></div> : null}
+                        {typeof inquiry.rejection_reason === "string" && inquiry.rejection_reason ? <div className="admin-detail-wide"><dt>Rejection reason</dt><dd>{inquiry.rejection_reason}</dd></div> : null}
+                      </dl>
+                      <div className="admin-actions">
+                        {currentStatus !== "confirmed" && currentStatus !== "rejected" ? (
+                          <button className="button button-primary" type="button" onClick={() => void inquiryAction(id, "update", { status: "confirmed" })}>Confirm</button>
+                        ) : null}
+                        {currentStatus !== "rejected" ? (
+                          <button className="button button-ghost" type="button" onClick={() => setRejection({ id, reason: "" })}>Reject</button>
+                        ) : typeof inquiry.rejection_reason === "string" && inquiry.rejection_reason.trim() ? (
+                          <button className="button button-danger" type="button" disabled={rejectionPendingId !== null} aria-busy={rejectionPendingId === id} onClick={() => void inquiryAction(id, "reject")}>
+                            {rejectionPendingId === id ? "Rejecting inquiry…" : inquiry.rejection_email_sent === true ? "Finish deletion" : "Retry email & delete"}
+                          </button>
+                        ) : (
+                          <button className="button button-danger" type="button" onClick={() => setRejection({ id, reason: "" })}>Add reason and finish rejection</button>
+                        )}
+                      </div>
+                      {rejection?.id === id ? (
+                        <form className="admin-rejection-form" onSubmit={(event) => {
+                          event.preventDefault();
+                          void inquiryAction(id, "reject", { reason: rejection.reason });
+                        }}>
+                          <label className="admin-field">Reason (required, max 250 words)
+                            <textarea required maxLength={3000} rows={3} disabled={rejectionPendingId !== null} value={rejection.reason} onChange={(event) => setRejection({ id, reason: event.target.value })} />
+                          </label>
+                          <p>The inquiry is deleted only after the email is accepted by the configured mail server.</p>
+                          <div className="admin-actions">
+                            <button className="button button-primary" type="submit" disabled={rejectionPendingId !== null} aria-busy={rejectionPendingId === id}>
+                              {rejectionPendingId === id ? <><span className="admin-rejection-spinner" aria-hidden="true" /> Rejecting inquiry…</> : "Email customer and delete inquiry"}
+                            </button>
+                            <button className="button button-ghost" type="button" disabled={rejectionPendingId !== null} onClick={() => setRejection(null)}>Cancel</button>
+                          </div>
+                        </form>
+                      ) : null}
+                    </div>
                   ) : null}
                 </article>
               );
@@ -614,15 +706,15 @@ export default function AdminDashboard({
           <article className="admin-list-row admin-fleet-row" key={String(unit.id ?? index)}>
             <div><strong>{text(unit.display_name)}</strong><span>#{text(unit.id)} · {text(unit.status)} · {text(unit.capacity)} seats</span><span>{text(unit.brand)} {text(unit.model)}</span></div>
             <div className="admin-actions">
-              <button className="button button-ghost" type="button" onClick={() => {
+              <button className="admin-icon-button" type="button" aria-label={`Edit ${text(unit.display_name)}`} title="Edit" onClick={() => {
                 beginEdit(unit);
                 setScrollToEditor(true);
-              }}>Edit</button>
-              <button className="button button-danger" type="button" disabled={ownerChangePending} aria-busy={ownerChangePending} onClick={() => {
+              }}><AdminIcon name="edit" /></button>
+              <button className="admin-icon-button is-danger" type="button" aria-label={`Delete ${text(unit.display_name)}`} title="Delete" disabled={ownerChangePending} aria-busy={ownerChangePending} onClick={() => {
                 if (window.confirm(`Delete ${text(unit.display_name)} from the fleet?`)) {
                   void requestOwnerChange({ resource: "unit", action: "delete", data: { id: unit.id, display_name: unit.display_name } });
                 }
-              }}>{ownerChangePending && <span className="admin-request-spinner" aria-hidden="true" />}{ownerChangePending ? "Requesting approval…" : "Delete"}</button>
+              }}>{ownerChangePending ? <span className="admin-request-spinner" aria-hidden="true" /> : <AdminIcon name="delete" />}</button>
             </div>
           </article>
         ))}
@@ -676,15 +768,15 @@ export default function AdminDashboard({
           <article className="admin-list-row" key={String(asset.id ?? index)}>
             <div><strong>{text(asset.display_name)}</strong><span>#{text(asset.id)} · {text(asset.asset_type)} · {text(asset.status)}</span><span>{text(asset.description)}</span></div>
             <div className="admin-actions">
-              <button className="button button-ghost" type="button" onClick={() => {
+              <button className="admin-icon-button" type="button" aria-label={`Edit ${text(asset.display_name)}`} title="Edit" onClick={() => {
                 beginEdit(asset);
                 setScrollToEditor(true);
-              }}>Edit</button>
-              {asset.asset_type === "location" ? <button className="button button-danger" type="button" disabled={ownerChangePending} aria-busy={ownerChangePending} onClick={() => {
+              }}><AdminIcon name="edit" /></button>
+              {asset.asset_type === "location" ? <button className="admin-icon-button is-danger" type="button" aria-label={`Delete ${text(asset.display_name)}`} title="Delete" disabled={ownerChangePending} aria-busy={ownerChangePending} onClick={() => {
                 if (window.confirm(`Delete pickup location ${text(asset.display_name)}?`)) {
                   void requestOwnerChange({ resource: "site_assets", action: "delete", data: { id: asset.id, asset_type: "location" } });
                 }
-              }}>{ownerChangePending && <span className="admin-request-spinner" aria-hidden="true" />}{ownerChangePending ? "Requesting approval…" : "Delete"}</button> : null}
+              }}>{ownerChangePending ? <span className="admin-request-spinner" aria-hidden="true" /> : <AdminIcon name="delete" />}</button> : null}
             </div>
           </article>
         ))}
@@ -711,12 +803,46 @@ export default function AdminDashboard({
   function renderContent() {
     return (
       <>
-        <form className="admin-card admin-json-editor" onSubmit={(event) => void submitContentChange(event)}>
-          <h2>Edit public site content</h2>
-          <p>Preserve the complete settings and labels structure. Contact and pickup fields are managed in Site assets; legacy unmanaged labels are left unchanged.</p>
-          <label className="admin-field">Site content JSON<textarea value={editor || pretty(data)} onChange={(event) => setEditor(event.target.value)} rows={25} spellCheck={false} /></label>
-          <div className="admin-actions"><button className="button button-primary" type="submit" disabled={ownerChangePending} aria-busy={ownerChangePending}>{ownerChangePending && <span className="admin-request-spinner" aria-hidden="true" />}{ownerChangePending ? "Requesting approval…" : "Request owner approval"}</button><button className="button button-ghost" type="button" disabled={ownerChangePending} onClick={() => setEditor(pretty(data))}>Reset editor</button></div>
-        </form>
+        <section
+          ref={siteContentEditorRef}
+          className={`admin-card admin-json-editor admin-site-content-editor${siteContentExpanded ? " is-expanded" : ""}`}
+          aria-label="Public site content editor"
+        >
+          <div className="admin-site-content-heading">
+            <div>
+              <h2>Edit public site content</h2>
+              <p>Preserve the complete settings and labels structure. Contact and pickup fields are managed in Site assets; legacy unmanaged labels are left unchanged.</p>
+            </div>
+            <div className="admin-actions">
+              <button
+                className="admin-icon-button"
+                type="button"
+                aria-label={siteContentExpanded ? "Minimize site content editor" : "Expand site content editor"}
+                title={siteContentExpanded ? "Minimize editor" : "Expand editor"}
+                aria-expanded={siteContentExpanded}
+                onClick={() => setSiteContentExpanded((expanded) => !expanded)}
+              >
+                <AdminIcon name={siteContentExpanded ? "collapse" : "expand"} />
+              </button>
+              <button
+                className="admin-icon-button"
+                type="button"
+                aria-label={siteContentIsFullscreen ? "Exit site content editor full screen" : "Open site content editor full screen"}
+                title={siteContentIsFullscreen ? "Exit full screen" : "Full screen"}
+                onClick={() => void toggleSiteContentFullscreen()}
+              >
+                <AdminIcon name={siteContentIsFullscreen ? "collapse" : "fullscreen"} />
+              </button>
+            </div>
+          </div>
+          {siteContentFullscreenError ? <p className="admin-error" role="alert">{siteContentFullscreenError}</p> : null}
+          {siteContentExpanded ? (
+            <form onSubmit={(event) => void submitContentChange(event)}>
+              <label className="admin-field">Site content JSON<textarea value={editor || pretty(data)} onChange={(event) => setEditor(event.target.value)} rows={25} spellCheck={false} /></label>
+              <div className="admin-actions"><button className="button button-primary" type="submit" disabled={ownerChangePending} aria-busy={ownerChangePending}>{ownerChangePending && <span className="admin-request-spinner" aria-hidden="true" />}{ownerChangePending ? "Requesting approval…" : "Request owner approval"}</button><button className="button button-ghost" type="button" disabled={ownerChangePending} onClick={() => setEditor(pretty(data))}>Reset editor</button></div>
+            </form>
+          ) : null}
+        </section>
         <section className="admin-card">
           <h2>Reset public site content</h2>
           <p>This restores public settings and page copy. Fleet, site assets, inquiries, chat sessions, and administrator access are unchanged. Owner approval is required.</p>
@@ -760,7 +886,7 @@ export default function AdminDashboard({
           </div>
         </div>
         {sessions.length ? sessions.map((session, index) => (
-          <article className="admin-list-row" key={text(session.id, String(index))}>
+          <article className="admin-list-row admin-chat-row" key={text(session.id, String(index))}>
             <div>
               <strong>{text(session.username ?? session.name, "Guest session")}</strong>
               <span>Session {text(session.id)}</span>
@@ -775,11 +901,11 @@ export default function AdminDashboard({
                 </details>
               ) : null}
             </div>
-            <button className="button button-danger" type="button" disabled={ownerChangePending} aria-busy={ownerChangePending} onClick={() => {
+            <button className="admin-icon-button is-danger" type="button" aria-label={`Delete chat session ${text(session.id)}`} title="Delete chat session" disabled={ownerChangePending} aria-busy={ownerChangePending} onClick={() => {
               if (window.confirm("Delete this chat session?")) {
                 void requestOwnerChange({ resource: "chat_sessions", action: "delete", data: { id: session.id } });
               }
-            }}>{ownerChangePending && <span className="admin-request-spinner" aria-hidden="true" />}{ownerChangePending ? "Requesting approval…" : "Delete"}</button>
+            }}>{ownerChangePending ? <span className="admin-request-spinner" aria-hidden="true" /> : <AdminIcon name="delete" />}</button>
           </article>
         )) : <p className="admin-empty">No chat sessions found.</p>}
       </>
