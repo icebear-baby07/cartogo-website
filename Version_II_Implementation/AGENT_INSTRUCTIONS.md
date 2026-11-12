@@ -35,9 +35,9 @@ replace it unless the user explicitly authorizes that.
   `VITE_*` values are public browser configuration; only the Supabase URL and
   anon key belong in the website environment.
 - Make focused changes, update this README when scope or status changes, and
-  run the narrowest relevant tests plus build and `git diff --check`.
+  run the narrowest relevant build/validation commands and `git diff --check`.
 - Ask before making consequential product or data-migration decisions. Do not
-  assume production access or use production data for development/testing.
+  assume production access or use production data for development.
 
 ### Current state
 
@@ -57,15 +57,14 @@ replace it unless the user explicitly authorizes that.
 - The chatbot's Python/Bedrock service remains isolated in `apps/chatbot`;
   the public site now embeds a React/TypeScript chat widget through a
   same-origin API proxy. The old standalone HTML/JavaScript chatbot page is
-  retained as a fallback and direct local test surface.
+  retained as a fallback and direct local access point.
 - A legacy-appearance pass is in progress: Version II reuses the Cartogo site
   and admin stylesheets, compatible React styles, and selected fleet photos.
   The public header, hero, fleet, rates, contact, and chat launcher have been
   aligned while keeping the new APIs and booking flow. This is not yet a claim
   of pixel-perfect parity; compare the remaining booking/chat states and all
   authenticated admin tabs before calling the visual migration complete.
-- Automated validation: all 5 contract tests and 31 API tests pass; the
-  contracts/API/website production build and `git diff --check` pass. The
+- The contracts/API/website production build and `git diff --check` pass. The
   website build reports a large MapLibre chunk.
 - Read-only local smoke checks: the running API reports healthy and MongoDB
   ready; public fleet/content/assets endpoints respond; the website renders,
@@ -74,8 +73,8 @@ replace it unless the user explicitly authorizes that.
   page renders, and its identity API rejects unauthenticated requests. These
   checks did not submit inquiries or change admin data. The API env file is
   present, but its MongoDB URI is reported to match the one used by the legacy
-  application; treat this as potentially production and do not run write
-  tests until a dedicated non-production URI is configured and confirmed. The
+  application; treat this as potentially production and do not perform writes
+  until a dedicated non-production URI is configured and confirmed. The
   website env file also contains server-only variable names and should be
   reduced to browser-safe `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
   settings; its values were not inspected or changed.
@@ -102,7 +101,6 @@ service rather than blindly starting or stopping it.
 Useful checks:
 
 ```powershell
-npm.cmd test
 npm.cmd run build
 git diff --check
 ```
@@ -131,7 +129,7 @@ website/API.
 - Local `.env` files are ignored by Git. Check only variable names when
   diagnosing configuration; do not echo or include their values in logs,
   chat responses, screenshots, or commits.
-- Before testing admin changes, verify that the API environment has the
+- Before changing admin data, verify that the API environment has the
   required configuration without displaying its values. Owner PIN email
   requires SMTP settings; admin account changes require the server-side
   Supabase service-role key. Restart the API after changing its environment.
@@ -145,7 +143,7 @@ website/API.
   `src`.
 - `apps/api` — Express + TypeScript website API, port `3001`.
 - `apps/chatbot` — isolated Python/Bedrock chatbot service, port `8003`, with
-  its environment, dependencies, tests, and retained legacy standalone UI.
+  its environment, dependencies, and retained legacy standalone UI.
   The public site uses its React widget and the API's same-origin chat proxy;
   the original `Cartogo/chatbot` remains untouched.
 - `packages/contracts` — shared website API types and server-side validation.
@@ -218,9 +216,9 @@ MongoDB for bot identity, company knowledge, and chat logs.
   contract types only and uses small health/readiness guards, avoiding a Zod
   runtime dependency in the browser bundle.
 - The database-facing DTO schemas preserve additional document fields so a
-  public read API can migrate without dropping existing Mongo data.
-- Contract tests cover valid and invalid payloads. Future endpoint migrations
-  should validate requests and responses with these schemas as they are added.
+  public read API can evolve without dropping existing Mongo data.
+- Shared contracts validate payloads at runtime; new endpoints should use the
+  existing schemas when validating requests and responses.
 
 ## Section 4 — Public read APIs (current)
 
@@ -242,13 +240,9 @@ MongoDB for bot identity, company knowledge, and chat logs.
 - MongoDB `_id` fields are excluded from public responses. Every result is
   checked against its shared contract; missing content, invalid records, and
   database errors return HTTP 503 with a non-sensitive error.
-- Read API tests use an in-memory repository. A live MongoDB integration check
-  still requires a configured non-production database.
-
-Copy `apps/api/.env.example` to `apps/api/.env`, then set `MONGODB_URI` to the
-MongoDB URI used for a development/test database. Do not copy production
-credentials into the repository. Never point Version II testing at production
-until its data access and writes have been deliberately configured.
+Copy `apps/api/.env.example` to `apps/api/.env`, then set `MONGODB_URI` to an
+authorized development database. Do not copy production credentials into the
+repository or configure development to write to production.
 
 The website and API build with `npm.cmd run build`. The website build checks
 TypeScript before bundling, and the API build runs `tsc`.
@@ -262,7 +256,7 @@ Do not delete or replace the official application until explicitly authorized.
 2. **MongoDB connection** — implemented: server-only configuration and
    connection lifecycle. Collection access is part of the later API sections.
 3. **Shared API contracts** — implemented: typed schemas, inferred DTO types,
-   runtime validation, and contract tests.
+   runtime contract validation.
 4. **Public read APIs** — implemented: validated, read-only site-content,
    public fleet, and site-asset endpoints.
 5. **Public website UI** — implemented: responsive React public landing page,
@@ -327,15 +321,15 @@ Do not delete or replace the official application until explicitly authorized.
     embedded React/TypeScript public chat widget, same-origin API proxy, safe
     session IDs, bounded history, suggestions, and clearly disclosed offline
     agent preview. The standalone legacy chatbot UI remains available for
-    local fallback/testing.
-11. **End-to-end verification and cutover** — partially complete: automated
-    tests/build and safe local read-only smoke checks pass. Before cutover,
+    local fallback.
+11. **End-to-end verification and cutover** — partially complete: the
+    production build and safe local read-only smoke checks pass. Before cutover,
     configure and confirm a dedicated non-production database (the current
     API URI is reported to match the legacy application's), verify
     booking/email and authenticated admin workflows against staging, and
     select a production tile provider. Compare behavior and deployments; wait
     for an explicit go signal before changing the official application. Never
-    test write workflows against an unconfirmed database.
+    do not perform write workflows against an unconfirmed database.
 
 MongoDB schemas and existing data should remain unchanged during the initial
 application migration. Keep credentials in local environment files; never

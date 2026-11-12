@@ -67,7 +67,7 @@ On first launch, the launcher creates `main\cartogo-website\.env` from `.env.exa
 |---|---|
 | `SUPABASE_URL` | Project URL from the same Supabase project used for Google sign-in. |
 | `SUPABASE_ANON_KEY` | That project's publishable/anon key. This is not the service-role key. |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server-only service-role key. Needed for Owner-approved allowlist changes and migrations; never put it in browser code or share it. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only service-role key. Needed for Owner-approved allowlist changes; never put it in browser code or share it. |
 | `MONGODB_URI` | MongoDB connection URI. Use a database user with read/write privileges for the databases below. |
 | `MONGODB_DATABASE` | Usually `cartogo`; stores customer inquiries and the email outbox. |
 | `MONGODB_SITE_DATABASE` | Usually `Site`; stores fleet, site assets, site content, sequences, roles, and website chat sessions. |
@@ -152,7 +152,7 @@ Keep the website terminal open. If it is already running from the administrator 
 - Site assets appear in Admin Settings.
 - Owner PIN email arrives when a protected change is requested.
 
-For LAN testing, use a device on the same trusted network and the printed LAN URL. Allow Python through Windows Firewall on the Private network if prompted. Do not expose this development server directly to the public internet. If the LAN IP changes, update Supabase redirect allowlists as needed.
+For LAN access, use a device on the same trusted network and the printed LAN URL. Allow Python through Windows Firewall on the Private network if prompted. Do not expose this development server directly to the public internet. If the LAN IP changes, update Supabase redirect allowlists as needed.
 
 ## 8. Optional chatbot setup
 
@@ -183,14 +183,12 @@ The website can run without the chatbot. To set up the chatbot:
 
 The MongoDB initializer creates the chatbot log indexes only when it can read a non-empty MongoDB URI from `chatbot\.env` (or `CHATBOT_MONGODB_URI` in the initializer process). It does not create or populate knowledge records.
 
-## 9. New installation versus existing-data migration
+## 9. Existing application data
 
-These are different workflows:
-
-- **New installation:** Follow this guide, initialize MongoDB, and add/import fleet and knowledge data as needed. Do not run legacy Supabase table-creation scripts.
-- **Existing deployment moved to a new MongoDB host:** Configure both source and destination access, then run the applicable `migrate_supabase_to_mongodb.py`, `migrate_supabase_admin_roles_to_mongodb.py`, and `migrate_supabase_chat_to_mongodb.py` scripts from `main\cartogo-website`. They preserve existing MongoDB records and do not delete the Supabase source data. Run the initializer without `--seed-starter-assets`, verify all required data, and make a recoverable Supabase backup. This repository no longer includes a legacy-table cutover script. If you want legacy tables removed from Supabase, prepare and review a project-specific cleanup only after verifying the imports and backup; keep `cartogo_admin_accounts` and Supabase Auth intact.
-
-Removing the old SQL files from this repository does not run SQL against Supabase or remove any live database records.
+The application uses MongoDB for its operational records and Supabase Auth for
+administrator sign-in. One-off data import utilities are not included in this
+repository. Removing local import and setup files does not change any live
+MongoDB or Supabase data.
 
 ## Troubleshooting
 
@@ -203,7 +201,7 @@ Removing the old SQL files from this repository does not run SQL against Supabas
 - **Owner PIN or guest verification email does not arrive:** Check `SMTP_USER`, `SMTP_APP_PASSWORD`, `SMTP_HOST`, `SMTP_PORT`, and `SMTP_FROM`; use a Google app password rather than the normal account password.
 - **Inquiry confirmation email is delayed:** The inquiry is saved independently from email delivery. Check the `email_outbox` collection (or the configured `MONGODB_EMAIL_OUTBOX_COLLECTION`) for queued/failed jobs and review the website server log for retry errors.
 - **Site content is not initialized:** Rerun the MongoDB initializer and check its output and MongoDB write permissions.
-- **Pickup/contact list is empty:** On a blank installation, rerun with `--seed-starter-assets`; the seed only runs if the site-assets collection has no documents. If assets were migrated, verify the configured MongoDB database/collection instead.
+- **Pickup/contact list is empty:** On a blank installation, rerun with `--seed-starter-assets`; the seed only runs if the site-assets collection has no documents. Verify the configured MongoDB database/collection.
 - **Chatbot cannot see vehicles:** Check that the chatbot uses `MONGODB_UNITS_DATABASE=Site` and `MONGODB_UNITS_COLLECTION=vehicles`, and that the fleet collection has records.
 
 For the broader site and service behavior, see [`main/cartogo-website/README.md`](../../README.md) and [`chatbot/OPERATIONAL_TUTORIAL.md`](../../../chatbot/OPERATIONAL_TUTORIAL.md).

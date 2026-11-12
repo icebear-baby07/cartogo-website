@@ -403,7 +403,7 @@ export function createAdminRouter(
       response.json(await (await getRepository()).listSiteAssets());
     } catch (error) {
       console.error("Could not read admin site assets.", error instanceof Error ? error.name : "UnknownError");
-      sendError(response, 503, "MongoDB site assets are unavailable.");
+      sendError(response, 503, "Site assets are unavailable.");
     }
   });
 
@@ -412,13 +412,13 @@ export function createAdminRouter(
       const content = await (await getRepository()).getSiteContent();
       const validated = SiteContentSchema.safeParse(content);
       if (!validated.success) {
-        sendError(response, 503, "MongoDB site content is unavailable.");
+        sendError(response, 503, "Site content is unavailable.");
         return;
       }
       response.json(validated.data);
     } catch (error) {
       console.error("Could not read admin site content.", error instanceof Error ? error.name : "UnknownError");
-      sendError(response, 503, "MongoDB site content is unavailable.");
+      sendError(response, 503, "Site content is unavailable.");
     }
   });
 
@@ -427,7 +427,7 @@ export function createAdminRouter(
       response.json(await (await getRepository()).listInquiries());
     } catch (error) {
       console.error("Could not read inquiries.", error instanceof Error ? error.name : "UnknownError");
-      sendError(response, 503, "MongoDB inquiries are unavailable.");
+      sendError(response, 503, "Inquiries are unavailable.");
     }
   });
 
@@ -473,7 +473,7 @@ export function createAdminRouter(
       response.json(await (await getRepository()).listChatSessions());
     } catch (error) {
       console.error("Could not read chat sessions.", error instanceof Error ? error.name : "UnknownError");
-      sendError(response, 503, "MongoDB chat sessions are unavailable.");
+      sendError(response, 503, "Chat sessions are unavailable.");
     }
   });
 
@@ -753,7 +753,7 @@ export function createAdminRouter(
       console.error("Owner-approved change failed.", error instanceof Error ? error.name : "UnknownError");
       const message = error instanceof Error ? error.message : "MongoDB could not apply the owner-approved change.";
       const status = error instanceof AdminActivityLogError ? 503 :
-        /at least one Owner|no longer exists|not found|does not match|must remain/i.test(message) ? 400 : 503;
+        /at least one Owner|no longer exists|not found|does not match|must remain|already exists/i.test(message) ? 400 : 503;
       sendError(response, status, message);
     }
   });

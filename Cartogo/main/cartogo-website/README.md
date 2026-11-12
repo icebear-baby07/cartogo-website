@@ -6,7 +6,7 @@ Customer-facing car rental site with fleet information, booking inquiries, and a
 
 Requirements: Python 3.10 or newer, a Supabase project, and a MongoDB database reachable by the website server. Guest email verification also requires the SMTP settings in `.env`.
 
-From the `Cartogo` directory, run `start_site.cmd`. On first launch, it creates `main/cartogo-website/.env` from `.env.example` and stops so you can configure it. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and the server-only `MONGODB_URI`; follow the migration steps below before launching the cut-over site. The default port is `8002`; the launcher prints local and LAN addresses and updates the PowerShell window title with the current LAN site address.
+From the `Cartogo` directory, run `start_site.cmd`. On first launch, it creates `main/cartogo-website/.env` from `.env.example` and stops so you can configure it. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and the server-only `MONGODB_URI` before launching the site. The default port is `8002`; the launcher prints local and LAN addresses and updates the PowerShell window title with the current LAN site address.
 
 When launched with `start_site.ps1` (including `start_site.cmd`), the console highlights successful responses in green, redirects in cyan, client errors in yellow, and server errors in red with contrasting text. API errors also print their HTTP category and a sanitized, length-limited detail for troubleshooting. Set `NO_COLOR` to disable status colors.
 
@@ -14,7 +14,7 @@ To start manually, run `python server.py` from `main/cartogo-website`. To start 
 
 The launchers reuse an already-responsive carTOGO server. If a carTOGO `server.py` process owns its configured port but is no longer responding, the launcher restarts only that verified project process. A listener that cannot be identified as this project is left alone and reported as a port conflict.
 
-For phone testing, open the printed LAN URL on a device connected to the same trusted network. The launcher binds to `0.0.0.0` by default so the site is reachable over LAN; allow Python through Windows Firewall on the Private profile if prompted. Use `HOST=127.0.0.1` when access should be limited to this computer. Do not expose this development server directly to the public internet. LAN addresses may change, so update the Supabase redirect settings if the address changes.
+To use the site from a phone, open the printed LAN URL on a device connected to the same trusted network. The launcher binds to `0.0.0.0` by default so the site is reachable over LAN; allow Python through Windows Firewall on the Private profile if prompted. Use `HOST=127.0.0.1` when access should be limited to this computer. Do not expose this development server directly to the public internet. LAN addresses may change, so update the Supabase redirect settings if the address changes.
 
 ## Environment
 
@@ -28,64 +28,34 @@ The booking map verifies selected destinations on the server through OpenStreetM
 
 ## Supabase and Google sign-in
 
-Use one Supabase project consistently for the site URL, public key, Google provider, and database migrations. A mismatched URL/key pair causes authentication requests to fail.
+Use one Supabase project consistently for the site URL, public key, Google provider, and database configuration. A mismatched URL/key pair causes authentication requests to fail.
 For the complete fresh-install database script order, see [the database setup guide](back/db/README.md).
 
 1. In Supabase Authentication, enable Google. Create a Web application OAuth client in Google Cloud, then add the callback URL shown in Supabase's Google provider settings to Google's Authorized redirect URIs. Put the Google client ID and secret in Supabase, not in this repository.
 2. In the same Supabase project, set the Site URL to a stable canonical site URL, such as the deployed HTTPS site or `http://localhost:8002/front/`. Do not set it to a DHCP-assigned LAN address; Supabase uses the Site URL as a fallback when a requested return URL is not allowlisted.
 3. Under Supabase Authentication → URL Configuration → Redirect URLs, allow the exact pages used: `http://localhost:8002/front/index.html`, `http://localhost:8002/front/admin.html`, `http://127.0.0.1:8002/front/index.html`, and `http://127.0.0.1:8002/front/admin.html`, plus the deployed HTTPS pages. For a changing LAN IP in the `192.168.30.x` subnet, add `http://192.168.30.*/front/index.html` and `http://192.168.30.*/front/admin.html`; update the subnet pattern if your router assigns a different subnet. The admin sign-in returns to the same hostname and port currently used in the browser. The Google Cloud callback remains the Supabase callback URL; it is not a site page.
 4. Run [01_supabase_admin_accounts.sql](back/db/01_supabase_admin_accounts.sql) in the SQL editor. It creates the administrator allowlist and its authentication/account-management functions; site content, inquiries, chat sessions, and administrator titles/permissions are stored in MongoDB.
-5. Bootstrap the first administrator: sign in once at `front/admin.html` with the chosen Google account (access will be denied until it is added), replace the email placeholder in [02_supabase_bootstrap_first_admin.sql](back/db/02_supabase_bootstrap_first_admin.sql), then run that script in the same project's SQL editor. Return to the admin page and sign in again. To add further administrators, have each account complete Google sign-in once, then add its email in Admin Settings. Existing installations migrate their current admin account automatically; if you already ran an earlier version that seeded an email into `cartogo_admin_accounts`, remove that account after adding your intended one.
+5. Bootstrap the first administrator: sign in once at `front/admin.html` with the chosen Google account (access will be denied until it is added), replace the email placeholder in [02_supabase_bootstrap_first_admin.sql](back/db/02_supabase_bootstrap_first_admin.sql), then run that script in the same project's SQL editor. Return to the admin page and sign in again. To add further administrators, have each account complete Google sign-in once, then add its email in Admin Settings. If an earlier version seeded an unintended email into `cartogo_admin_accounts`, remove that account after adding your intended one.
 
-Set `CARTOGO_INITIAL_OWNER_EMAIL` in the website server's `.env` to the verified administrator account that should receive the initial Owner title. New administrator accounts default to Moderator. Moderators can access inquiries, fleet, site assets, site content, and chat; Owners can also manage administrator accounts and titles. Site-content, fleet, site-asset, chat, and title changes require an Owner PIN, which is sent to every MongoDB account with the Owner title. Existing title assignments are imported from Supabase when available by [migrate_supabase_admin_roles_to_mongodb.py](migrate_supabase_admin_roles_to_mongodb.py).
+Set `CARTOGO_INITIAL_OWNER_EMAIL` in the website server's `.env` to the verified administrator account that should receive the initial Owner title. New administrator accounts default to Moderator. Moderators can access inquiries, fleet, site assets, site content, and chat; Owners can also manage administrator accounts and titles. Site-content, fleet, site-asset, chat, and title changes require an Owner PIN, which is sent to every MongoDB account with the Owner title.
 
-For an existing deployment, run the applicable site-data, administrator-role, and chat migrations before retiring any legacy Supabase data. These import scripts preserve existing MongoDB records and do not delete the Supabase source rows. The old SQL setup and cutover files have been removed from this repository; removing them did not change your live Supabase project. If you need to remove legacy Supabase tables, first verify all required data in MongoDB, take a Supabase backup, and prepare and review a project-specific cleanup through Supabase before applying it. `cartogo_admin_accounts` and Supabase Auth must remain. Keep `SUPABASE_SERVICE_ROLE_KEY` configured on the server for approved administrator-account changes and one-time migrations; never expose it through `config.js` or browser code. Configure `SMTP_USER`, `SMTP_APP_PASSWORD`, `SMTP_HOST=smtp.gmail.com`, and `SMTP_PORT=587` for Owner PIN delivery.
+`cartogo_admin_accounts` and Supabase Auth are required for administrator sign-in. Keep `SUPABASE_SERVICE_ROLE_KEY` configured on the server for approved administrator-account changes; never expose it through `config.js` or browser code. Configure `SMTP_USER`, `SMTP_APP_PASSWORD`, `SMTP_HOST=smtp.gmail.com`, and `SMTP_PORT=587` for Owner PIN delivery.
 
-## MongoDB site-data migration
+## MongoDB data
 
-Install the website server's MongoDB driver from `main/cartogo-website`:
-
-```powershell
-py -3 -m pip install -r requirements.txt
-```
-
-Set these server-only values in `main/cartogo-website/.env`:
-
-- `MONGODB_URI` — connection URI for the MongoDB deployment.
-- `MONGODB_DATABASE=cartogo` — customer inquiries.
-- `MONGODB_SITE_DATABASE=Site` — fleet, site assets, public site content, ID sequences, admin roles, and chat sessions.
-- `MONGODB_UNITS_COLLECTION=vehicles`
-- `MONGODB_SITE_ASSETS_COLLECTION=site_assets`
-- `MONGODB_SITE_CONTENT_COLLECTION=site_content`
-- `MONGODB_INQUIRIES_COLLECTION=inquiries`
-- `MONGODB_ADMIN_ROLES_COLLECTION=admin_roles`
-- `MONGODB_CHAT_SESSIONS_COLLECTION=chat_sessions`
-
-For a blank MongoDB database, initialize the live website collections, indexes, public content seed, and role definitions from `main/cartogo-website`:
-
-```powershell
-py -3 back/db/initialize_mongodb.py --seed-starter-assets
-```
-
-The optional starter asset seed is inserted only when the site-assets collection is empty. Review the starter pickup/contact details before launch. The fleet and chatbot knowledge records are not seeded; import or enter those separately. For an existing deployment being migrated, follow the migration instructions below and run the initializer without `--seed-starter-assets`.
-
-For an existing deployment that still has data in Supabase, run the one-time `migrate_supabase_to_mongodb.py`, `migrate_supabase_admin_roles_to_mongodb.py`, and `migrate_supabase_chat_to_mongodb.py` scripts as applicable. They preserve existing MongoDB records and do not delete Supabase source rows. Set `SUPABASE_SERVICE_ROLE_KEY` in the ignored website `.env`; keep it server-only.
-
-```powershell
-py -3 migrate_supabase_to_mongodb.py
-```
-
-The importer reads `unit_data`, `site_assets`, and `inquiries` from Supabase in pages, preserves their numeric IDs, and inserts records only when that ID is not already in MongoDB. The `vehicles`, `site_assets`, `site_content`, and `site_sequences` collections are read from or written to `MONGODB_SITE_DATABASE` (`Site` by default); `inquiries` remains in `MONGODB_DATABASE` (`cartogo` by default). It seeds `site_content` from [site_content_seed.json](back/data/site_content_seed.json) only if the public content document is absent. Re-running it will not overwrite MongoDB edits; it removes the duplicate `labels.contact` value because pickup/contact data is managed in `site_assets`. Existing Supabase records are never deleted or modified. Set the database and collection names in `.env` if you prefer names other than the defaults above.
-
-The website and chatbot read the public vehicle catalog from `Site.vehicles`; pickup/contact records use `Site.site_assets`; rates, fees, discounts, page copy, and social links use `Site.site_content`; customer inquiries use `cartogo.inquiries` by default (or the configured `MONGODB_DATABASE`). Inquiry notes are saved in that inquiry collection and displayed on the admin inquiry card. Inquiry records do not collect destination labels, target coordinates, nearest pickup names, or nearest pickup distances. Rerun `migrate_supabase_to_mongodb.py` to remove those fields from existing MongoDB inquiry documents as well. The default discount rules are 5% for 4–7 days and 10% for 8–15 days. Footer social entries are placeholder labels (“Facebook Link”, “IG Link”, “X Link”) with no active URL until real profile links are provided. The existing per-browser `localStorage` values are not imported; migration seeds the current source-code defaults. Supabase Auth provides Google sign-in, and `cartogo_admin_accounts` is the only Supabase application-data table used by the current application; administrator titles and permissions are stored in MongoDB. Existing projects may still contain legacy Supabase tables until they are separately cleaned up. Supabase inquiry rows are copied to MongoDB but are not removed from Supabase by the importer.
-
-For the chatbot, set the same `MONGODB_URI`, `MONGODB_UNITS_DATABASE=Site`, and `MONGODB_UNITS_COLLECTION=vehicles` in `chatbot/.env`, then restart it. Chat logs and company knowledge use their separately configured MongoDB collections. No Supabase key is needed by the chatbot for vehicle lookup.
+The website stores the fleet in `Site.vehicles`, pickup/contact records in
+`Site.site_assets`, public content in `Site.site_content`, administrator roles
+in `Site.admin_roles`, chat sessions in `Site.chat_sessions`, and inquiries in
+`cartogo.inquiries` by default. The chatbot uses its configured MongoDB
+collections for identity, company knowledge, and optional chat logs. Set
+database and collection names in each server's local `.env` as needed. The
+repository no longer includes one-off data import utilities.
 
 The booking form filters unit choices to capacities no larger than the entered value and offers separate 12/24-hour and custom-day arrangements. Hourly rentals quote one selected rate block; custom rentals use a 4–15 day slider and the 24-hour rate, with configured discounts. Luzon destinations use custom-day rates only. The return date follows the selected arrangement and pickup time. Rates stay hidden until a unit is selected. Customer target coordinates are sent to Nominatim to identify the rate region; follow the OpenStreetMap tile and Nominatim usage policies before scaling production traffic. Keep the required OpenStreetMap attribution visible. Public visitors cannot read rows marked `Inactive`.
 
 Customers can submit inquiries either with Google sign-in or as a guest. Google-authenticated inquiries use the verified Supabase profile; guests must provide first and last names (middle name and suffix are optional), a phone number, and an email address verified by a one-time code sent through SMTP. Every inquiry requires a phone number with 7–15 digits; phone verification is not currently performed. Guest email verification codes expire after ten minutes, allow five attempts, and are rate-limited to one email per minute per client address. After an inquiry is saved, the customer receives a branded HTML and plain-text confirmation summarizing the request and next steps. Delivery failures do not undo a saved inquiry; the site reports that the confirmation email could not be sent, and the server logs the failure. Guest verification, inquiry confirmations, and administrator approval codes share the same branded email template and SMTP settings. If the email-code request returns a 404, restart or update the website server so it includes the email verification API, then refresh the page. Admin inquiry listing, status changes, and deletion require an authorized administrator with the appropriate MongoDB title. Do not expose MongoDB credentials to the browser. If a token request returns `UNAUTHORIZED_INVALID_API_KEY`, verify that the Supabase URL and public key belong to the same project.
 
-> **Soon-to-be-added:** Phone number verification could not be added yet because a free verification provider for sandbox testing is not available. Phone numbers are required for booking inquiries, but are not verified.
+Phone numbers are required for booking inquiries, but are not verified.
 
 ## Data and security notes
 
@@ -98,8 +68,7 @@ Chat sessions are stored in MongoDB and are accessed through the website server;
 - **Python and the standard-library HTTP server** power the website and chatbot backends. They serve the browser application, expose API endpoints, handle inquiry and chat workflows, and keep database and email operations on the server.
 - **HTML, CSS, and browser JavaScript** build the customer-facing site and admin panel. They provide the rental inquiry flow, fleet and rate views, interactive maps, and administration without a separate frontend framework.
 - **MongoDB with PyMongo** stores the live vehicle catalog, pickup and contact locations, site content, inquiries, administrator titles/permissions, website chat sessions, chatbot knowledge, and optional chat logs. The website and chatbot use separate collections for their respective data.
-- **Supabase Auth and Google OAuth** provide sign-in. The current application uses `cartogo_admin_accounts` as its administrator allowlist; legacy Supabase tables in an existing project are not accessed by the application and are not deleted by the migration importers. The service role is reserved for server-side account management and one-time migrations.
+- **Supabase Auth and Google OAuth** provide sign-in. The current application uses `cartogo_admin_accounts` as its administrator allowlist; legacy Supabase tables in an existing project are not accessed by the application. The service role is reserved for server-side account management.
 - **Amazon Bedrock, accessed through Boto3 in the chatbot**, supplies the AI responses. The chatbot can also look up vehicle availability and use company knowledge stored in MongoDB.
 - **SMTP** sends guest email-verification codes, inquiry confirmations, and owner-approval PINs, helping verify guest email ownership and notify customers and administrators.
 - **MapLibre GL JS** renders interactive booking and pickup maps using **Esri World Street Map** raster tiles and Esri attribution. **OSRM's driving profile** supplies driving-distance estimates and one displayed road route at a time to the nearest pickup area, with clearly labeled straight-line fallback estimates when distance routing is unavailable. **OpenStreetMap Nominatim** powers server-side location search, destination validation, and mapped place names. These public services have usage policies and availability limits; the OSRM demo server is not intended for production workloads.
-- **The Supabase-to-MongoDB migration script** imports the existing catalog, site assets, and inquiries while preserving IDs and avoiding overwrites, enabling the site-data transition without deleting the source records.

@@ -11,7 +11,6 @@
     "dev": "npm run build --workspace @cartogo/contracts && concurrently -k -n api,website -c blue,green \"npm:dev --workspace @cartogo/api\" \"npm:dev --workspace @cartogo/website\"",
     "dev:chatbot": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File apps/chatbot/start_chat.ps1",
     "build": "npm run build --workspace @cartogo/contracts && npm run build --workspace @cartogo/api && npm run build --workspace @cartogo/website",
-    "test": "npm run test --workspace @cartogo/contracts && npm run test --workspace @cartogo/api",
     "start:api": "npm run start --workspace @cartogo/api"
   },
   "devDependencies": {

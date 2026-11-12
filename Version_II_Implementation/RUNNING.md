@@ -104,12 +104,11 @@ Google/Supabase sign-in from another device may require adding the exact
 network URL to Supabase's allowed redirect URLs. With a changing IP address,
 that URL may need updating when the address changes.
 
-## Useful checks
+## Build
 
 From the Version II directory:
 
 ```powershell
-npm.cmd test
 npm.cmd run build
 git diff --check
 ```

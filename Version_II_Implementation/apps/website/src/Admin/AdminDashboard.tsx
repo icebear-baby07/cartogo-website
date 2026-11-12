@@ -17,7 +17,7 @@ type ApprovalChallenge = {
   ownerEmail: string;
   expiresIn: number;
 };
-type AdminIconName = "refresh" | "download" | "edit" | "delete" | "expand" | "collapse" | "fullscreen";
+type AdminIconName = "refresh" | "download" | "edit" | "delete" | "expand" | "collapse";
 
 function AdminIcon({ name }: { name: AdminIconName }) {
   const paths: Record<AdminIconName, string> = {
@@ -27,7 +27,6 @@ function AdminIcon({ name }: { name: AdminIconName }) {
     delete: "M3 6h18m-2 0-.9 14H5.9L5 6m4 0V4h6v2m-5 4v6m4-6v6",
     expand: "M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3m8 0h3a2 2 0 0 0 2-2v-3",
     collapse: "M8 3v5H3m13-5v5h5M8 21v-5H3m13 5v-5h5",
-    fullscreen: "M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3m8 0h3a2 2 0 0 0 2-2v-3",
   };
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -206,9 +205,6 @@ export default function AdminDashboard({
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const [showMobileAdminNotice, setShowMobileAdminNotice] = useState(true);
   const [expandedInquiryId, setExpandedInquiryId] = useState<string | null>(null);
-  const [siteContentExpanded, setSiteContentExpanded] = useState(false);
-  const [siteContentIsFullscreen, setSiteContentIsFullscreen] = useState(false);
-  const [siteContentFullscreenError, setSiteContentFullscreenError] = useState("");
   const [data, setData] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -230,7 +226,6 @@ export default function AdminDashboard({
   const approvalFormRef = useRef<HTMLFormElement>(null);
   const accountDialogRef = useRef<HTMLDialogElement>(null);
   const logoutDialogRef = useRef<HTMLDialogElement>(null);
-  const siteContentEditorRef = useRef<HTMLElement>(null);
 
   const allowedPermissions = useMemo(
     () => new Set((profile?.titles ?? []).flatMap((title) => permissionsByTitle[title] ?? [])),
@@ -362,38 +357,8 @@ export default function AdminDashboard({
     else if (!logoutDialogOpen && dialog.open) dialog.close();
   }, [logoutDialogOpen]);
 
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      const isFullscreen = document.fullscreenElement === siteContentEditorRef.current;
-      setSiteContentIsFullscreen(isFullscreen);
-      if (isFullscreen) setSiteContentExpanded(true);
-    };
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
-  }, []);
-
   async function refresh() {
     await loadTab(tab);
-  }
-
-  async function toggleSiteContentFullscreen() {
-    const editorElement = siteContentEditorRef.current;
-    if (!editorElement) return;
-    setSiteContentFullscreenError("");
-    setSiteContentExpanded(true);
-    try {
-      if (document.fullscreenElement === editorElement) {
-        await document.exitFullscreen();
-      } else {
-        await editorElement.requestFullscreen();
-      }
-    } catch (fullscreenError) {
-      setSiteContentFullscreenError(
-        fullscreenError instanceof Error
-          ? `Could not open the editor full screen: ${fullscreenError.message}`
-          : "Could not open the editor full screen.",
-      );
-    }
   }
 
   async function requestOwnerChange(change: OwnerChange) {
@@ -792,7 +757,7 @@ export default function AdminDashboard({
         {editor ? (
           <form ref={recordEditorRef} className="admin-card admin-json-editor" onSubmit={(event) => void submitJsonChange(event, "site_assets", editingId === null ? "add" : "update", true)}>
             <h2>{editingId === null ? "Add pickup location" : `Edit site asset #${editingId}`}</h2>
-            <p>Enter the pickup location coordinates as latitude and longitude; there is no default location. After owner approval, the record is saved in MongoDB&apos;s <code>site_assets</code> collection and used by the public map. The live-agent contact can be edited but not added or deleted here.</p>
+            <p>Enter the pickup location coordinates as latitude and longitude; there is no default location. After owner approval, the record is saved to the configured site asset store and used by the public map. The live-agent contact can be edited but not added or deleted here.</p>
             <label className="admin-field">Asset data<textarea value={editor} onChange={(event) => setEditor(event.target.value)} rows={12} spellCheck={false} /></label>
             <div className="admin-actions"><button className="button button-primary" type="submit" disabled={ownerChangePending} aria-busy={ownerChangePending}>{ownerChangePending && <span className="admin-request-spinner" aria-hidden="true" />}{ownerChangePending ? "Requesting approval…" : "Request owner approval"}</button><button className="button button-ghost" type="button" disabled={ownerChangePending} onClick={() => { setEditor(""); setEditingId(null); }}>Cancel</button></div>
           </form>
@@ -805,8 +770,7 @@ export default function AdminDashboard({
     return (
       <>
         <section
-          ref={siteContentEditorRef}
-          className={`admin-card admin-json-editor admin-site-content-editor${siteContentExpanded ? " is-expanded" : ""}`}
+          className="admin-card admin-json-editor admin-site-content-editor"
           aria-label="Public site content editor"
         >
           <div className="admin-site-content-heading">
@@ -814,35 +778,11 @@ export default function AdminDashboard({
               <h2>Edit public site content</h2>
               <p>Preserve the complete settings and labels structure. Contact and pickup fields are managed in Site assets; legacy unmanaged labels are left unchanged.</p>
             </div>
-            <div className="admin-actions">
-              <button
-                className="admin-icon-button"
-                type="button"
-                aria-label={siteContentExpanded ? "Minimize site content editor" : "Expand site content editor"}
-                title={siteContentExpanded ? "Minimize editor" : "Expand editor"}
-                aria-expanded={siteContentExpanded}
-                onClick={() => setSiteContentExpanded((expanded) => !expanded)}
-              >
-                <AdminIcon name={siteContentExpanded ? "collapse" : "expand"} />
-              </button>
-              <button
-                className="admin-icon-button"
-                type="button"
-                aria-label={siteContentIsFullscreen ? "Exit site content editor full screen" : "Open site content editor full screen"}
-                title={siteContentIsFullscreen ? "Exit full screen" : "Full screen"}
-                onClick={() => void toggleSiteContentFullscreen()}
-              >
-                <AdminIcon name={siteContentIsFullscreen ? "collapse" : "fullscreen"} />
-              </button>
-            </div>
           </div>
-          {siteContentFullscreenError ? <p className="admin-error" role="alert">{siteContentFullscreenError}</p> : null}
-          {siteContentExpanded ? (
-            <form onSubmit={(event) => void submitContentChange(event)}>
-              <label className="admin-field">Site content JSON<textarea value={editor || pretty(data)} onChange={(event) => setEditor(event.target.value)} rows={25} spellCheck={false} /></label>
-              <div className="admin-actions"><button className="button button-primary" type="submit" disabled={ownerChangePending} aria-busy={ownerChangePending}>{ownerChangePending && <span className="admin-request-spinner" aria-hidden="true" />}{ownerChangePending ? "Requesting approval…" : "Request owner approval"}</button><button className="button button-ghost" type="button" disabled={ownerChangePending} onClick={() => setEditor(pretty(data))}>Reset editor</button></div>
-            </form>
-          ) : null}
+          <form onSubmit={(event) => void submitContentChange(event)}>
+            <label className="admin-field">Site content JSON<textarea value={editor || pretty(data)} onChange={(event) => setEditor(event.target.value)} rows={25} spellCheck={false} /></label>
+            <div className="admin-actions"><button className="button button-primary" type="submit" disabled={ownerChangePending} aria-busy={ownerChangePending}>{ownerChangePending && <span className="admin-request-spinner" aria-hidden="true" />}{ownerChangePending ? "Requesting approval…" : "Request owner approval"}</button><button className="button button-ghost" type="button" disabled={ownerChangePending} onClick={() => setEditor(pretty(data))}>Reset editor</button></div>
+          </form>
         </section>
         <section className="admin-card">
           <h2>Reset public site content</h2>

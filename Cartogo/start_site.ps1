@@ -14,7 +14,7 @@ if (-not (Test-Path $EnvironmentFile)) {
 		throw "Environment template not found: $EnvironmentExample"
 	}
 	Copy-Item -LiteralPath $EnvironmentExample -Destination $EnvironmentFile
-	throw "Created .env from the template. Set SUPABASE_URL, SUPABASE_ANON_KEY, and MONGODB_URI, migrate the site data, then run this launcher again."
+	throw "Created .env from the template. Set SUPABASE_URL, SUPABASE_ANON_KEY, and MONGODB_URI, then run this launcher again."
 }
 
 $Settings = @{}

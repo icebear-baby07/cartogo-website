@@ -227,7 +227,7 @@ class MongoDataStore:
 	def get_site_content(self):
 		content = self.site_content.find_one({"_id": "public"})
 		if content is None:
-			raise RuntimeError("MongoDB site content is not initialized. Run migrate_supabase_to_mongodb.py first.")
+			raise RuntimeError("MongoDB site content is not initialized. Initialize it before starting the website.")
 		return self._public_document(content)
 
 	def list_inquiries(self):

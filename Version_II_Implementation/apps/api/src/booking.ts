@@ -68,6 +68,7 @@ export type GuestChallenge = {
   attempts: number;
   verified_at?: Date;
   token_hash?: string;
+  consumed_at?: Date;
 };
 
 export type EmailOutboxItem = {
@@ -612,6 +613,13 @@ export function createBookingRouter(
           await repository.releaseGuestChallenge(challengeId, email, digest(verificationToken));
         }
         throw error;
+      }
+      if (created.email.toLowerCase() !== email) {
+        if (challengeId && verificationToken) {
+          await repository.releaseGuestChallenge(challengeId, email, digest(verificationToken));
+        }
+        sendError(response, 409, "That request ID is already associated with another inquiry.");
+        return;
       }
       try {
         await repository.enqueueInquiryConfirmation(created);

@@ -48,6 +48,10 @@ The bot provides up to four matching records to Amazon Bedrock as reference cont
 
 The chatbot reads identity and behavior data from `KB.bot_identity`; proprietary company facts come from `KB.proprietary_info_collection`. Set `MONGODB_BOT_IDENTITY` in `chatbot/.env` to select a different identity collection. The identity document must use `record_id: "cartogo-bot-identity"` and `record_type: "bot_identity"`. It may provide a complete `instructions` string, or the structured `name`, `role`, `organization`, `purpose`, `voice`, `capabilities`, and `boundaries` fields. The chatbot builds its prompt from those MongoDB fields and does not fall back to local instructions. If MongoDB is unavailable or the identity record is missing or invalid, chat requests fail with an explicit service error. Changes to the document take effect on the next chat request.
 
+### Supabase-backed chatbot storage
+
+When `CHATBOT_STORAGE=supabase`, the chatbot uses Supabase for chat logs, company-reference documents, and bot identity. Vehicle questions use the shared `public.fleet_documents` table. Configure `SUPABASE_URL` and the server-only `SUPABASE_SERVICE_ROLE_KEY` in `apps/chatbot/.env`; never expose the service-role key to browser code. This repository no longer includes one-off import or schema setup utilities, so the required Supabase tables and functions must already be present. Restart the chatbot after changing the storage selector.
+
 Example identity document:
 
 ```json

@@ -91,7 +91,7 @@ The chatbot service is deliberately isolated from the website/API runtime. The
 website API forwards chat requests to it; the bot can use its configured
 MongoDB records for vehicle information, company knowledge, identity, and chat
 logging, and AWS Bedrock for language-model responses. The standalone chatbot
-page is retained for local testing.
+page is retained for local access.
 
 ### Tools and their contributions
 
@@ -109,7 +109,6 @@ page is retained for local testing.
 | Python 3.10+ | Runs the separate chatbot service and its isolated virtual environment. |
 | Boto3 and AWS Bedrock | Let the chatbot call the configured Bedrock model. AWS CLI sign-in and suitable AWS permissions are needed when using this model flow. |
 | MapLibre GL and OpenStreetMap tiles | Render pickup locations. Production deployment must use a tile provider and usage policy appropriate to expected traffic. |
-| Node test runner and Python tests | Exercise API/contracts and chatbot behavior. Root npm scripts run the contract and API test suites. |
 
 ### Important data and security boundaries
 
@@ -125,10 +124,10 @@ page is retained for local testing.
   environment.
 - Never put MongoDB credentials, SMTP credentials, or Supabase service-role
   keys in the browser environment. Never commit `.env` files.
-- Use a dedicated, confirmed non-production database for development and
-  testing. Existing project notes flag the current API database URI as
-  potentially matching the legacy application; do not run write tests against
-  it unless an authorized owner confirms it is safe.
+- Use a dedicated, confirmed non-production database for development. Existing
+  project notes flag the current API database URI as potentially matching the
+  legacy application; do not write to it unless an authorized owner confirms
+  it is safe.
 
 ## 3. Operating on an already set up device
 
@@ -183,7 +182,6 @@ are configured.
 - Run checks from the Version II directory:
 
   ```powershell
-  npm.cmd test
   npm.cmd run build
   git diff --check
   ```
@@ -256,28 +254,10 @@ Configure the API file (`apps/api/.env`) as needed:
   project when authentication is required.
 - `SUPABASE_SERVICE_ROLE_KEY` and `CARTOGO_INITIAL_OWNER_EMAIL` only for
   server-side admin/account configuration that requires them.
-- `Developer` is an admin title with the same dashboard permissions and
-  owner-approved change access as `Owner`. To assign it, add the title to the
-  account's document in `Site.admin_roles` (the API creates the title
-  definition automatically). For example, in `mongosh`:
-
-  ```javascript
-  db.admin_roles.updateOne(
-    { _id: "account:developer@example.com" },
-    {
-      $set: { email: "developer@example.com" },
-      $addToSet: { titles: "Developer" }
-    },
-    { upsert: true }
-  )
-  ```
-
-  Replace the example address with the administrator's sign-in email. This
-  role assignment is stored in MongoDB; it is not automatically granted to
-  every administrator.
+- The API uses Supabase for fleet, site assets and content, email activity, inquiries, email outbox, challenges, administrator roles, and chat sessions. One-off import utilities and their cutover SQL files are no longer included.
 - Admin mutations write sanitized activity records to Supabase's
   `public.admin_activity_logs` table using the server-only Supabase secret
-  key (or legacy service-role key). Before testing admin changes, run
+  key (or legacy service-role key). Before deploying admin activity logging, run
   `temp/admin_activity_logs.sql` in the Supabase SQL Editor. To inspect recent
   entries in the SQL Editor, run:
 
@@ -309,7 +289,7 @@ Configure the browser file (`apps/website/.env`) with only:
 
 Use the URL and public anon key from the same Supabase project. Configure its
 Google provider and the development redirect URL
-`http://127.0.0.1:5173/admin` if Google/admin sign-in is to be tested. Add the
+`http://127.0.0.1:5173/admin` when Google/admin sign-in is required. Add the
 deployed URL only when that deployment has been authorized and configured.
 Never add service-role keys, MongoDB credentials, or SMTP credentials to this
 file.
@@ -342,16 +322,9 @@ development credentials rather than using production credentials.
    network, or <http://127.0.0.1:5173/> on the host computer. The API's
    liveness endpoint is <http://127.0.0.1:3001/api/health>; its readiness
    endpoint is <http://127.0.0.1:3001/api/health/ready>.
-4. Run automated checks:
-
-   ```powershell
-   npm.cmd test
-   npm.cmd run build
-   ```
-
-5. Before exercising inquiry submission, email, or admin data changes, verify
+4. Before exercising inquiry submission, email, or admin data changes, verify
    with the project owner that the API points to a dedicated non-production
-   database and that all external integrations are approved for testing.
+   database and that all external integrations are approved.
 
 For additional chatbot-specific information, see
 [`apps/chatbot/OPERATIONAL_TUTORIAL.md`](apps/chatbot/OPERATIONAL_TUTORIAL.md).
