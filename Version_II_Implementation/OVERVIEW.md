@@ -256,8 +256,48 @@ Configure the API file (`apps/api/.env`) as needed:
   project when authentication is required.
 - `SUPABASE_SERVICE_ROLE_KEY` and `CARTOGO_INITIAL_OWNER_EMAIL` only for
   server-side admin/account configuration that requires them.
+- `Developer` is an admin title with the same dashboard permissions and
+  owner-approved change access as `Owner`. To assign it, add the title to the
+  account's document in `Site.admin_roles` (the API creates the title
+  definition automatically). For example, in `mongosh`:
+
+  ```javascript
+  db.admin_roles.updateOne(
+    { _id: "account:developer@example.com" },
+    {
+      $set: { email: "developer@example.com" },
+      $addToSet: { titles: "Developer" }
+    },
+    { upsert: true }
+  )
+  ```
+
+  Replace the example address with the administrator's sign-in email. This
+  role assignment is stored in MongoDB; it is not automatically granted to
+  every administrator.
+- Admin mutations write sanitized activity records to Supabase's
+  `public.admin_activity_logs` table using the server-only Supabase secret
+  key (or legacy service-role key). Before testing admin changes, run
+  `temp/admin_activity_logs.sql` in the Supabase SQL Editor. To inspect recent
+  entries in the SQL Editor, run:
+
+  ```sql
+  SELECT occurred_at, actor_email, action, resource, resource_id, details
+  FROM public.admin_activity_logs
+  ORDER BY occurred_at DESC
+  LIMIT 100;
+  ```
+
+  The log records inquiry status/restore/rejection actions and owner-change
+  requests/approvals. It intentionally excludes customer records, rejection
+  reasons, PINs, and email contents. If an action succeeds but its log write
+  fails, the API reports that the change was applied and advises checking
+  Supabase before retrying.
 - `SMTP_*` settings when guest email verification or administrator email
   workflows need to send mail.
+- `BOOKING_SMTP_FROM` optionally overrides `SMTP_FROM` for customer booking
+  verification and confirmation emails only. Leave it unset to use `SMTP_FROM`;
+  owner-approval PIN emails continue to use `SMTP_FROM`.
 - Set a stable `GUEST_EMAIL_VERIFICATION_SECRET` on every API instance if
   using guest email verification; otherwise the configured SMTP app password
   is used as the HMAC key.

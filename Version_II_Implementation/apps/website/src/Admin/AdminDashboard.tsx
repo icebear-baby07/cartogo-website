@@ -47,6 +47,7 @@ const tabs: { id: DashboardTab; label: string; permission: string }[] = [
 
 const permissionsByTitle: Record<string, string[]> = {
   Owner: ["inquiries", "fleet", "site_assets", "site_content", "chat", "analytics"],
+  Developer: ["inquiries", "fleet", "site_assets", "site_content", "chat", "analytics"],
   Moderator: ["inquiries", "fleet", "site_assets", "site_content", "chat", "analytics"],
 };
 

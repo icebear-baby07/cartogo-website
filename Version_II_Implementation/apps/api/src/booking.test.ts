@@ -149,7 +149,7 @@ function inquiryPayload(challengeId: string, verificationToken: string) {
     pickupDate: "2026-11-10",
     pickupTime: "09:00",
     returnDate: "2026-11-10",
-    rateRegion: "in",
+    rateRegion: "inside",
     rentalMode: "hourly",
     rentalPeriodHours: 12,
     estimatedRentalHours: 12,
@@ -300,7 +300,7 @@ test("uses the renter-selected rate area and calculates the quote from database 
   );
   assert.equal(response.status, 201);
   const result = await response.json() as { inquiry: Record<string, unknown> };
-  assert.equal(result.inquiry.rate_region, "out");
+  assert.equal(result.inquiry.rate_region, "outside");
   assert.equal(result.inquiry.rate_per_period, 1400);
   assert.equal(result.inquiry.extra_driver, true);
   assert.equal(result.inquiry.extra_driver_fee, 300);

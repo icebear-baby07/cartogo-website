@@ -4,6 +4,7 @@ import { once } from "node:events";
 import type { AddressInfo } from "node:net";
 import test from "node:test";
 import { createAdminRouter, type AdminDataRepository } from "./admin-api.js";
+import { createAdminActivityLogger } from "./admin-activity.js";
 
 function createRepository(): AdminDataRepository {
   return {
@@ -125,6 +126,42 @@ test("enforces role permissions for admin endpoints", async () => {
     assert.equal(response.status, 403);
     assert.deepEqual(await response.json(), {
       error: "Your administrator title does not allow this action.",
+    });
+  } finally {
+    await server.close();
+  }
+});
+
+test("allows Developer accounts to use the Owner approval endpoint", async () => {
+  const repository = createRepository();
+  repository.getAdminRole = async (email) => ({ email, titles: ["Developer"] });
+  const server = await createServer(repository);
+  try {
+    const response = await fetch(`${server.baseUrl}/owner-change/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: "Enter the six-digit approval code." });
+  } finally {
+    await server.close();
+  }
+});
+
+test("keeps Moderator accounts out of the Owner approval endpoint", async () => {
+  const server = await createServer(createRepository());
+  try {
+    const response = await fetch(`${server.baseUrl}/owner-change/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    assert.equal(response.status, 403);
+    assert.deepEqual(await response.json(), {
+      error: "Only an Owner or Developer can approve this change.",
     });
   } finally {
     await server.close();
@@ -317,6 +354,93 @@ test("confirms an inquiry when the admin sends the confirmed status", async () =
   } finally {
     await server.close();
   }
+});
+
+test("records sanitized admin identity and inquiry metadata after a successful update", async () => {
+  const events: unknown[] = [];
+  const server = await createServer(createRepository(), {
+    recordAdminActivity: async (event) => {
+      events.push(event);
+    },
+  });
+  try {
+    const response = await fetch(`${server.baseUrl}/inquiries`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "update", id: 12, status: "confirmed" }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(events, [{
+      actorId: "admin-1",
+      actorEmail: "moderator@example.com",
+      action: "inquiry_status_updated",
+      resource: "inquiries",
+      resourceId: "12",
+      details: { status: "confirmed" },
+    }]);
+  } finally {
+    await server.close();
+  }
+});
+
+test("reports audit-log failure without hiding that the admin change was applied", async () => {
+  const server = await createServer(createRepository(), {
+    recordAdminActivity: async () => {
+      throw new Error("Supabase unavailable.");
+    },
+  });
+  try {
+    const response = await fetch(`${server.baseUrl}/inquiries`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "update", id: 12, status: "confirmed" }),
+    });
+
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), {
+      error: "The change was applied, but its audit record could not be saved. Check the Supabase table and API configuration before retrying.",
+    });
+  } finally {
+    await server.close();
+  }
+});
+
+test("writes activity records to the server-side Supabase REST endpoint", async () => {
+  let requestUrl = "";
+  let requestInit: RequestInit | undefined;
+  const recordActivity = createAdminActivityLogger({
+    supabaseUrl: "https://example.supabase.co/",
+    serviceRoleKey: "server-only-test-key",
+    fetcher: async (input, init) => {
+      requestUrl = String(input);
+      requestInit = init;
+      return new Response(null, { status: 201 });
+    },
+  });
+  await recordActivity({
+    actorId: "7d3f7729-ea34-4d79-a969-8d904ec42824",
+    actorEmail: "admin@example.com",
+    action: "inquiry_status_updated",
+    resource: "inquiries",
+    resourceId: "12",
+    details: { status: "confirmed" },
+  });
+
+  assert.equal(requestUrl, "https://example.supabase.co/rest/v1/admin_activity_logs");
+  assert.equal(requestInit?.method, "POST");
+  const headers = new Headers(requestInit?.headers);
+  assert.equal(headers.get("apikey"), "server-only-test-key");
+  assert.equal(headers.get("authorization"), "Bearer server-only-test-key");
+  assert.equal(headers.get("prefer"), "return=minimal");
+  assert.deepEqual(JSON.parse(String(requestInit?.body)), {
+    actor_id: "7d3f7729-ea34-4d79-a969-8d904ec42824",
+    actor_email: "admin@example.com",
+    action: "inquiry_status_updated",
+    resource: "inquiries",
+    resource_id: "12",
+    details: { status: "confirmed" },
+  });
 });
 
 test("emails the customer before deleting a rejected inquiry", async () => {

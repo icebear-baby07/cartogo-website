@@ -409,6 +409,7 @@ export async function getAdminDataRepository(): Promise<AdminDataRepository> {
     await Promise.all(
       Object.entries({
         Owner: ["inquiries", "fleet", "site_assets", "site_content", "chat", "analytics"],
+        Developer: ["inquiries", "fleet", "site_assets", "site_content", "chat", "analytics"],
         Moderator: ["inquiries", "fleet", "site_assets", "site_content", "chat", "analytics"],
       }).map(([title, permissions]) =>
         adminRoles.updateOne(
@@ -537,7 +538,10 @@ export async function getAdminDataRepository(): Promise<AdminDataRepository> {
     },
     async listOwnerEmails() {
       const records = await adminRoles
-        .find({ _id: { $regex: "^account:" }, titles: "Owner" }, { projection: { email: 1 } })
+        .find(
+          { _id: { $regex: "^account:" }, titles: { $in: ["Owner", "Developer"] } },
+          { projection: { email: 1 } },
+        )
         .toArray();
       return records.map((record) => String(record.email ?? "").trim().toLowerCase()).filter(Boolean);
     },

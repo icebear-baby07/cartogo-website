@@ -287,8 +287,15 @@ function normalizeInquiry(
     throw new BookingInputError("Pickup time must use 24-hour HH:MM format.");
   }
 
-  const rateRegion = text(payload.rateRegion, "Rate region", 16)!;
-  if (!["in", "out", "luzon"].includes(rateRegion)) throw new BookingInputError("Choose a valid rate region.");
+  const requestedRateRegion = text(payload.rateRegion, "Rate region", 16)!;
+  const rateRegion = requestedRateRegion === "in"
+    ? "inside"
+    : requestedRateRegion === "out"
+      ? "outside"
+      : requestedRateRegion;
+  if (!["inside", "outside", "luzon"].includes(rateRegion)) {
+    throw new BookingInputError("Choose a valid rate region.");
+  }
   const rentalMode = payload.rentalMode;
   if (rentalMode !== "hourly" && rentalMode !== "custom_days") {
     throw new BookingInputError("Choose an hourly or custom-day rental arrangement.");
@@ -313,9 +320,9 @@ function normalizeInquiry(
     throw new BookingInputError("The return date must match the selected rental duration.");
   }
 
-  const rate = rateRegion === "in"
+  const rate = rateRegion === "inside"
     ? (period === 12 ? unit.in12_rate : unit.in24_rate)
-    : rateRegion === "out"
+    : rateRegion === "outside"
       ? (period === 12 ? unit.out12_rate : unit.out24_rate)
       : unit.luzon_rate;
   const discountPercent = rentalMode === "custom_days"

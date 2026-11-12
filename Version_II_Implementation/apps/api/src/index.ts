@@ -14,6 +14,7 @@ import {
 } from "./mongo.js";
 import { createAuthRouter, createRequireAdmin } from "./auth.js";
 import { createAdminRouter } from "./admin-api.js";
+import { createAdminActivityLogger } from "./admin-activity.js";
 import { createPublicDataRouter } from "./public-data.js";
 import { createChatbotRouter } from "./chatbot.js";
 import {
@@ -36,7 +37,7 @@ const bookingEmailConfig = {
   smtpPassword: process.env.SMTP_APP_PASSWORD,
   smtpHost: process.env.SMTP_HOST,
   smtpPort: process.env.SMTP_PORT,
-  smtpFrom: process.env.SMTP_FROM,
+  smtpFrom: process.env.BOOKING_SMTP_FROM || process.env.SMTP_FROM,
   verificationSecret: process.env.GUEST_EMAIL_VERIFICATION_SECRET
     || process.env.SMTP_APP_PASSWORD,
 };
@@ -62,6 +63,10 @@ app.use("/api/admin", createAdminRouter(getAdminDataRepository, {
   smtpPort: process.env.SMTP_PORT,
   smtpFrom: process.env.SMTP_FROM,
   recordEmailActivity,
+  recordAdminActivity: createAdminActivityLogger({
+    supabaseUrl: process.env.SUPABASE_URL,
+    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  }),
 }));
 app.use("/api", createPublicDataRouter(getPublicDataRepository));
 app.use("/api", createBookingRouter(getBookingRepository, bookingConfig));

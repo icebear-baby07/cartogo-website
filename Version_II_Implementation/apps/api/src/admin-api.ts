@@ -12,6 +12,10 @@ import {
   withEmailActivity,
   type EmailActivityRecorder,
 } from "./email-activity.js";
+import {
+  AdminActivityLogError,
+  type AdminActivityLogger,
+} from "./admin-activity.js";
 
 type ApprovalResource =
   | "unit"
@@ -71,6 +75,7 @@ type AdminApiConfig = {
   smtpFrom?: string;
   sendEmail?: (to: string, subject: string, text: string, html?: string) => Promise<void>;
   recordEmailActivity?: EmailActivityRecorder;
+  recordAdminActivity?: AdminActivityLogger;
 };
 
 type ResourcePermission = {
@@ -119,19 +124,19 @@ function requirePermission(
   };
 }
 
-function requireOwner(
+function requireOwnerOrDeveloper(
   getRepository: () => Promise<AdminDataRepository>,
 ): RequestHandler {
   return (request, response, next) => {
     void (async () => {
       const role = await (await getRepository()).getAdminRole(authenticatedAdmin(request).email);
-      if (!role?.titles.includes("Owner")) {
-        sendError(response, 403, "Only an Owner can approve this change.");
+      if (!role?.titles.some((title) => title === "Owner" || title === "Developer")) {
+        sendError(response, 403, "Only an Owner or Developer can approve this change.");
         return;
       }
       next();
     })().catch((error: unknown) => {
-      console.error("Could not verify Owner role.", error instanceof Error ? error.name : "UnknownError");
+      console.error("Could not verify Owner or Developer role.", error instanceof Error ? error.name : "UnknownError");
       sendError(response, 503, "Administrator roles are unavailable.");
     });
   };
@@ -353,6 +358,25 @@ export function createAdminRouter(
   config: AdminApiConfig,
 ): Router {
   const router = Router();
+  const recordAdminActivity = async (
+    request: Request,
+    event: Omit<Parameters<AdminActivityLogger>[0], "actorId" | "actorEmail">,
+  ) => {
+    if (!config.recordAdminActivity) return;
+    const admin = authenticatedAdmin(request);
+    try {
+      await config.recordAdminActivity({
+        ...event,
+        actorId: admin.id,
+        actorEmail: admin.email,
+      });
+    } catch (error) {
+      console.error("Could not save admin activity log.", error instanceof Error ? error.name : "UnknownError");
+      throw new AdminActivityLogError(
+        "The change was applied, but its audit record could not be saved. Check the Supabase table and API configuration before retrying.",
+      );
+    }
+  };
 
   router.get("/me", async (request, response) => {
     try {
@@ -468,9 +492,22 @@ export function createAdminRouter(
       const action = request.body.action;
       if (action === "update") {
         if (request.body.status !== "confirmed") throw new Error("Choose a valid inquiry status.");
-        response.json({ data: await repository.updateInquiryStatus(id, "confirmed") });
+        const data = await repository.updateInquiryStatus(id, "confirmed");
+        await recordAdminActivity(request, {
+          action: "inquiry_status_updated",
+          resource: "inquiries",
+          resourceId: String(id),
+          details: { status: "confirmed" },
+        });
+        response.json({ data });
       } else if (action === "restore") {
-        response.json({ data: await repository.restoreInquiry(id) });
+        const data = await repository.restoreInquiry(id);
+        await recordAdminActivity(request, {
+          action: "inquiry_restored",
+          resource: "inquiries",
+          resourceId: String(id),
+        });
+        response.json({ data });
       } else if (action === "reject" || action === "resend_rejection") {
         const existing = await repository.getInquiry(id);
         if (!existing) throw new Error("That inquiry no longer exists.");
@@ -510,13 +547,20 @@ export function createAdminRouter(
           await repository.markInquiryRejectionEmailSent(id);
         }
         const deleted = await repository.deleteInquiry(id);
+        await recordAdminActivity(request, {
+          action: "inquiry_rejected_and_deleted",
+          resource: "inquiries",
+          resourceId: String(id),
+          details: { rejection_email_sent: true },
+        });
         response.json({ data: deleted, emailSent: true, deleted: true });
       } else {
         throw new Error("Choose a valid inquiry action.");
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "MongoDB could not apply the inquiry change.";
-      const status = /valid|enter|choose|only|already|reason|email address/i.test(message) ? 400 :
+      const status = error instanceof AdminActivityLogError ? 503 :
+        /valid|enter|choose|only|already|reason|email address/i.test(message) ? 400 :
         /no longer exists/i.test(message) ? 404 : 503;
       if (status === 503) console.error("Inquiry action failed.", error instanceof Error ? error.name : "UnknownError");
       sendError(response, status, message);
@@ -623,9 +667,21 @@ export function createAdminRouter(
         sendError(response, 503, "SMTP could not send the owner approval PIN. Check the API SMTP settings.");
         return;
       }
+      const resourceId = change.resource.resource === "site_content"
+        ? "public"
+        : typeof change.data.id === "string" || typeof change.data.id === "number"
+          ? String(change.data.id)
+          : undefined;
+      await recordAdminActivity(request, {
+        action: "owner_change_requested",
+        resource: change.resource.resource,
+        ...(resourceId ? { resourceId } : {}),
+        details: { requested_action: change.action },
+      });
       response.json({ challengeId: id, ownerEmail: ownerEmails.join(", "), expiresIn: 300 });
     } catch (error) {
       if (
+        !(error instanceof AdminActivityLogError) &&
         approvalRateKey &&
         approvalRateTimestamp !== undefined &&
         lastApprovalRequest.get(approvalRateKey) === approvalRateTimestamp
@@ -633,11 +689,17 @@ export function createAdminRouter(
         lastApprovalRequest.delete(approvalRateKey);
       }
       console.error("Could not create owner approval request.", error instanceof Error ? error.name : "UnknownError");
-      sendError(response, 503, "Owner approval is unavailable.");
+      sendError(
+        response,
+        503,
+        error instanceof AdminActivityLogError
+          ? error.message
+          : "Owner approval is unavailable.",
+      );
     }
   });
 
-  router.post("/owner-change/approve", requireOwner(getRepository), async (request, response) => {
+  router.post("/owner-change/approve", requireOwnerOrDeveloper(getRepository), async (request, response) => {
     if (!isRecord(request.body) || typeof request.body.challengeId !== "string" ||
         typeof request.body.code !== "string" || !/^\d{6}$/.test(request.body.code)) {
       sendError(response, 400, "Enter the six-digit approval code.");
@@ -675,11 +737,23 @@ export function createAdminRouter(
         return;
       }
       const result = await applyApprovedChange(repository, challenge);
+      const resourceId = challenge.resource === "site_content"
+        ? "public"
+        : typeof challenge.data.id === "string" || typeof challenge.data.id === "number"
+          ? String(challenge.data.id)
+          : undefined;
+      await recordAdminActivity(request, {
+        action: "owner_change_approved",
+        resource: challenge.resource,
+        ...(resourceId ? { resourceId } : {}),
+        details: { approved_action: challenge.action },
+      });
       response.json({ data: result, resource: challenge.resource });
     } catch (error) {
       console.error("Owner-approved change failed.", error instanceof Error ? error.name : "UnknownError");
       const message = error instanceof Error ? error.message : "MongoDB could not apply the owner-approved change.";
-      const status = /at least one Owner|no longer exists|not found|does not match|must remain/i.test(message) ? 400 : 503;
+      const status = error instanceof AdminActivityLogError ? 503 :
+        /at least one Owner|no longer exists|not found|does not match|must remain/i.test(message) ? 400 : 503;
       sendError(response, status, message);
     }
   });

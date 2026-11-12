@@ -118,7 +118,7 @@ export default function BookingForm({
   const [pickupDate, setPickupDate] = useState("");
   const [pickupTime, setPickupTime] = useState("");
   const [requestedSeats, setRequestedSeats] = useState("");
-  const [rateRegion, setRateRegion] = useState<"in" | "out" | "luzon" | "">("");
+  const [rateRegion, setRateRegion] = useState<"inside" | "outside" | "luzon" | "">("");
   const [rentalMode, setRentalMode] = useState<"hourly" | "custom_days">("hourly");
   const [rentalModePreview, setRentalModePreview] = useState<"hourly" | "custom_days" | null>(null);
   const [periodHours, setPeriodHours] = useState(24);
@@ -229,9 +229,9 @@ export default function BookingForm({
   const unit = matchingUnits.find((item) => String(item.id) === selectedUnitId);
   const quote = useMemo(() => {
     if (!unit || !rateRegion || !pickupDate || !pickupTime) return null;
-    const regionRate = rateRegion === "in"
+    const regionRate = rateRegion === "inside"
       ? periodHours === 12 ? unit.in12_rate : unit.in24_rate
-      : rateRegion === "out"
+      : rateRegion === "outside"
         ? periodHours === 12 ? unit.out12_rate : unit.out24_rate
         : unit.luzon_rate;
     const percent = rentalMode === "custom_days"
@@ -541,14 +541,14 @@ export default function BookingForm({
                   required
                   value={rateRegion}
                   onChange={(event) => {
-                    const selected = event.target.value as "in" | "out" | "luzon" | "";
+                    const selected = event.target.value as "inside" | "outside" | "luzon" | "";
                     setRateRegion(selected);
                     if (selected === "luzon") setRentalMode("custom_days");
                   }}
                 >
                   <option value="">Select a rate area</option>
-                  <option value="in">Metro Manila</option>
-                  <option value="out">Nearby areas</option>
+                  <option value="inside">Metro Manila</option>
+                  <option value="outside">Nearby areas</option>
                   <option value="luzon">Other Luzon Areas</option>
                 </select>
                 <span className="booking-rate-area-hint">Choose the area where you plan to use the vehicle. Our team will confirm the final pickup and rental details.</span>
@@ -666,7 +666,7 @@ export default function BookingForm({
                   Estimated rental subtotal: <strong>{formatCurrency(quote.total, content.settings.currency)}</strong>
                   {quote.discountPercent > 0 && ` · ${quote.discountPercent}% long-rental discount`}
                 </p>
-                <p>Rate area: {rateRegion === "in" ? "Metro Manila" : rateRegion === "out" ? "Nearby areas" : "Other Luzon"} · Pickup {pickupDate} at {pickupTime} · Return {quote.returnDate} · Refundable deposit estimate ({content.settings.depositPercent}%): {formatCurrency(Math.round(quote.total * content.settings.depositPercent / 100), content.settings.currency)}</p>
+                <p>Rate area: {rateRegion === "inside" ? "Metro Manila" : rateRegion === "outside" ? "Nearby areas" : "Other Luzon"} · Pickup {pickupDate} at {pickupTime} · Return {quote.returnDate} · Refundable deposit estimate ({content.settings.depositPercent}%): {formatCurrency(Math.round(quote.total * content.settings.depositPercent / 100), content.settings.currency)}</p>
                 <small>Estimate only; the team will confirm availability and final pricing.</small>
               </div>
             )}
@@ -824,7 +824,7 @@ export default function BookingForm({
             {requestedSeatCount !== null && <div className="recap-row"><dt>Requested seats</dt><dd>{requestedSeatCount}</dd></div>}
             <div className="recap-row"><dt>Pickup</dt><dd>{pickupDate} at {pickupTime}</dd></div>
             <div className="recap-row"><dt>Return</dt><dd>{quote?.returnDate ?? "—"}</dd></div>
-            <div className="recap-row"><dt>Rate area</dt><dd>{rateRegion === "in" ? "Metro Manila" : rateRegion === "out" ? "Nearby areas" : rateRegion === "luzon" ? "Other Luzon areas" : "Not selected"}</dd></div>
+            <div className="recap-row"><dt>Rate area</dt><dd>{rateRegion === "inside" ? "Metro Manila" : rateRegion === "outside" ? "Nearby areas" : rateRegion === "luzon" ? "Other Luzon areas" : "Not selected"}</dd></div>
             <div className="recap-row"><dt>Rental arrangement</dt><dd>{rentalMode === "custom_days" ? `${rentalDays} days` : `${periodHours} hours`}</dd></div>
             {quote && quote.discount > 0 && <div className="recap-row"><dt>Long-rental discount</dt><dd>−{formatCurrency(quote.discount, content.settings.currency)}</dd></div>}
             <div className="recap-row"><dt>Rental subtotal</dt><dd>{formatCurrency(quote?.total ?? 0, content.settings.currency)}</dd></div>
