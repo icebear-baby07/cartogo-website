@@ -424,7 +424,7 @@ export default function PublicSite({ units, assets, content }: PublicSiteProps) 
 
         <section className="section bg-paper" id="contact">
           <div className="wrap">
-            <SectionHeading eyebrow="Ready when you are" title="Talk to a live agent">
+            <SectionHeading eyebrow="Ready when you are" title="Contact Us">
               Ask about vehicle availability, pickup, and booking details. No payment is taken online.
             </SectionHeading>
             <div className="contact-grid">
@@ -487,7 +487,7 @@ export default function PublicSite({ units, assets, content }: PublicSiteProps) 
           </div>
           <div>
             <h3>Contact</h3>
-            <a href="#contact">Talk to a live agent</a>
+            <a href="#contact">Contact Us</a>
             {contact?.phone && <a href={`tel:${contact.phone.replace(/[^\d+]/g, "")}`}>{contact.phone}</a>}
             {contact?.email && <a href={`mailto:${contact.email}`}>{contact.email}</a>}
             <a href="/admin">Admin sign-in</a>

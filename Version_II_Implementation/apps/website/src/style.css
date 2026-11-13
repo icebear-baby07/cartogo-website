@@ -2417,13 +2417,57 @@ p {
   }
 }
 
-.chatbot-widget {
+.chat-backdrop {
   position: fixed;
   z-index: 1202;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  background: rgb(20 20 20 / 24%);
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+  transition: opacity 0.24s ease, visibility 0s linear 0.24s;
+}
+
+.chat-backdrop.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.24s ease;
+}
+
+.chatbot-widget {
+  position: fixed;
+  z-index: 1203;
+  top: 88%;
+  bottom: auto;
   right: max(1.25rem, env(safe-area-inset-right));
-  bottom: max(1.25rem, env(safe-area-inset-bottom));
+  left: auto;
+  transform: translateY(-50%);
   color: #242323;
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  transition: top 0.28s cubic-bezier(0.2, 0.75, 0.25, 1),
+    left 0.28s cubic-bezier(0.2, 0.75, 0.25, 1),
+    right 0.28s cubic-bezier(0.2, 0.75, 0.25, 1),
+    transform 0.12s ease-out;
+  will-change: top, left, right, transform;
+}
+
+.chatbot-widget[data-side="left"] {
+  right: auto;
+  left: max(1.25rem, env(safe-area-inset-left));
+}
+
+.chatbot-widget[data-side="right"] {
+  right: max(1.25rem, env(safe-area-inset-right));
+  left: auto;
+}
+
+.chatbot-widget.is-dragging {
+  transition: transform 0.08s linear;
+  user-select: none;
 }
 
 .chat-launcher {
@@ -2440,6 +2484,24 @@ p {
   color: #fff;
   font-size: 0.9rem;
   font-weight: 700;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.chatbot-widget.is-returning .chat-launcher {
+  animation: chat-launcher-return 0.22s ease both;
+}
+
+@keyframes chat-launcher-return {
+  from {
+    opacity: 0;
+    transform: scale(0.78);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .chat-launcher:hover {
@@ -2460,6 +2522,21 @@ p {
   border-radius: 14px;
   background: #fff;
   box-shadow: 0 16px 55px rgb(0 0 0 / 24%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(10px) scale(0.98);
+  transform-origin: center;
+  transition: opacity 0.22s ease, transform 0.22s ease,
+    visibility 0s linear 0.22s;
+}
+
+.chat-panel.is-visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+  transition: opacity 0.22s ease, transform 0.22s ease;
 }
 
 .chatbot-widget.is-fullscreen {
@@ -2467,6 +2544,9 @@ p {
     max(0.75rem, env(safe-area-inset-right))
     max(0.75rem, env(safe-area-inset-bottom))
     max(0.75rem, env(safe-area-inset-left));
+  transform: none !important;
+  transition: inset 0.24s ease;
+  will-change: inset;
 }
 
 .chatbot-widget.is-fullscreen .chat-panel {
@@ -2486,6 +2566,13 @@ p {
   padding: 0.85rem 1rem;
   background: #191919;
   color: #fff;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.chat-panel-header.is-dragging {
+  cursor: grabbing;
 }
 
 .chat-panel-header > div:first-child {
@@ -2520,6 +2607,8 @@ p {
   color: #fff;
   cursor: pointer;
   font-size: 1.2rem;
+  touch-action: manipulation;
+  user-select: auto;
 }
 
 .chat-header-actions button:hover {
@@ -2757,8 +2846,17 @@ p {
 
 @media (max-width: 480px) {
   .chatbot-widget:not(.is-fullscreen) {
-    right: 0.6rem;
-    bottom: 0.6rem;
+    top: 88%;
+  }
+
+  .chatbot-widget:not(.is-fullscreen)[data-side="left"] {
+    right: auto;
+    left: max(0.6rem, env(safe-area-inset-left));
+  }
+
+  .chatbot-widget:not(.is-fullscreen)[data-side="right"] {
+    right: max(0.6rem, env(safe-area-inset-right));
+    left: auto;
   }
 
   .chatbot-widget:not(.is-fullscreen) .chat-panel {
