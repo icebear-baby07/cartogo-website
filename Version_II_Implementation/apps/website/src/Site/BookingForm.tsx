@@ -101,9 +101,35 @@ async function postJson<T>(
     headers: { "Content-Type": "application/json", ...Object.fromEntries(new Headers(headers).entries()) },
     body: JSON.stringify(body),
   });
-  const result = await response.json() as T & { error?: string };
-  if (!response.ok) throw new Error(result.error || "The request could not be completed.");
-  return result;
+  const responseBody = await response.text();
+  let result: unknown = null;
+  if (responseBody.trim()) {
+    try {
+      result = JSON.parse(responseBody);
+    } catch {
+      const contentType = response.headers.get("content-type");
+      throw new Error(
+        `The server returned an invalid response for ${path} (HTTP ${response.status}${contentType ? `, ${contentType}` : ""}).`,
+      );
+    }
+  }
+  if (!response.ok) {
+    const errorMessage =
+      typeof result === "object" &&
+      result !== null &&
+      !Array.isArray(result) &&
+      "error" in result &&
+      typeof result.error === "string"
+        ? result.error
+        : `The request to ${path} failed (HTTP ${response.status}).`;
+    throw new Error(errorMessage);
+  }
+  if (typeof result !== "object" || result === null || Array.isArray(result)) {
+    throw new Error(
+      `The server returned an empty or invalid response for ${path} (HTTP ${response.status}).`,
+    );
+  }
+  return result as T;
 }
 
 export default function BookingForm({
@@ -139,6 +165,7 @@ export default function BookingForm({
   const [challengeId, setChallengeId] = useState("");
   const [verificationToken, setVerificationToken] = useState("");
   const [verificationMessage, setVerificationMessage] = useState("");
+  const [verificationError, setVerificationError] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -269,6 +296,7 @@ export default function BookingForm({
     setVerificationToken("");
     setCode("");
     setVerificationMessage("");
+    setVerificationError("");
   };
 
   const requestCode = async () => {
@@ -276,6 +304,7 @@ export default function BookingForm({
     setBusy(true);
     setProgressMessage("Sending verification code…");
     setError("");
+    setVerificationError("");
     setVerificationMessage("Sending verification code…");
     try {
       const result = await postJson<VerificationResponse>(
@@ -287,7 +316,7 @@ export default function BookingForm({
       setVerificationMessage("Code sent. Check your inbox and spam folder. It expires in 10 minutes.");
     } catch (requestError) {
       setVerificationMessage("");
-      setError(requestError instanceof Error ? requestError.message : "Could not send a verification code.");
+      setVerificationError(requestError instanceof Error ? requestError.message : "Could not send a verification code.");
     } finally {
       setBusy(false);
       setProgressMessage("");
@@ -337,6 +366,7 @@ export default function BookingForm({
     setBusy(true);
     setProgressMessage("Verifying email…");
     setError("");
+    setVerificationError("");
     try {
       const result = await postJson<VerificationResponse>(
         "/api/public/email-verification/verify",
@@ -345,7 +375,7 @@ export default function BookingForm({
       setVerificationToken(result.verificationToken || "");
       setVerificationMessage("Email verified. You can now submit your inquiry.");
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Could not verify that code.");
+      setVerificationError(requestError instanceof Error ? requestError.message : "Could not verify that code.");
     } finally {
       setBusy(false);
       setProgressMessage("");
@@ -371,6 +401,33 @@ export default function BookingForm({
       return;
     }
     setRecapOpen(true);
+  };
+
+  const resetBookingFields = () => {
+    onUnitChange("");
+    setPickupDate("");
+    setPickupTime("");
+    setRequestedSeats("");
+    setRateRegion("");
+    setRentalMode("hourly");
+    setRentalModePreview(null);
+    setPeriodHours(24);
+    setRentalDays(4);
+    setTermsAccepted(false);
+    setExtraDriver(false);
+    setChildSeat(false);
+    setFirstName("");
+    setLastName("");
+    setMiddleName("");
+    setSuffix("");
+    setEmail("");
+    setPhone("");
+    setNotes("");
+    setCode("");
+    setChallengeId("");
+    setVerificationToken("");
+    setVerificationMessage("");
+    setVerificationError("");
   };
 
   const confirmInquiry = async () => {
@@ -438,13 +495,7 @@ export default function BookingForm({
         : `Inquiry #${result.inquiry.id} received. Our team will follow up by phone.`);
       setRecapOpen(false);
       requestId.current = null;
-      setChallengeId("");
-      setVerificationToken("");
-      setEmail("");
-      setCode("");
-      setVerificationMessage("");
-      setExtraDriver(false);
-      setChildSeat(false);
+      resetBookingFields();
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Could not submit your inquiry.");
     } finally {
@@ -555,6 +606,7 @@ export default function BookingForm({
               </label>
               <fieldset
                 className={`booking-rental-panel booking-field-wide ${rateRegion === "luzon" ? "is-luzon" : ""} ${rentalMode === "hourly" ? "hourly-selected" : "custom-selected"} ${rentalModePreview === "hourly" ? "hourly-hover-preview" : ""} ${rentalModePreview === "custom_days" ? "custom-hover-preview" : ""}`}
+                hidden={!rateRegion}
                 onPointerLeave={() => setRentalModePreview(null)}
                 onFocusCapture={(event) => {
                   const mode = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-rental-mode]")?.dataset.rentalMode;
@@ -701,7 +753,7 @@ export default function BookingForm({
                   </button>
                 ) : (
                   <>
-                    <p className="booking-auth-copy">Sign in with Google or provide your details below to send an inquiry.</p>
+                    <p className="booking-auth-copy">Use Google Sign-In for a hassle-free verification check.</p>
                     <button className="button button-ghost" type="button" disabled={busy} onClick={() => void startGoogleSignIn()}>
                       Continue with Google
                     </button>
@@ -723,6 +775,21 @@ export default function BookingForm({
               )}
               {!googleUser && (
                 <label className="booking-field">Email<input form="bookingForm" ref={emailInput} required maxLength={254} type="email" autoComplete="email" value={email} onChange={(event) => changeEmail(event.target.value)} /></label>
+              )}
+              {!googleUser && (
+                <div className="booking-verification booking-field-wide">
+                  <button className="button button-ghost" type="button" disabled={busy} onClick={() => void requestCode()}>
+                    {challengeId ? "Resend verification code" : "Send verification code"}
+                  </button>
+                  {challengeId && !verificationToken && (
+                    <div className="booking-verify-row">
+                      <label className="booking-field">6-digit code<input form="bookingForm" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} /></label>
+                      <button className="button button-ghost" type="button" disabled={busy || code.length !== 6} onClick={() => void verifyCode()}>Verify email</button>
+                    </div>
+                  )}
+                  {verificationMessage && <p className="booking-form-status" role="status">{verificationMessage}</p>}
+                  {verificationError && <p className="booking-form-error" role="alert">{verificationError}</p>}
+                </div>
               )}
               <label className="booking-field">Phone number<input form="bookingForm" required maxLength={24} type="tel" autoComplete="tel" placeholder="09xxxxxxxxx" value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
               <label className="booking-field booking-field-wide">Notes (optional)<textarea form="bookingForm" maxLength={2000} rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
@@ -749,21 +816,6 @@ export default function BookingForm({
                 </a>
               </span>
             </label>
-            {!googleUser && (
-              <div className="booking-verification">
-                <button className="button button-ghost" type="button" disabled={busy} onClick={() => void requestCode()}>
-                  {challengeId ? "Resend verification code" : "Send verification code"}
-                </button>
-                {challengeId && !verificationToken && (
-                  <div className="booking-verify-row">
-                    <label className="booking-field">6-digit code<input form="bookingForm" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} /></label>
-                    <button className="button button-ghost" type="button" disabled={busy || code.length !== 6} onClick={() => void verifyCode()}>Verify email</button>
-                  </div>
-                )}
-                {verificationMessage && <p className="booking-form-status" role="status">{verificationMessage}</p>}
-              </div>
-            )}
-
           {error && <p className="booking-form-error" role="alert">{error}</p>}
           {status && <p className="booking-form-success" role="status">{status}</p>}
           <div className="booking-submit">
