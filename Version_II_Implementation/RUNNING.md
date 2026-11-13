@@ -77,6 +77,9 @@ separate `ctg-venv` Python environment. Chatbot settings belong in
   content.
 - The browser environment file `apps/website/.env` may contain only
   `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+- Public-site photos use the public Supabase Storage bucket
+  `cartogo-public-site-images`, with URLs built from `VITE_SUPABASE_URL`.
+  The local `apps/website/public/images` copies remain as a fallback.
 - Booking email verification requires working API-side SMTP settings.
 - Never put MongoDB credentials, SMTP credentials, or Supabase service-role
   keys in the website environment or commit any `.env` file.

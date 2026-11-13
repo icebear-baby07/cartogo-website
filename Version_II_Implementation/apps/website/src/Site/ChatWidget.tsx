@@ -72,6 +72,7 @@ export default function ChatWidget() {
   const [open, setOpen] = useState(false);
   const [panelMounted, setPanelMounted] = useState(false);
   const [position, setPosition] = useState<ChatPosition>({ side: "right", y: 0.88 });
+  const [mobileLauncherTop, setMobileLauncherTop] = useState<number | null>(null);
   const [headerBottom, setHeaderBottom] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -112,6 +113,7 @@ export default function ChatWidget() {
       parseChatPosition(window.localStorage.getItem(CHAT_POSITION_STORAGE_KEY)) ??
       positionFromLegacyCorner(window.localStorage.getItem(LEGACY_CHAT_CORNER_STORAGE_KEY));
     if (savedPosition) setPosition(savedPosition);
+    setMobileLauncherTop((savedPosition?.y ?? 0.88) * window.innerHeight);
   }, []);
 
   useLayoutEffect(() => {
@@ -147,6 +149,15 @@ export default function ChatWidget() {
       observer.disconnect();
     };
   }, []);
+
+  useEffect(() => {
+    if (window.innerWidth > 740 || panelMounted || mobileLauncherTop === null) return;
+    const minimumTop =
+      headerBottom + CHAT_EDGE_GAP + (launcher.current?.offsetHeight ?? 54) / 2;
+    setMobileLauncherTop((current) =>
+      current === null || current >= minimumTop ? current : minimumTop,
+    );
+  }, [headerBottom, mobileLauncherTop, panelMounted]);
 
   useEffect(() => {
     const element = transcript.current;
@@ -206,6 +217,9 @@ export default function ChatWidget() {
       y: Math.min(MAX_CHAT_POSITION, Math.max(MIN_CHAT_POSITION, nextPosition.y)),
     };
     setPosition(normalized);
+    if (window.innerWidth <= 740) {
+      setMobileLauncherTop(normalized.y * window.innerHeight);
+    }
     window.localStorage.setItem(
       CHAT_POSITION_STORAGE_KEY,
       `${normalized.side}:${normalized.y.toFixed(4)}`,
@@ -412,7 +426,9 @@ export default function ChatWidget() {
           if (event.key === "Escape" && open) closeChat();
         }}
         style={!fullscreen ? {
-          top: `${getAnchorY()}px`,
+          top: !panelMounted && window.innerWidth <= 740 && mobileLauncherTop !== null
+            ? `${mobileLauncherTop}px`
+            : `${getAnchorY()}px`,
           transform: dragging
             ? `translate(${dragOffset.x}px, calc(-50% + ${dragOffset.y}px))`
             : undefined,

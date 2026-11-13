@@ -15,16 +15,23 @@ type PublicSiteProps = {
   content: SiteContent;
 };
 
+function siteImageUrl(fileName: string): string {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim().replace(/\/+$/, "");
+  return supabaseUrl
+    ? `${supabaseUrl}/storage/v1/object/public/cartogo-public-site-images/${encodeURIComponent(fileName)}`
+    : `/images/${fileName}`;
+}
+
 const vehicleImages: Record<string, string> = {
-  "honda city": "/images/honda-city-red.jpg",
-  "mitsubishi mirage g4": "/images/mirage-g4-red.jpg",
-  "mirage g4": "/images/mirage-g4-red.jpg",
-  "toyota fortuner": "/images/toyota-fortuner.jpg",
+  "honda city": siteImageUrl("honda-city-red.jpg"),
+  "mitsubishi mirage g4": siteImageUrl("mirage-g4-red.jpg"),
+  "mirage g4": siteImageUrl("mirage-g4-red.jpg"),
+  "toyota fortuner": siteImageUrl("toyota-fortuner.jpg"),
 };
 
 function imageForUnit(unit: PublicUnit): string {
   const modelKey = `${unit.brand} ${unit.model}`.trim().toLowerCase();
-  return vehicleImages[modelKey] ?? "/images/cartogo-fleet.jpg";
+  return vehicleImages[modelKey] ?? siteImageUrl("cartogo-fleet.jpg");
 }
 
 function formatCurrency(value: number, currency: string): string {
@@ -189,7 +196,7 @@ export default function PublicSite({ units, assets, content }: PublicSiteProps) 
               </div>
             </div>
             <div className="hero-art">
-              <img src="/images/main-picture.jpg" alt="carTOGO rental cars ready for your trip" />
+              <img src={siteImageUrl("main-picture.jpg")} alt="carTOGO rental cars ready for your trip" />
             </div>
           </div>
           <div className="road" aria-hidden="true" />
