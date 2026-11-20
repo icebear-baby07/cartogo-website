@@ -24,6 +24,44 @@ export const ApiErrorSchema = z.object({
 });
 export type ApiError = z.infer<typeof ApiErrorSchema>;
 
+export const MINIMUM_PICKUP_LEAD_TIME_MS = 12 * 60 * 60 * 1000;
+
+export function pickupTimestampFromLocalDateTime(date: string, time: string): number | null {
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  const timeMatch = /^(\d{2}):(\d{2})$/.exec(time);
+  if (!dateMatch || !timeMatch) return null;
+
+  const [, year, month, day] = dateMatch.map(Number);
+  const [, hour, minute] = timeMatch.map(Number);
+  const pickup = new Date(year, month - 1, day, hour, minute);
+  if (
+    pickup.getFullYear() !== year ||
+    pickup.getMonth() !== month - 1 ||
+    pickup.getDate() !== day ||
+    pickup.getHours() !== hour ||
+    pickup.getMinutes() !== minute
+  ) {
+    return null;
+  }
+  return pickup.getTime();
+}
+
+export function localDateString(timestamp: number): string {
+  const date = new Date(timestamp);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+export function isPickupBookingTimeValid(
+  date: string,
+  time: string,
+  now = Date.now(),
+): boolean {
+  const pickupTimestamp = pickupTimestampFromLocalDateTime(date, time);
+  if (pickupTimestamp === null || pickupTimestamp <= now) return false;
+  return date !== localDateString(now) ||
+    pickupTimestamp >= now + MINIMUM_PICKUP_LEAD_TIME_MS;
+}
+
 const PositiveIdSchema = z.number().int().positive();
 const NonNegativeRateSchema = z.number().finite().nonnegative();
 

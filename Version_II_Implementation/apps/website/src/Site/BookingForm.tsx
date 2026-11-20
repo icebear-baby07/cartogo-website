@@ -1,7 +1,12 @@
 import { useMemo, useRef, useState } from "react";
 import { useEffect } from "react";
 import type { FormEvent } from "react";
-import type { PublicUnit, SiteContent } from "@cartogo/contracts";
+import {
+  isPickupBookingTimeValid,
+  localDateString,
+  type PublicUnit,
+  type SiteContent,
+} from "@cartogo/contracts";
 import type { User } from "@supabase/supabase-js";
 import { supabase } from "../supabase";
 import TermsAndConditions from "./TermsAndConditions";
@@ -30,24 +35,6 @@ function dateAfter(date: string, days: number): string {
   const [year, month, day] = date.split("-").map(Number);
   const result = new Date(Date.UTC(year, month - 1, day + days));
   return result.toISOString().slice(0, 10);
-}
-
-function pickupTimestamp(date: string, time: string): number | null {
-  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  const timeMatch = /^(\d{2}):(\d{2})$/.exec(time);
-  if (!dateMatch || !timeMatch) return null;
-
-  const [, year, month, day] = dateMatch;
-  const [, hour, minute] = timeMatch;
-  const selected = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
-  if (
-    selected.getFullYear() !== Number(year)
-    || selected.getMonth() !== Number(month) - 1
-    || selected.getDate() !== Number(day)
-    || selected.getHours() !== Number(hour)
-    || selected.getMinutes() !== Number(minute)
-  ) return null;
-  return selected.getTime();
 }
 
 function createRequestId(): string {
@@ -212,8 +199,11 @@ export default function BookingForm({
   const googleUser = isVerifiedGoogleUser(authUser) ? authUser : null;
   const accountName = googleProfileName(googleUser);
   const termsAndConditions = content.labels.termsAndConditions ?? "";
-  const selectedPickupTimestamp = pickupTimestamp(pickupDate, pickupTime);
-  const pickupTimeInvalid = selectedPickupTimestamp !== null && selectedPickupTimestamp <= currentTime.getTime();
+  const pickupTimeInvalid = !isPickupBookingTimeValid(
+    pickupDate,
+    pickupTime,
+    currentTime.getTime(),
+  );
 
   useEffect(() => {
     onGoogleAuthChange(Boolean(googleUser));
@@ -387,9 +377,8 @@ export default function BookingForm({
     setError("");
     setStatus("");
     if (!event.currentTarget.reportValidity()) return;
-    const selectedPickup = pickupTimestamp(pickupDate, pickupTime);
-    if (selectedPickup === null || selectedPickup <= Date.now()) {
-      setError("The requested pickup date and time has passed. Choose a future pickup time.");
+    if (!isPickupBookingTimeValid(pickupDate, pickupTime)) {
+      setError("Same-day pickups require at least 12 hours' notice. Choose a future pickup time.");
       return;
     }
     if (!unit || !quote || !rateRegion) {
@@ -397,7 +386,7 @@ export default function BookingForm({
       return;
     }
     if (!googleUser && (!challengeId || !verificationToken)) {
-      setError("Verify your email address before sending this inquiry.");
+      setError("Verify your email address before sending an inquiry.");
       return;
     }
     setRecapOpen(true);
@@ -433,9 +422,9 @@ export default function BookingForm({
   const confirmInquiry = async () => {
     setError("");
     setStatus("");
-    const selectedPickup = pickupTimestamp(pickupDate, pickupTime);
-    if (selectedPickup === null || selectedPickup <= Date.now()) {
-      setError("The requested pickup date and time has passed. Choose a future pickup time.");
+    if (!isPickupBookingTimeValid(pickupDate, pickupTime)) {
+      setError("Same-day pickups require at least 12 hours' notice. Choose a future pickup time.");
+      setRecapOpen(false);
       return;
     }
     if (!unit || !quote || !rateRegion) {
@@ -444,7 +433,7 @@ export default function BookingForm({
       return;
     }
     if (!googleUser && (!challengeId || !verificationToken)) {
-      setError("Verify your email address before sending this inquiry.");
+      setError("Verify your email address before sending an inquiry.");
       setRecapOpen(false);
       return;
     }
@@ -504,8 +493,7 @@ export default function BookingForm({
     }
   };
 
-  const today = new Date();
-  const minDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const minDate = localDateString(currentTime.getTime());
 
   return (
     <section className="section bg-paper" id="booking">
@@ -586,6 +574,9 @@ export default function BookingForm({
                 Pickup time
                 <input required type="time" value={pickupTime} onChange={(event) => setPickupTime(event.target.value)} />
               </label>
+              <p className="booking-rate-area-hint booking-field-wide">
+                Same-day pickups require at least 12 hours' notice. Future-date pickups may be booked as usual.
+              </p>
               <label className="booking-field booking-field-wide">
                 Rate area
                 <select
@@ -712,7 +703,7 @@ export default function BookingForm({
             {quote && (
               <div className={`booking-quote${pickupTimeInvalid ? " is-invalid" : ""}`} aria-live="polite">
                 {pickupTimeInvalid && (
-                  <h3 className="booking-quote-invalid-title">The requested pickup time is no longer valid</h3>
+                  <h3 className="booking-quote-invalid-title">Same-day pickup requires 12 hours' notice</h3>
                 )}
                 <p>
                   Estimated rental subtotal: <strong>{formatCurrency(quote.total, content.settings.currency)}</strong>

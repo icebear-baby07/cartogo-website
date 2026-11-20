@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import nodemailer, { type SendMailOptions } from "nodemailer";
+import { isPickupBookingTimeValid } from "@cartogo/contracts";
 import { emailVerificationEmail, inquiryConfirmationEmail } from "./email-templates.js";
 import {
   withEmailActivity,
@@ -286,6 +287,11 @@ function normalizeInquiry(
   const pickupTime = text(payload.pickupTime, "Pickup time", 5)!;
   if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(pickupTime)) {
     throw new BookingInputError("Pickup time must use 24-hour HH:MM format.");
+  }
+  if (!isPickupBookingTimeValid(pickupDate, pickupTime)) {
+    throw new BookingInputError(
+      "Same-day pickups require at least 12 hours' notice. Choose a future pickup time.",
+    );
   }
 
   const requestedRateRegion = text(payload.rateRegion, "Rate region", 16)!;
