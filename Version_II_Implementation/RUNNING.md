@@ -57,9 +57,11 @@ website's same-origin `/api` proxy.
 
 ## Start the chatbot (optional)
 
-The website's chatbot can use its offline preview without this service. To run
-the separate chatbot service, open a **second** PowerShell terminal in the same
-Version II directory and run:
+The website and API can run without the separate chatbot, but assistant
+requests will display an unavailable message until the chatbot is started.
+The agent/contact view is only a local preview, not a live support queue. To
+run the chatbot, open a **second** PowerShell terminal in the same Version II
+directory and run:
 
 ```powershell
 npm.cmd run dev:chatbot
@@ -73,16 +75,38 @@ separate `ctg-venv` Python environment. Chatbot settings belong in
 
 - The API reads MongoDB, Supabase server settings, and optional SMTP settings
   from `apps/api/.env`. Use `apps/api/.env.example` as a reference. MongoDB
-  must be configured and reachable for the public site to load its fleet and
-  content.
+  must be configured and reachable for the API readiness check and public site
+  startup, even if individual API data areas are set to use Supabase.
+- API storage selectors accept only `mongodb` or `supabase`. Keep every
+  `.env` assignment on its own line; do not put multiple assignments on one
+  line.
 - The browser environment file `apps/website/.env` may contain only
   `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 - Public-site photos use the public Supabase Storage bucket
   `cartogo-public-site-images`, with URLs built from `VITE_SUPABASE_URL`.
-  The local `apps/website/public/images` copies remain as a fallback.
+  Local fallback photos work only if the expected image filenames are present
+  in `apps/website/public/images`.
+- The website proxies `/api` requests to `http://127.0.0.1:3001`. Start the
+  API and website together with `npm.cmd run dev`; running only Vite causes
+  API requests to fail.
 - Booking email verification requires working API-side SMTP settings.
 - Never put MongoDB credentials, SMTP credentials, or Supabase service-role
   keys in the website environment or commit any `.env` file.
+
+## Troubleshooting startup
+
+- **`ECONNREFUSED` in the website terminal:** Vite could not connect to the API
+  at `127.0.0.1:3001`. Confirm the API process is running in the combined
+  `npm.cmd run dev` terminal.
+- **API exits with a storage-selector error:** check each `*_STORAGE` setting
+  in `apps/api/.env`; values must be `mongodb` or `supabase`, with one
+  assignment per line.
+- **The site reports that the API is not ready:** check the API terminal and
+  confirm `MONGODB_URI` points to a reachable, authorized MongoDB deployment.
+  The readiness endpoint checks MongoDB even if the API's data providers are
+  configured to use Supabase.
+- After editing environment files, restart the affected service so it reloads
+  the settings. Do not paste credentials into logs, chat, or screenshots.
 
 ## Ports and stopping
 
