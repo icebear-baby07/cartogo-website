@@ -105,6 +105,19 @@ separate `ctg-venv` Python environment. Chatbot settings belong in
   confirm `MONGODB_URI` points to a reachable, authorized MongoDB deployment.
   The readiness endpoint checks MongoDB even if the API's data providers are
   configured to use Supabase.
+- **VS Code reports `Cannot find module '@cartogo/contracts'` and implicit
+  `any` types for callbacks such as `rule`:** the contracts workspace's
+  generated declarations may be missing. From the Version II directory, run:
+
+  ```powershell
+  npm.cmd run build --workspace @cartogo/contracts
+  ```
+
+  This generates the declarations and usually clears both the missing-module
+  error and dependent type diagnostics. The standard `npm.cmd run dev` and
+  `npm.cmd run build` commands also build contracts first. If VS Code still
+  shows stale diagnostics, run **TypeScript: Restart TS Server** from the
+  Command Palette.
 - After editing environment files, restart the affected service so it reloads
   the settings. Do not paste credentials into logs, chat, or screenshots.
 
