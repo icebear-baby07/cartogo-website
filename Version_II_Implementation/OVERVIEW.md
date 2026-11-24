@@ -16,7 +16,7 @@ provides an administrator area for authorized staff to manage inquiries and
 selected website information.
 
 Version II is a new implementation intended to progressively replace the
-legacy site while preserving its existing MongoDB data formats and expected
+legacy site while preserving its existing data formats and expected
 customer workflows. It is still under development. It must not be treated as
 the production replacement until the remaining staging checks are completed
 and a cutover is explicitly approved.
@@ -70,28 +70,26 @@ Browser
   v
 Website (Vite, port 5173) ---- /api proxy ----> API (Express, port 3001)
                                                      |          |--> SMTP email
-                                                     |          +--> MongoDB / Supabase
+                                                     |          +--> Supabase
                                                      +--> Chat proxy
                                                             |
                                                             v
                                                    Chatbot (Python, port 8003)
                                                      |                        |
-                                                     +--> MongoDB / Supabase +--> AWS Bedrock
+                                                     +--> Supabase +--> AWS Bedrock
 ```
 
 The website's `/api` requests are proxied by Vite to the API in development.
 The API validates incoming data against shared contracts and provides booking,
-chat-proxy, and protected admin endpoints. Each supported data area can use
-MongoDB or Supabase, selected independently in `apps/api/.env`. The example
-environment defaults to MongoDB; the local environment may select Supabase
-where its required tables and functions are provisioned. The API readiness
-endpoint still requires a reachable MongoDB connection.
+chat-proxy, and protected admin endpoints. Version II uses Supabase for its
+application data, authentication, and storage. The API readiness endpoint
+checks the configured Supabase project and required data resources.
 
 The chatbot service is deliberately isolated from the website/API runtime. The
 website API forwards chat requests to it at `http://127.0.0.1:8003` by default.
-The bot can use MongoDB or Supabase for vehicle information, company knowledge,
-identity, and chat logging, and AWS Bedrock for language-model responses. The
-standalone chatbot page is retained for local access.
+The bot uses Supabase for vehicle information, company knowledge, identity, and
+chat logging, and AWS Bedrock for language-model responses. The standalone
+chatbot page is retained for local access.
 
 ### Tools and their contributions
 
@@ -102,8 +100,7 @@ standalone chatbot page is retained for local access.
 | Vite | Runs the website development server, serves the production build, and proxies `/api` requests during development. |
 | Node.js and npm workspaces | Run the TypeScript applications, manage shared JavaScript dependencies, and coordinate workspace scripts. Node.js 22 or newer is recommended and required by the Windows site launcher. |
 | Express | Hosts the API, including public-data, booking, chat-proxy, health, authentication, and admin routes. |
-| MongoDB | Stores the existing fleet, site content/assets, inquiries, and other configured application records. The API and chatbot have separate environment files and independently configured connections. |
-| Supabase | Provides Google sign-in, optional API/chatbot data storage, admin activity logging, and the public `cartogo-public-site-images` Storage bucket. API and chatbot server-side access uses server-only credentials. |
+| Supabase | Stores Version II fleet, site content/assets, inquiries, chatbot data, admin records, and email activity; provides Google sign-in, admin activity logging, and the public `cartogo-public-site-images` Storage bucket. API and chatbot server-side access uses server-only credentials. |
 | Zod and `packages/contracts` | Define shared API schemas/types and validate API input and database-facing responses without changing the existing document formats. |
 | Supabase Auth | Supports the configured Google sign-in flow and protected administrator identity/authorization checks. The browser uses only the public anon key; privileged keys stay on the API. |
 | Nodemailer and SMTP | Send guest verification, inquiry, rejection, and owner-approval email. SMTP credentials belong only in the API environment. |
@@ -113,27 +110,21 @@ standalone chatbot page is retained for local access.
 
 ### Important data and security boundaries
 
-- The API environment template defaults fleet, site assets, and site content
-  to MongoDB in the `Site` database, and inquiries to the `Sessions` database.
-  Storage providers and MongoDB collection/database names are configurable in
-  `apps/api/.env`. The public site-content document uses `_id: "public"`.
+- Version II API data is stored in the configured Supabase project. Site
+  content is held in the `site_content_documents` table under the `public` ID.
   Public content must contain only material intended for website visitors.
-- The API readiness endpoint checks MongoDB even when individual data areas
-  are configured to use Supabase. `MONGODB_URI` must therefore be valid and
-  reachable for the website's readiness check.
+- The API readiness endpoint checks Supabase availability and the fleet data
+  resource used by the application.
 - Public-site photos are served from the public Supabase Storage bucket
   `cartogo-public-site-images`. The website builds their URLs from
   `VITE_SUPABASE_URL`; local image fallback requires files in
   `apps/website/public/images` with the expected original filenames.
-- The chatbot has its own environment file and settings. Its defaults include
-  the `Site.vehicles` fleet and knowledge/identity collections in the `KB`
-  database when MongoDB storage is selected. Its example environment selects
-  Supabase instead. Do not copy the legacy chatbot's environment file or
-  virtual environment.
-- Never put MongoDB credentials, SMTP credentials, or Supabase service-role
-  keys in the browser environment. Never commit `.env` files.
-- Keep each `.env` assignment on its own line. Storage selector values must be
-  `mongodb` or `supabase`; do not append another variable to the same line.
+- The chatbot has its own environment file and uses the same Supabase project
+  for fleet, knowledge, identity, and chat logs. Do not copy the legacy
+  chatbot's environment file or virtual environment.
+- Never put SMTP credentials or Supabase service-role keys in the browser
+  environment. Never commit `.env` files.
+- Keep each `.env` assignment on its own line.
 - Use a dedicated, confirmed non-production database for development. Existing
   project notes flag the current API database URI as potentially matching the
   legacy application; do not write to it unless an authorized owner confirms
@@ -178,7 +169,7 @@ requirements. The website can still show its offline chat preview if the
 chatbot service is unavailable.
 
 For full Bedrock-backed chatbot operation, AWS CLI v2 credentials/login,
-permissions, and the chatbot's own MongoDB/AWS configuration must be valid.
+permissions, and the chatbot's Supabase/AWS configuration must be valid.
 On Windows, `.\start_cartogo.cmd` opens separate terminals for AWS login, the
 website/API, and the chatbot. Use it only when those services and credentials
 are configured.
@@ -218,7 +209,7 @@ For the optional, full chatbot:
 - Install Python 3.10 or newer.
 - Install AWS CLI v2 and obtain authorized AWS credentials with access to the
   configured Bedrock model.
-- Have authorized access to the MongoDB instance configured for the chatbot.
+- Have authorized access to the Supabase project configured for the chatbot.
 
 ### Obtain and install the project
 
@@ -252,25 +243,16 @@ ignored by Git, and must not be committed.
 
 Configure the API file (`apps/api/.env`) as needed:
 
-- `MONGODB_URI`: authorized non-production MongoDB connection string.
-- `MONGODB_SITE_DATABASE`, `MONGODB_INQUIRIES_DATABASE`, and collection
-  settings only if the approved databases differ from the defaults in
-  `apps/api/.env.example`. Site data and booking operations use `Site`;
-  inquiries use `Sessions`.
-- Email analytics activity events are stored in the `email_activities`
-  collection in the inquiries database. Events contain type, activity, and
-  timestamp only; they do not contain recipient addresses or message content.
 - `SUPABASE_URL` and `SUPABASE_ANON_KEY` to match the browser's Supabase
   project when authentication is required.
 - `SUPABASE_SERVICE_ROLE_KEY` and `CARTOGO_INITIAL_OWNER_EMAIL` only for
   server-side admin/account configuration that requires them.
-- API storage areas can be configured individually with `FLEET_STORAGE`,
-  `SITE_ASSETS_STORAGE`, `SITE_CONTENT_STORAGE`, `EMAIL_ACTIVITY_STORAGE`,
-  `INQUIRY_STORAGE`, `EMAIL_OUTBOX_STORAGE`, `GUEST_CHALLENGE_STORAGE`,
-  `ADMIN_ROLE_STORAGE`, `OWNER_APPROVAL_STORAGE`, and `CHAT_SESSION_STORAGE`.
-  Each accepts `mongodb` or `supabase`. Required Supabase tables and RPC
-  functions must already exist; the one-off import utilities and cutover SQL
-  files are not included in this repository.
+- API data is stored in Supabase. Required tables and RPC functions must
+  already exist; the one-off import utilities and cutover SQL files are not
+  included in this repository.
+- Email analytics activity events are stored in the Supabase
+  `email_activity_logs` table. Events contain type, activity, and timestamp
+  only; they do not contain recipient addresses or message content.
 - Admin mutations write sanitized activity records to Supabase's
   `public.admin_activity_logs` table using the server-only Supabase secret
   key (or legacy service-role key). The table must be provisioned before
@@ -298,10 +280,6 @@ Configure the API file (`apps/api/.env`) as needed:
 - Set a stable `GUEST_EMAIL_VERIFICATION_SECRET` on every API instance if
   using guest email verification; otherwise the configured SMTP app password
   is used as the HMAC key.
-- Configure the `*_STORAGE` variables to `mongodb` or `supabase`, one
-  assignment per line. The API still needs a reachable `MONGODB_URI` for its
-  readiness endpoint even if the selected data areas use Supabase.
-
 Configure the browser file (`apps/website/.env`) with only:
 
 - `VITE_SUPABASE_URL`
@@ -311,16 +289,13 @@ Use the URL and public anon key from the same Supabase project. Configure its
 Google provider and the development redirect URL
 `http://127.0.0.1:5173/admin` when Google/admin sign-in is required. Add the
 deployed URL only when that deployment has been authorized and configured.
-Never add service-role keys, MongoDB credentials, or SMTP credentials to this
-file.
+Never add service-role keys or SMTP credentials to this file.
 
 Configure the chatbot file (`apps/chatbot/.env`) separately, using
-`apps/chatbot/.env.example` as the template. The template selects Supabase
-storage and requires `SUPABASE_URL`, a server-only
+`apps/chatbot/.env.example` as the template. The chatbot uses Supabase directly
+and requires `SUPABASE_URL`, a server-only
 `SUPABASE_SERVICE_ROLE_KEY`, and the chatbot's provisioned Supabase tables and
-RPC functions. To use MongoDB instead, set `CHATBOT_STORAGE=mongodb` and
-provide an authorized `MONGODB_URI` and the required identity, knowledge, and
-fleet records. Configure AWS credentials with the approved AWS profile or SSO
+RPC functions. Configure AWS credentials with the approved AWS profile or SSO
 flow and grant access to the selected Bedrock model. Do not reuse the official
 legacy chatbot's environment file.
 

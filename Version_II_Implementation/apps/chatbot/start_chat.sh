@@ -30,7 +30,7 @@ fi
 
 if [[ ! -f "$CHATBOT_ROOT/.env" && -f "$CHATBOT_ROOT/.env.example" ]]; then
   cp "$CHATBOT_ROOT/.env.example" "$CHATBOT_ROOT/.env"
-  echo "Created apps/chatbot/.env from its example. Configure MongoDB and AWS settings to enable full chatbot features." >&2
+  echo "Created apps/chatbot/.env from its example. Configure Supabase and AWS settings before using the chatbot." >&2
 fi
 
 export PORT

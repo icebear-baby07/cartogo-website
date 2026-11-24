@@ -73,13 +73,11 @@ separate `ctg-venv` Python environment. Chatbot settings belong in
 
 ## Required local configuration
 
-- The API reads MongoDB, Supabase server settings, and optional SMTP settings
-  from `apps/api/.env`. Use `apps/api/.env.example` as a reference. MongoDB
-  must be configured and reachable for the API readiness check and public site
-  startup, even if individual API data areas are set to use Supabase.
-- API storage selectors accept only `mongodb` or `supabase`. Keep every
-  `.env` assignment on its own line; do not put multiple assignments on one
-  line.
+- The API reads Supabase server settings and optional SMTP settings
+  from `apps/api/.env`. Use `apps/api/.env.example` as a reference. Supabase
+  must be configured and reachable for API readiness and data operations.
+- Keep every `.env` assignment on its own line; do not put multiple
+  assignments on one line.
 - The browser environment file `apps/website/.env` may contain only
   `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 - Public-site photos use the public Supabase Storage bucket
@@ -90,21 +88,18 @@ separate `ctg-venv` Python environment. Chatbot settings belong in
   API and website together with `npm.cmd run dev`; running only Vite causes
   API requests to fail.
 - Booking email verification requires working API-side SMTP settings.
-- Never put MongoDB credentials, SMTP credentials, or Supabase service-role
-  keys in the website environment or commit any `.env` file.
+- Never put SMTP credentials or Supabase service-role keys in the website
+  environment or commit any `.env` file.
 
 ## Troubleshooting startup
 
 - **`ECONNREFUSED` in the website terminal:** Vite could not connect to the API
   at `127.0.0.1:3001`. Confirm the API process is running in the combined
   `npm.cmd run dev` terminal.
-- **API exits with a storage-selector error:** check each `*_STORAGE` setting
-  in `apps/api/.env`; values must be `mongodb` or `supabase`, with one
-  assignment per line.
-- **The site reports that the API is not ready:** check the API terminal and
-  confirm `MONGODB_URI` points to a reachable, authorized MongoDB deployment.
-  The readiness endpoint checks MongoDB even if the API's data providers are
-  configured to use Supabase.
+- **The site reports that the API is not ready:** check the API terminal,
+  confirm `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set in
+  `apps/api/.env`, and confirm the required Supabase tables and RPC functions
+  are provisioned.
 - **VS Code reports `Cannot find module '@cartogo/contracts'` and implicit
   `any` types for callbacks such as `rule`:** the contracts workspace's
   generated declarations may be missing. From the Version II directory, run:

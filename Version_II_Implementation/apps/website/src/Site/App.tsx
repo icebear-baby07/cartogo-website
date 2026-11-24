@@ -144,9 +144,9 @@ function isAssets(value: unknown): value is SiteAsset[] {
 function isApiReadiness(value: unknown): value is ApiReadiness {
   if (!isRecord(value) || !isRecord(value.dependencies)) return false;
   return (
-    (value.status === "ready" && value.dependencies.mongodb === "ok") ||
+    (value.status === "ready" && value.dependencies.supabase === "ok") ||
     (value.status === "not_ready" &&
-      value.dependencies.mongodb === "unavailable")
+      value.dependencies.supabase === "unavailable")
   );
 }
 
@@ -169,7 +169,7 @@ export default function App() {
       }
       if (readiness.status !== "ready") {
         throw new Error(
-          "The API is running, but MongoDB is not ready. Configure MONGODB_URI in apps/api/.env, then restart the dev server.",
+          "The API is running, but Supabase is not ready. Check the API Supabase configuration and required resources, then restart the dev server.",
         );
       }
 

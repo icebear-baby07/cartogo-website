@@ -1,9 +1,2 @@
-1. Apply this in admin panel (Adjust differently for desktop and smaller devices mode)
-1.1. In "Inquiries" Tab, have the "Export CSV" and "Refresh" button into icons. Bring the refresh icon beside the inquiries spinner, while having the export csv icon to the rightmost part (level it vertically with the right margins of each record underneath)
-- Shorten the reports into smaller units by default, then display every part of it when an expand button (represented by an icon) is clicked.
-- The shorten version should only have the following; 1. Status (i.e. pending, confirmed, etc.), 2. name of the inquiree, 3. Date, time, and model. Do it in a horizontal single line strip
-- It should display the current UI version (before these changes) when a fullscreen button is toggled. 
-1.2. In "fleets and rates" tab, have the "edit" and "delete" buttons into icons
-1.3. Do the same with "Site Assets" tab.
-1.4. In "Site Content" tab, minimize the json content editor by default, then add a fullscreen icon button.
-1.5. In "Chat Monitor" tab, replace the "delete" text inside that button into an icon. Keep it in the same place when "View Transcript" is clicked.
+1. Implement Captcha for guest and admin sign in, and booking request (right before reservation recap)
+2. 

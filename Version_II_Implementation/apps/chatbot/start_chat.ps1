@@ -126,7 +126,7 @@ if ($LASTEXITCODE -ne 0) {
 	throw "Dependency installation failed. Check your internet connection and try again."
 }
 
-& $EnvironmentPython -c "import boto3, awscrt, dns, dotenv, pymongo; print('Verified boto3 ' + boto3.__version__ + ', awscrt, dnspython, python-dotenv, and pymongo ' + pymongo.version)"
+& $EnvironmentPython -c "import boto3, awscrt, dotenv; print('Verified boto3 ' + boto3.__version__ + ', awscrt, and python-dotenv')"
 if ($LASTEXITCODE -ne 0) {
 	throw "Required Python modules could not be imported after installation."
 }
@@ -135,7 +135,7 @@ $EnvironmentFile = Join-Path $ProjectRoot ".env"
 $EnvironmentExample = Join-Path $ProjectRoot ".env.example"
 if (-not (Test-Path $EnvironmentFile) -and (Test-Path $EnvironmentExample)) {
 	Copy-Item -LiteralPath $EnvironmentExample -Destination $EnvironmentFile
-	Write-Warning "Created .env. Add your MongoDB connection string there to enable chat logging."
+	Write-Warning "Created .env. Configure Supabase and AWS settings before using the chatbot."
 }
 
 $Listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue

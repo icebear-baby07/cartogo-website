@@ -9,11 +9,11 @@ export type ApiHealth = z.infer<typeof ApiHealthSchema>;
 export const ApiReadinessSchema = z.discriminatedUnion("status", [
   z.object({
     status: z.literal("ready"),
-    dependencies: z.object({ mongodb: z.literal("ok") }),
+    dependencies: z.object({ supabase: z.literal("ok") }),
   }),
   z.object({
     status: z.literal("not_ready"),
-    dependencies: z.object({ mongodb: z.literal("unavailable") }),
+    dependencies: z.object({ supabase: z.literal("unavailable") }),
   }),
 ]);
 export type ApiReadiness = z.infer<typeof ApiReadinessSchema>;

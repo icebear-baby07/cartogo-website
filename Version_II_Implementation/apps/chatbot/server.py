@@ -15,7 +15,6 @@ from urllib.request import Request, urlopen
 
 import boto3
 from dotenv import load_dotenv
-from pymongo import ASCENDING, DESCENDING, MongoClient
 
 from supabase_storage import SupabaseChatbotStore
 
@@ -30,41 +29,9 @@ AWS_REGION = (
 	or "ap-southeast-1"
 )
 MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "global.amazon.nova-2-lite-v1:0")
-CHATBOT_STORAGE = os.environ.get("CHATBOT_STORAGE", "mongodb").strip().lower()
-if CHATBOT_STORAGE not in ("mongodb", "supabase"):
-	raise RuntimeError("CHATBOT_STORAGE must be either mongodb or supabase.")
-MONGODB_URI = os.environ.get("MONGODB_URI", "").strip()
-MONGODB_DATABASE = os.environ.get("MONGODB_DATABASE", "Site")
-MONGODB_COLLECTION = os.environ.get("MONGODB_COLLECTION", "chat_logs")
-MONGODB_UNITS_DATABASE = os.environ.get("MONGODB_UNITS_DATABASE", "Site")
-MONGODB_UNITS_COLLECTION = os.environ.get("MONGODB_UNITS_COLLECTION", "vehicles")
-MONGODB_KNOWLEDGE_DATABASE = os.environ.get("MONGODB_KNOWLEDGE_DATABASE", "KB")
-MONGODB_KNOWLEDGE_COLLECTION = os.environ.get("MONGODB_KNOWLEDGE_COLLECTION", "proprietary_info_collection")
-MONGODB_BOT_IDENTITY = os.environ.get("MONGODB_BOT_IDENTITY", "bot_identity")
-MONGO_CLIENT = (
-	MongoClient(MONGODB_URI, serverSelectionTimeoutMS=3000)
-	if CHATBOT_STORAGE == "mongodb" and MONGODB_URI
-	else None
-)
-AI_CHAT_SESSIONS_LOG = MONGO_CLIENT[MONGODB_DATABASE][MONGODB_COLLECTION] if MONGO_CLIENT else None
-VEHICLE_CATALOG = MONGO_CLIENT[MONGODB_UNITS_DATABASE][MONGODB_UNITS_COLLECTION] if MONGO_CLIENT else None
-PROPRIETARY_INFO_COLLECTION = (
-	MONGO_CLIENT[MONGODB_KNOWLEDGE_DATABASE][MONGODB_KNOWLEDGE_COLLECTION]
-	if MONGO_CLIENT
-	else None
-)
-SUPABASE_CHATBOT_STORE = (
-	SupabaseChatbotStore(
-		os.environ.get("SUPABASE_URL", ""),
-		os.environ.get("SUPABASE_SERVICE_ROLE_KEY", ""),
-	)
-	if CHATBOT_STORAGE == "supabase"
-	else None
-)
-BOT_IDENTITY_COLLECTION = (
-	MONGO_CLIENT[MONGODB_KNOWLEDGE_DATABASE][MONGODB_BOT_IDENTITY]
-	if MONGO_CLIENT
-	else None
+SUPABASE_CHATBOT_STORE = SupabaseChatbotStore(
+	os.environ.get("SUPABASE_URL", ""),
+	os.environ.get("SUPABASE_SERVICE_ROLE_KEY", ""),
 )
 MAX_BODY_BYTES = 48 * 1024
 MAX_MESSAGES = 11
@@ -96,7 +63,6 @@ UNIT_LIST_QUERY = re.compile(r"\b(?:all|each|every|list|show|recommend(?:ation|a
 UNIT_AVAILABLE_QUERY = re.compile(r"\b(?:available|availability)\b", re.IGNORECASE)
 UNIT_RECOMMEND_QUERY = re.compile(r"\brecommend(?:ation|ations)?\b", re.IGNORECASE)
 UNIT_FOLLOW_UP_QUERY = re.compile(r"^\s*(?:what about|how about|and)\s+.+", re.IGNORECASE)
-BOT_IDENTITY_RECORD_ID = "cartogo-bot-identity"
 RECOMMEND_CONTACT_PATH = "/recommend-contact"
 CONTACT_REQUEST = re.compile(
 	r"\b(?:who\s+(?:should|can|do)\s+i\s+(?:contact|call|email|reach|speak\s+to|talk\s+to)|"
@@ -148,36 +114,16 @@ def find_company_information(query):
 	if not terms:
 		return []
 
-	if CHATBOT_STORAGE == "supabase":
-		records = SUPABASE_CHATBOT_STORE.list_company_information()
-	elif PROPRIETARY_INFO_COLLECTION is None:
-		return []
-	else:
-		query_filter = {
-			"$and": [
-				{"record_type": {"$ne": "bot_identity"}},
-				{
-					"$or": [
-						{field: {"$regex": re.escape(term), "$options": "i"}}
-						for term in terms
-						for field in KNOWLEDGE_SEARCH_FIELDS
-					]
-				},
-			]
-		}
-		projection = {"_id": 0, **{field: 1 for field in KNOWLEDGE_SEARCH_FIELDS}}
-		records = list(PROPRIETARY_INFO_COLLECTION.find(query_filter, projection).limit(50))
-
-	if CHATBOT_STORAGE == "supabase":
-		records = [
-			record for record in records
-			if record.get("record_type") != "bot_identity"
-			and any(
-				term in str(record.get(field, "")).lower()
-				for field in KNOWLEDGE_SEARCH_FIELDS
-				for term in terms
-			)
-		]
+	records = SUPABASE_CHATBOT_STORE.list_company_information()
+	records = [
+		record for record in records
+		if record.get("record_type") != "bot_identity"
+		and any(
+			term in str(record.get(field, "")).lower()
+			for field in KNOWLEDGE_SEARCH_FIELDS
+			for term in terms
+		)
+	]
 
 	def relevance(record):
 		searchable_text = " ".join(str(record.get(field, "")) for field in KNOWLEDGE_SEARCH_FIELDS).lower()
@@ -189,15 +135,7 @@ def find_company_information(query):
 
 
 def find_unit_records(query):
-	if CHATBOT_STORAGE == "supabase":
-		records = SUPABASE_CHATBOT_STORE.list_vehicles()
-	elif VEHICLE_CATALOG is None:
-		raise RuntimeError("MongoDB vehicle catalog is not configured.")
-	else:
-		records = list(VEHICLE_CATALOG.find(
-			{"status": {"$ne": "Inactive"}},
-			{"_id": 0},
-		).sort("id", ASCENDING).limit(100))
+	records = SUPABASE_CHATBOT_STORE.list_vehicles()
 
 	is_list_query = bool(UNIT_LIST_QUERY.search(query))
 	available_only = bool(UNIT_AVAILABLE_QUERY.search(query) or UNIT_RECOMMEND_QUERY.search(query))
@@ -309,17 +247,9 @@ class BotIdentityError(RuntimeError):
 
 
 def get_bot_identity_instructions():
-	if CHATBOT_STORAGE == "supabase":
-		identity = SUPABASE_CHATBOT_STORE.get_bot_identity()
-	elif BOT_IDENTITY_COLLECTION is None:
-		raise BotIdentityError("MongoDB bot identity is unavailable. Configure MONGODB_URI and restart the chatbot.")
-	else:
-		identity = BOT_IDENTITY_COLLECTION.find_one(
-			{"record_id": BOT_IDENTITY_RECORD_ID, "record_type": "bot_identity"},
-			{"_id": 0},
-		)
-	if not identity:
-		raise BotIdentityError("MongoDB bot identity record is missing. Add the configured bot identity document.")
+	identity = SUPABASE_CHATBOT_STORE.get_bot_identity()
+	if not isinstance(identity, dict):
+		raise BotIdentityError("The Supabase chatbot identity record is missing or invalid.")
 
 	instructions = identity.get("instructions")
 	if isinstance(instructions, str) and instructions.strip():
@@ -328,20 +258,20 @@ def get_bot_identity_instructions():
 	required_fields = ("name", "role", "organization", "purpose", "voice", "capabilities", "boundaries")
 	if any(field not in identity for field in required_fields):
 		raise BotIdentityError(
-			"MongoDB bot identity must contain non-empty instructions or the structured identity fields."
+			"Bot identity must contain non-empty instructions or the required structured fields."
 		)
 
 	for field in ("name", "role", "organization", "purpose"):
 		if not isinstance(identity[field], str) or not identity[field].strip():
-			raise BotIdentityError(f"MongoDB bot identity field '{field}' must be a non-empty string.")
+			raise BotIdentityError(f"Bot identity field '{field}' must be a non-empty string.")
 
 	voice = identity["voice"]
 	if not isinstance(voice, dict):
-		raise BotIdentityError("MongoDB bot identity field 'voice' must be an object.")
+		raise BotIdentityError("Bot identity field 'voice' must be an object.")
 
 	def instruction_list(field, values):
 		if not isinstance(values, list) or any(not isinstance(value, str) or not value.strip() for value in values):
-			raise BotIdentityError(f"MongoDB bot identity field '{field}' must be a list of non-empty strings.")
+			raise BotIdentityError(f"Bot identity field '{field}' must be a list of non-empty strings.")
 		return "\n".join(f"- {value.strip()}" for value in values)
 
 	voice_traits = instruction_list("voice.traits", voice.get("traits"))
@@ -349,7 +279,7 @@ def get_bot_identity_instructions():
 	boundaries = instruction_list("boundaries", identity["boundaries"])
 	language = voice.get("language", "")
 	if not isinstance(language, str):
-		raise BotIdentityError("MongoDB bot identity field 'voice.language' must be a string.")
+		raise BotIdentityError("Bot identity field 'voice.language' must be a string.")
 
 	other_names = identity.get("other_names", [])
 	if other_names:
@@ -495,11 +425,10 @@ class ChatHandler(SimpleHTTPRequestHandler):
 			return
 
 		company_records = []
-		if CHATBOT_STORAGE == "supabase" or PROPRIETARY_INFO_COLLECTION is not None:
-			try:
-				company_records = find_company_information(self.chat_query or "")
-			except Exception as error:
-				self.log_error("Company knowledge lookup failed (%s)", type(error).__name__)
+		try:
+			company_records = find_company_information(self.chat_query or "")
+		except Exception as error:
+			self.log_error("Company knowledge lookup failed (%s)", type(error).__name__)
 
 		knowledge_context = build_knowledge_context(company_records)
 		unit_records = []
@@ -577,45 +506,23 @@ class ChatHandler(SimpleHTTPRequestHandler):
 			"successful": 200 <= status < 300,
 		}
 		try:
-			if CHATBOT_STORAGE == "supabase":
-				SUPABASE_CHATBOT_STORE.insert_chat_log({
-					**record,
-					"created_at": record["created_at"].isoformat(),
-				})
-			elif AI_CHAT_SESSIONS_LOG is not None:
-				AI_CHAT_SESSIONS_LOG.insert_one(record)
+			SUPABASE_CHATBOT_STORE.insert_chat_log({
+				**record,
+				"created_at": record["created_at"].isoformat(),
+			})
 		except Exception as error:
 			self.log_error("Chat logging failed (%s)", type(error).__name__)
 
 
 if __name__ == "__main__":
 	port = int(os.environ.get("PORT", "8000"))
-	if CHATBOT_STORAGE == "supabase":
-		try:
-			SUPABASE_CHATBOT_STORE.get_bot_identity()
-			print("Supabase chatbot identity, logging, company knowledge, and fleet access enabled.")
-		except Exception as error:
-			raise SystemExit(
-				f"Supabase chatbot storage setup failed ({type(error).__name__}); check the server-side Supabase configuration."
-			) from None
-	elif MONGO_CLIENT is None:
-		print("MongoDB bot identity, logging, and company knowledge are unavailable. Set MONGODB_URI in .env; chat requests require a valid bot identity record.")
-	else:
-		try:
-			MONGO_CLIENT.admin.command("ping")
-			AI_CHAT_SESSIONS_LOG.create_index(
-				[("user_id", ASCENDING), ("created_at", DESCENDING)],
-				name="user_id_created_at",
-			)
-			AI_CHAT_SESSIONS_LOG.create_index(
-				[("session_id", ASCENDING), ("created_at", ASCENDING)],
-				name="session_id_created_at",
-			)
-		except Exception as error:
-			raise SystemExit(f"MongoDB connection or index setup failed ({type(error).__name__}); check .env and database permissions.") from None
-		print(f"MongoDB logging enabled: {MONGODB_DATABASE}.{MONGODB_COLLECTION}")
-		print(f"Company knowledge lookup enabled: {MONGODB_KNOWLEDGE_DATABASE}.{MONGODB_KNOWLEDGE_COLLECTION}")
-		print(f"Bot identity instructions: {MONGODB_KNOWLEDGE_DATABASE}.{MONGODB_BOT_IDENTITY}")
+	try:
+		SUPABASE_CHATBOT_STORE.get_bot_identity()
+		print("Supabase chatbot identity, logging, company knowledge, and fleet access enabled.")
+	except Exception as error:
+		raise SystemExit(
+			f"Supabase chatbot storage setup failed ({type(error).__name__}); check the server-side Supabase configuration."
+		) from None
 	server = ThreadingHTTPServer(
 		("0.0.0.0", port),
 		partial(ChatHandler, directory=str(ROOT)),

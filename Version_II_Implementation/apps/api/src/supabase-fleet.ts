@@ -1,5 +1,6 @@
 import { PublicUnitSchema } from "@cartogo/contracts";
 import type { AdminDataRepository } from "./admin-api.js";
+import type { BookingRepository } from "./booking.js";
 import type { PublicDataRepository } from "./public-data.js";
 
 type FleetChangeAction = "add" | "update" | "delete";
@@ -18,6 +19,7 @@ function isFleetRow(value: unknown): value is FleetRow {
 }
 
 export type SupabaseFleetRepository = Pick<PublicDataRepository, "listPublicUnits"> & {
+  getUnit: BookingRepository["getUnit"];
   listUnits(): Promise<unknown[]>;
   applyUnitChange(action: FleetChangeAction, unit: Record<string, unknown>): Promise<unknown>;
 };
@@ -78,6 +80,20 @@ export function createSupabaseFleetRepository(
   return {
     async listUnits() {
       return (await rows()).map((row) => row.document);
+    },
+    async getUnit(id) {
+      if (!Number.isSafeInteger(id) || id < 1) {
+        throw new Error("A valid unit ID is required.");
+      }
+      const response = await request(
+        `fleet_documents?select=id,document&id=eq.${id}&limit=1`,
+      );
+      const value: unknown = await response.json();
+      if (!Array.isArray(value) || !value.every(isFleetRow)) {
+        throw new Error("Supabase returned invalid fleet data.");
+      }
+      if (value.length === 0) return null;
+      return PublicUnitSchema.parse(value[0].document);
     },
     async listPublicUnits() {
       return (await rows())

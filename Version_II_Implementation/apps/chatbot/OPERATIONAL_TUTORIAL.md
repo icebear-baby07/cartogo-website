@@ -10,8 +10,8 @@ The website sends chat requests to the Version II API at
 `/api/chatbot/chat`. The API forwards them to `http://127.0.0.1:8003` by
 default; set `CHATBOT_URL` in `apps/api/.env` only when the chatbot is running
 at a different URL. The chatbot uses Amazon Bedrock for language-model
-responses and can read its vehicle, company-reference, identity, and chat-log
-data from MongoDB or Supabase.
+responses and uses Supabase for its vehicle, company-reference, identity, and
+chat-log data.
 
 The standalone page at <http://127.0.0.1:8003/> is for local diagnostics and
 direct access. It is not a health check for the database, AWS credentials, or
@@ -45,13 +45,11 @@ network, allow the port through a private-network firewall only when needed,
 and do not expose this unauthenticated development service to the public
 internet.
 
-## Configure storage
+## Configure Supabase
 
-Use `apps/chatbot/.env.example` as the template. The example selects
-Supabase:
+Use `apps/chatbot/.env.example` as the template:
 
 ```env
-CHATBOT_STORAGE=supabase
 SUPABASE_URL=https://your-project-id.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-server-only-secret
 ```
@@ -59,7 +57,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-server-only-secret
 Keep each environment assignment on its own line. Never put the service-role
 key in the website environment, source control, or chat.
 
-Supabase mode expects the following resources to have already been provisioned:
+The following resources must already be provisioned:
 
 - `chatbot_reference_documents` and `chatbot_chat_log_documents` tables, each
   with `id` and JSON `document` columns used by the chatbot.
@@ -68,26 +66,12 @@ Supabase mode expects the following resources to have already been provisioned:
 
 The repository does not include a Supabase chatbot schema/bootstrap script.
 Have the project owner provide the approved schema and confirm that the
-service-role key is for the intended project before enabling this mode.
-
-To use MongoDB instead, set `CHATBOT_STORAGE=mongodb` and provide an
-authorized `MONGODB_URI`. The default database/collection settings are:
-
-| Purpose | Setting | Default |
-| --- | --- | --- |
-| Chat logs | `MONGODB_DATABASE` / `MONGODB_COLLECTION` | `Site` / `chat_logs` |
-| Fleet | `MONGODB_UNITS_DATABASE` / `MONGODB_UNITS_COLLECTION` | `Site` / `vehicles` |
-| Company knowledge | `MONGODB_KNOWLEDGE_DATABASE` / `MONGODB_KNOWLEDGE_COLLECTION` | `KB` / `proprietary_info_collection` |
-| Bot identity | `MONGODB_KNOWLEDGE_DATABASE` / `MONGODB_BOT_IDENTITY` | `KB` / `bot_identity` |
-
-MongoDB mode checks the connection and creates indexes for chat-log queries at
-startup. The MongoDB account needs the corresponding read/write and index
-permissions.
+service-role key is for the intended project.
 
 ## Configure identity and company knowledge
 
-The chatbot requires a valid identity record before it can answer. In MongoDB,
-the identity document must have:
+The chatbot requires a valid identity record before it can answer. The
+identity returned by `get_cartogo_chatbot_identity` must include:
 
 ```json
 {
@@ -99,16 +83,14 @@ the identity document must have:
 It may include a non-empty `instructions` string, or the structured
 `name`, `role`, `organization`, `purpose`, `voice`, `capabilities`, and
 `boundaries` fields. `voice` must include a `traits` array and may include a
-`language` string. The identity collection defaults to `KB.bot_identity`;
-`MONGODB_BOT_IDENTITY` selects a different collection.
+`language` string.
 
 Company-approved reference documents belong in
-`KB.proprietary_info_collection` in MongoDB mode, or
-`chatbot_reference_documents` in Supabase mode. Documents should contain
-useful text in `content`; lookup also searches `title`, `topic`, `keywords`,
-and `tags`. The chatbot uses keyword matching and provides up to four relevant
-records as Bedrock context. Keep this collection limited to approved,
-up-to-date company information.
+`chatbot_reference_documents`. Documents should contain useful text in
+`content`; lookup also searches `title`, `topic`, `keywords`, and `tags`. The
+chatbot uses keyword matching and provides up to four relevant records as
+Bedrock context. Keep this table limited to approved, up-to-date company
+information.
 
 The chatbot does not invent company policies when its records do not support
 an answer. Only store information approved for processing by the configured
@@ -116,12 +98,10 @@ Bedrock model.
 
 ## Fleet answers
 
-In MongoDB mode, vehicle questions use the configured fleet collection
-(default `Site.vehicles`). In Supabase mode, they use the
-`list_cartogo_chatbot_fleet` RPC. Records marked `Inactive` are excluded;
-availability and recommendation questions are filtered to vehicles marked
-`Available`. Ensure fleet records include the status, model, capacity, and
-rate fields needed for useful answers.
+Vehicle questions use the `list_cartogo_chatbot_fleet` RPC. Records marked
+`Inactive` are excluded; availability and recommendation questions are
+filtered to vehicles marked `Available`. Ensure fleet records include the
+status, model, capacity, and rate fields needed for useful answers.
 
 Try a direct inventory question such as:
 
@@ -149,15 +129,12 @@ of `.env` and source files. Bedrock requests may incur AWS charges.
 
 - **API says the chatbot is unavailable:** confirm the chatbot terminal is
   running and that `CHATBOT_URL` in `apps/api/.env` matches its address.
-- **Startup fails in Supabase mode:** check `CHATBOT_STORAGE`, the project
-  URL, server-only key, and the required tables/RPC functions.
+- **Startup fails:** check the project URL, server-only key, and required
+  tables/RPC functions.
 - **Identity error:** verify that the configured identity record exists and
   matches the required schema.
 - **AWS credentials or Bedrock error:** refresh the approved AWS profile/SSO
   session, then check model access and region.
-- **MongoDB connection error:** verify the authorized URI, network access,
-  database permissions, and configured collection names.
-
 Chat logs can contain the customer's question, bot response, session/user IDs,
 and client IP address. Handle the database and logs as sensitive operational
 data; do not use real customer data for unapproved testing.

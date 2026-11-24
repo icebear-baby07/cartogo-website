@@ -385,7 +385,7 @@ export function createAdminRouter(
       response.json({ email: admin.email, titles: role?.titles ?? [] });
     } catch (error) {
       console.error("Could not read administrator identity.", error instanceof Error ? error.name : "UnknownError");
-      sendError(response, 503, "MongoDB administrator roles are unavailable.");
+      sendError(response, 503, "Administrator roles are unavailable.");
     }
   });
 
@@ -394,7 +394,7 @@ export function createAdminRouter(
       response.json(await (await getRepository()).listUnits());
     } catch (error) {
       console.error("Could not read admin fleet.", error instanceof Error ? error.name : "UnknownError");
-      sendError(response, 503, "MongoDB fleet data is unavailable.");
+      sendError(response, 503, "Fleet data is unavailable.");
     }
   });
 
@@ -558,7 +558,7 @@ export function createAdminRouter(
         throw new Error("Choose a valid inquiry action.");
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "MongoDB could not apply the inquiry change.";
+      const message = error instanceof Error ? error.message : "The inquiry change could not be applied.";
       const status = error instanceof AdminActivityLogError ? 503 :
         /valid|enter|choose|only|already|reason|email address/i.test(message) ? 400 :
         /no longer exists/i.test(message) ? 404 : 503;
@@ -605,7 +605,7 @@ export function createAdminRouter(
         }
       }
       const ownerEmails = await repository.listOwnerEmails();
-      if (!ownerEmails.length) throw new Error("No Owner title is assigned to an administrator in MongoDB.");
+      if (!ownerEmails.length) throw new Error("No Owner title is assigned to an administrator.");
       const now = Date.now();
       const rateKey = ownerEmails.join(",");
       const lastRequest = lastApprovalRequest.get(rateKey) ?? 0;
@@ -751,7 +751,7 @@ export function createAdminRouter(
       response.json({ data: result, resource: challenge.resource });
     } catch (error) {
       console.error("Owner-approved change failed.", error instanceof Error ? error.name : "UnknownError");
-      const message = error instanceof Error ? error.message : "MongoDB could not apply the owner-approved change.";
+      const message = error instanceof Error ? error.message : "The owner-approved change could not be applied.";
       const status = error instanceof AdminActivityLogError ? 503 :
         /at least one Owner|no longer exists|not found|does not match|must remain|already exists/i.test(message) ? 400 : 503;
       sendError(response, status, message);
