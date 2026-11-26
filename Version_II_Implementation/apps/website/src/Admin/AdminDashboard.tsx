@@ -3,7 +3,7 @@ import { supabase } from "../supabase";
 import EmailActivities from "./EmailActivities";
 import defaultSiteContent from "./site-content-defaults.json";
 
-type AdminProfile = { email: string; titles: string[] };
+type AdminProfile = { email: string; titles: string[]; permissions: string[] };
 type DataRecord = Record<string, unknown>;
 type GoogleAccount = { name: string; email: string; verified: boolean };
 type DashboardTab = "inquiries" | "fleet" | "assets" | "content" | "chat" | "analytics";
@@ -43,12 +43,6 @@ const tabs: { id: DashboardTab; label: string; permission: string }[] = [
   { id: "chat", label: "Chat monitor", permission: "chat" },
   { id: "analytics", label: "Analytics", permission: "analytics" },
 ];
-
-const permissionsByTitle: Record<string, string[]> = {
-  Owner: ["inquiries", "fleet", "site_assets", "site_content", "chat", "analytics"],
-  Developer: ["inquiries", "fleet", "site_assets", "site_content", "chat", "analytics"],
-  Moderator: ["inquiries", "fleet", "site_assets", "site_content", "chat", "analytics"],
-};
 
 function isRecord(value: unknown): value is DataRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -221,17 +215,19 @@ export default function AdminDashboard({
   const [scrollToEditor, setScrollToEditor] = useState(false);
   const [scrollToApprovalTab, setScrollToApprovalTab] = useState<DashboardTab | null>(null);
   const loadSequence = useRef(0);
-  const initialTab = useRef(tab);
   const recordEditorRef = useRef<HTMLFormElement>(null);
   const approvalFormRef = useRef<HTMLFormElement>(null);
   const accountDialogRef = useRef<HTMLDialogElement>(null);
   const logoutDialogRef = useRef<HTMLDialogElement>(null);
 
   const allowedPermissions = useMemo(
-    () => new Set((profile?.titles ?? []).flatMap((title) => permissionsByTitle[title] ?? [])),
+    () => new Set(profile?.permissions ?? []),
     [profile],
   );
-  const visibleTabs = tabs.filter((item) => allowedPermissions.has(item.permission));
+  const visibleTabs = useMemo(
+    () => tabs.filter((item) => allowedPermissions.has(item.permission)),
+    [allowedPermissions],
+  );
   const approval = approvals[tab] ?? null;
   const approvalCode = approvalCodes[tab] ?? "";
   const approvalPending = approvalPendingByTab[tab] ?? false;
@@ -328,20 +324,41 @@ export default function AdminDashboard({
           !isRecord(result) ||
           typeof result.email !== "string" ||
           !Array.isArray(result.titles) ||
-          !result.titles.every((title) => typeof title === "string")
+          !result.titles.every((title) => typeof title === "string") ||
+          !Array.isArray(result.permissions) ||
+          !result.permissions.every((permission) => typeof permission === "string")
         ) {
           throw new Error("The API returned an invalid admin profile.");
         }
-        setProfile({ email: result.email, titles: result.titles });
+        setProfile({
+          email: result.email,
+          titles: result.titles,
+          permissions: result.permissions,
+        });
       })
       .catch((profileError: unknown) => {
         if (active) setError(profileError instanceof Error ? profileError.message : "Could not load admin access.");
       });
-    void loadTab(initialTab.current);
     return () => {
       active = false;
     };
-  }, [email, loadTab]);
+  }, [email]);
+
+  useEffect(() => {
+    if (!profile) return;
+    const selectedTab = visibleTabs.find((item) => item.id === tab)?.id ?? visibleTabs[0]?.id;
+    if (!selectedTab) {
+      setData(null);
+      setLoading(false);
+      return;
+    }
+    if (selectedTab !== tab) {
+      setTab(selectedTab);
+      window.sessionStorage.setItem("cartogo-admin-tab", selectedTab);
+      return;
+    }
+    void loadTab(selectedTab);
+  }, [loadTab, profile, tab, visibleTabs]);
 
   useEffect(() => {
     const dialog = accountDialogRef.current;
@@ -859,15 +876,17 @@ export default function AdminDashboard({
     );
   }
 
-  const content = {
-    inquiries: renderInquiries,
-    fleet: renderFleet,
-    assets: renderAssets,
-    content: renderContent,
-    chat: renderChat,
-    analytics: renderAnalytics,
-  }[tab]();
-  const activeTab = tabs.find((item) => item.id === tab);
+  const activeTab = visibleTabs.find((item) => item.id === tab);
+  const content = activeTab
+    ? {
+      inquiries: renderInquiries,
+      fleet: renderFleet,
+      assets: renderAssets,
+      content: renderContent,
+      chat: renderChat,
+      analytics: renderAnalytics,
+    }[activeTab.id]()
+    : null;
 
   return (
     <main className="admin-dashboard admin-shell visible">
@@ -907,8 +926,15 @@ export default function AdminDashboard({
           {visibleTabs.map((item) => (
             <button className={item.id === tab ? "is-active" : ""} type="button" key={item.id} onClick={() => {
               window.sessionStorage.setItem("cartogo-admin-tab", item.id);
-              setTab(item.id);
-              void loadTab(item.id);
+              if (item.id === tab) {
+                void loadTab(item.id);
+              } else {
+                setLoading(true);
+                setData(null);
+                setError("");
+                setNotice("");
+                setTab(item.id);
+              }
             }}>{item.label}</button>
           ))}
         </nav>
@@ -1039,7 +1065,7 @@ export default function AdminDashboard({
         ) : null}
         {loading ? <p className="admin-empty" role="status">Loading {activeTab?.label.toLowerCase()}…</p> : null}
         {!loading && !error ? content : null}
-        {!loading && profile && visibleTabs.length === 0 ? <p className="admin-empty">Your account is authenticated, but no admin title currently grants dashboard access. Ask an Owner to assign a role.</p> : null}
+        {!loading && profile && visibleTabs.length === 0 ? <p className="admin-empty">Your account is authenticated, but no dashboard permissions are assigned. Ask an Owner to update your role.</p> : null}
       </section>
     </main>
   );

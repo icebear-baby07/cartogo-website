@@ -40,6 +40,15 @@ export type ApprovalChallenge = {
 
 export type AdminRole = { email: string; titles: string[] };
 
+const adminTabPermissions = [
+  "inquiries",
+  "fleet",
+  "site_assets",
+  "site_content",
+  "chat",
+  "analytics",
+] as const;
+
 export type AdminDataRepository = {
   listUnits(): Promise<unknown[]>;
   listSiteAssets(): Promise<unknown[]>;
@@ -381,8 +390,17 @@ export function createAdminRouter(
   router.get("/me", async (request, response) => {
     try {
       const admin = authenticatedAdmin(request);
-      const role = await (await getRepository()).getAdminRole(admin.email);
-      response.json({ email: admin.email, titles: role?.titles ?? [] });
+      const repository = await getRepository();
+      const [role, permissionResults] = await Promise.all([
+        repository.getAdminRole(admin.email),
+        Promise.all(adminTabPermissions.map(async (permission) =>
+          await repository.hasPermission(admin.email, permission) ? permission : null
+        )),
+      ]);
+      const permissions = permissionResults.filter(
+        (permission): permission is typeof adminTabPermissions[number] => permission !== null,
+      );
+      response.json({ email: admin.email, titles: role?.titles ?? [], permissions });
     } catch (error) {
       console.error("Could not read administrator identity.", error instanceof Error ? error.name : "UnknownError");
       sendError(response, 503, "Administrator roles are unavailable.");
