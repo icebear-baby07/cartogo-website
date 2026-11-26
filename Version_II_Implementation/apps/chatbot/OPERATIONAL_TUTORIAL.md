@@ -17,23 +17,32 @@ The standalone page at <http://127.0.0.1:8003/> is for local diagnostics and
 direct access. It is not a health check for the database, AWS credentials, or
 Bedrock. Chat requests use the service's `/api/chat` endpoint.
 
-## Start it on Windows
+## Start the chatbot
 
 1. Install Python 3.10 or later.
 2. Configure `apps/chatbot/.env` as described below.
-3. Open PowerShell in `Version_II_Implementation` and run:
+3. Open a terminal in `Version_II_Implementation` and use the launcher for
+   your operating system.
 
+   Windows PowerShell:
    ```powershell
    npm.cmd run dev:chatbot
    ```
 
-   Alternatively, run `apps\chatbot\start_chat.cmd`.
+   Or run `apps\chatbot\start_chat.cmd` from PowerShell.
 
-The launcher creates or repairs the `ctg-venv` environment in the Version II
-directory, installs `apps/chatbot/requirements.txt`, and starts the server on
-port `8003`. It may install packages on its first run or when requirements
-change. Keep the terminal open while using the chatbot. Press **Ctrl+C** there
-to stop it.
+   Linux/macOS:
+   ```sh
+   bash apps/chatbot/start_chat.sh
+   ```
+
+The Windows launcher creates or repairs `ctg-venv`; the Linux/macOS launcher
+uses `.venv-chatbot`. Both install `apps/chatbot/requirements.txt` and start
+the server on port `8003`. They may install packages on first run or when
+requirements change. Keep the terminal open while using the chatbot. Press
+**Ctrl+C** there to stop it. Set `CARTOGO_CHAT_PORT` before launching to use
+another port; if you do, set `CHATBOT_URL` in `apps/api/.env` to the matching
+chatbot URL.
 
 The chatbot is optional for starting the website and API, but live chat needs
 it. If it is stopped, API chat requests return an unavailable-service error.
@@ -42,8 +51,7 @@ staffed support queue.
 
 The server binds to all network interfaces. Use it only on a trusted local
 network, allow the port through a private-network firewall only when needed,
-and do not expose this unauthenticated development service to the public
-internet.
+and do not expose this unauthenticated service directly to the public internet.
 
 ## Configure Supabase
 
@@ -64,9 +72,9 @@ The following resources must already be provisioned:
 - The `get_cartogo_chatbot_identity` and `list_cartogo_chatbot_fleet` RPC
   functions.
 
-The repository does not include a Supabase chatbot schema/bootstrap script.
-Have the project owner provide the approved schema and confirm that the
-service-role key is for the intended project.
+The repository does not include a Supabase schema or bootstrap script. Have
+the project owner provide the approved schema and confirm that the
+service-role key is for the intended project before using the service.
 
 ## Configure identity and company knowledge
 

@@ -1,5 +1,10 @@
 # carTOGO Version II — Project Overview
 
+
+***Please Run This In A Markdown Viewer, Kindly Enter The Link Provided Below To Your Browser Search Bar***
+> https://markdownlivepreview.com/
+
+
 This document explains the purpose of the Version II application, how its
 parts fit together, and how to run it on a prepared or new development device.
 It describes the project in
@@ -15,11 +20,10 @@ review rates and pickup information, and send a rental inquiry. The site also
 provides an administrator area for authorized staff to manage inquiries and
 selected website information.
 
-Version II is a new implementation intended to progressively replace the
-legacy site while preserving its existing data formats and expected
-customer workflows. It is still under development. It must not be treated as
-the production replacement until the remaining staging checks are completed
-and a cutover is explicitly approved.
+Version II is a separate implementation intended to replace the legacy site
+while preserving its existing data formats and customer workflows. This guide
+covers local development and setup; it does not certify production readiness
+or authorize a production cutover.
 
 ### What it does
 
@@ -31,7 +35,8 @@ For visitors, the website:
 - Lets a visitor enter trip details, review a Reservation Recap, optionally
   request an extra driver or child seat, and then send a rental inquiry. The API
   independently validates the inquiry and calculates rental and add-on pricing
-  from the configured database rates, discount rules, and site-content fees.
+  from the configured rates, discount rules, and site-content fees. Same-day
+  pickups must be scheduled at least 12 hours ahead.
 - Supports guest email verification and an optional verified Google sign-in
   for booking inquiries. An inquiry is a request, not a confirmed reservation;
   the team still needs to confirm availability.
@@ -61,7 +66,7 @@ processes, and the optional chatbot runs in its own process. The Vite website
 server listens on all network interfaces by default and prints the current
 LAN URLs, so other devices on the same network can open it. Set
 `CARTOGO_SITE_HOST=127.0.0.1` to restrict the website server to the local
-computer.
+computer. The API itself listens only on `127.0.0.1`.
 
 ```text
 Browser
@@ -81,9 +86,10 @@ Website (Vite, port 5173) ---- /api proxy ----> API (Express, port 3001)
 
 The website's `/api` requests are proxied by Vite to the API in development.
 The API validates incoming data against shared contracts and provides booking,
-chat-proxy, and protected admin endpoints. Version II uses Supabase for its
-application data, authentication, and storage. The API readiness endpoint
-checks the configured Supabase project and required data resources.
+chat-proxy, and protected admin endpoints. Version II uses Supabase as its
+application database, authentication provider, and public-image storage. The
+API readiness endpoint checks Supabase connectivity and access to the fleet
+data resource.
 
 The chatbot service is deliberately isolated from the website/API runtime. The
 website API forwards chat requests to it at `http://127.0.0.1:8003` by default.
@@ -98,7 +104,7 @@ chatbot page is retained for local access.
 | React | Builds the public website, booking interface, chat widget, and admin user interface. |
 | TypeScript | Adds static types across the website, API, and shared contracts. |
 | Vite | Runs the website development server, serves the production build, and proxies `/api` requests during development. |
-| Node.js and npm workspaces | Run the TypeScript applications, manage shared JavaScript dependencies, and coordinate workspace scripts. Node.js 22 or newer is recommended and required by the Windows site launcher. |
+| Node.js and npm workspaces | Run the TypeScript applications, manage shared JavaScript dependencies, and coordinate workspace scripts. Node.js 22 or newer is required by the site launchers. |
 | Express | Hosts the API, including public-data, booking, chat-proxy, health, authentication, and admin routes. |
 | Supabase | Stores Version II fleet, site content/assets, inquiries, chatbot data, admin records, and email activity; provides Google sign-in, admin activity logging, and the public `cartogo-public-site-images` Storage bucket. API and chatbot server-side access uses server-only credentials. |
 | Zod and `packages/contracts` | Define shared API schemas/types and validate API input and database-facing responses without changing the existing document formats. |
@@ -110,39 +116,75 @@ chatbot page is retained for local access.
 
 ### Important data and security boundaries
 
-- Version II API data is stored in the configured Supabase project. Site
-  content is held in the `site_content_documents` table under the `public` ID.
-  Public content must contain only material intended for website visitors.
+- Version II uses Supabase for application data; it does not require a separate
+  database service. The API directly uses these public-schema tables:
+  - `fleet_documents` for rental-unit records.
+  - `site_content_documents` for the public site-content document, stored
+    under the `public` ID.
+  - `site_asset_documents` for pickup locations and contact assets.
+  - `inquiry_documents` for customer booking inquiries.
+  - `guest_email_challenges` for short-lived guest email-verification state.
+  - `email_activity_logs` for generated source ID, email type, activity, and
+    timestamp; these events exclude recipient addresses and message content.
+  - `admin_activity_logs` for sanitized administrator audit events.
+- The chatbot directly uses these public-schema tables:
+  - `chatbot_reference_documents` for approved company information used by
+    the chatbot.
+  - `chatbot_chat_log_documents` for chatbot request and response logs.
+- Database functions (Supabase RPCs) encapsulate other operations, including
+  administrator roles and permissions, owner-approval challenges, chat-session
+  management, inquiry workflows and analytics, email analytics, guest
+  verification, and the inquiry-confirmation email queue. The chatbot also
+  calls RPCs for its identity and fleet data. The application code does not
+  establish the underlying table names for data managed only through those
+  functions.
+- Supabase Auth handles Google sign-in. Public-site photos use the Supabase
+  Storage bucket `cartogo-public-site-images`; this is storage, not a database
+  table.
+- This repository does not include the SQL that creates or migrates the
+  Supabase tables, policies, or RPC functions. Confirm that the configured
+  project has the approved schema before running the application or testing
+  data changes. Do not infer that a table is unused merely because its name is
+  not referenced directly; database functions may use it.
 - The API readiness endpoint checks Supabase availability and the fleet data
   resource used by the application.
 - Public-site photos are served from the public Supabase Storage bucket
   `cartogo-public-site-images`. The website builds their URLs from
   `VITE_SUPABASE_URL`; local image fallback requires files in
   `apps/website/public/images` with the expected original filenames.
-- The chatbot has its own environment file and uses the same Supabase project
-  for fleet, knowledge, identity, and chat logs. Do not copy the legacy
+- The chatbot has its own environment file and uses the configured Supabase
+  project for fleet, knowledge, identity, and chat logs. Do not copy the legacy
   chatbot's environment file or virtual environment.
+- Chatbot logs include the client's IP address, session/user IDs, question,
+  response, and outcome. Treat them as sensitive operational data.
+- The chatbot's local development server binds to all network interfaces and
+  has no authentication. Keep it on a trusted network and do not expose it
+  directly to the public internet.
 - Never put SMTP credentials or Supabase service-role keys in the browser
   environment. Never commit `.env` files.
 - Keep each `.env` assignment on its own line.
-- Use a dedicated, confirmed non-production database for development. Existing
-  project notes flag the current API database URI as potentially matching the
-  legacy application; do not write to it unless an authorized owner confirms
-  it is safe.
+- Before testing operations that create, update, or delete data, verify that
+  the configured Supabase project is approved for that testing. Local
+  environment files can point at any project; do not assume they target a
+  development database.
 
 ## 3. Operating on an already set up device
 
 These steps assume the project files, Node.js/npm, dependencies, and required
-local configuration are already present.
+local configuration are already present. The launchers support Windows and
+Linux/macOS; use the platform-specific chatbot launcher described below.
 
 ### Start the website and API
 
-1. Open PowerShell in the `Version_II_Implementation` directory.
+1. Open PowerShell (Windows) or a terminal (Linux/macOS) in the
+   `Version_II_Implementation` directory.
 2. Run:
 
    ```powershell
    npm.cmd run dev
    ```
+
+   On Linux/macOS, use `npm run dev`.
 
 3. Keep the terminal open. Use the `Network` URL printed by Vite to open the
    site from another device on the same network, or visit
@@ -151,28 +193,39 @@ local configuration are already present.
 This command builds the shared contracts and starts the API and website
 together. The API is available at <http://127.0.0.1:3001/>.
 
-Alternatively, on Windows, run `.\start_site.cmd` from the project directory.
-If a needed environment file does not exist, the launcher creates it from its
-example and stops so you can configure it before starting again.
+Alternatively, run `.\start_site.cmd` on Windows or `bash ./start_site.sh` on
+Linux/macOS. If a needed environment file does not exist, the launcher creates
+it from its example and stops so you can configure it before starting again.
 
 ### Start the chatbot (optional)
 
-In a second PowerShell terminal in the project directory, run:
+In a second terminal in the project directory, run the launcher for your
+operating system:
 
+Windows PowerShell:
 ```powershell
 npm.cmd run dev:chatbot
 ```
 
-The service is available at <http://127.0.0.1:8003/>. Its launcher reuses the
-isolated `ctg-venv` Python environment on Windows and checks/installs its
-requirements. The website can still show its offline chat preview if the
+Linux/macOS:
+```sh
+bash apps/chatbot/start_chat.sh
+```
+
+The service is available at <http://127.0.0.1:8003/>. On Windows, the launcher
+uses the isolated `ctg-venv` Python environment and checks/installs its
+requirements. On Linux/macOS, the launcher uses `.venv-chatbot` and installs
+the same requirements. The root `npm.cmd run dev:chatbot` command is
+Windows-only. The website can still show its offline chat preview if the
 chatbot service is unavailable.
 
 For full Bedrock-backed chatbot operation, AWS CLI v2 credentials/login,
 permissions, and the chatbot's Supabase/AWS configuration must be valid.
 On Windows, `.\start_cartogo.cmd` opens separate terminals for AWS login, the
 website/API, and the chatbot. Use it only when those services and credentials
-are configured.
+are configured. On Linux/macOS, `bash ./start_cartogo.sh` runs AWS login when
+the AWS CLI is installed, starts the chatbot in the background, and then starts
+the website/API in the current terminal.
 
 ### Stop and check
 
@@ -234,10 +287,14 @@ and a confirmed non-production environment:
 ```powershell
 Copy-Item apps\api\.env.example apps\api\.env
 Copy-Item apps\website\.env.example apps\website\.env
+```
+
+If you intend to run the optional chatbot, also copy its example:
+
+```powershell
 Copy-Item apps\chatbot\.env.example apps\chatbot\.env
 ```
 
-Only create/configure `apps\chatbot\.env` if you intend to run the chatbot.
 On Linux/macOS, use `cp` with the equivalent paths. These files are local,
 ignored by Git, and must not be committed.
 
@@ -245,14 +302,17 @@ Configure the API file (`apps/api/.env`) as needed:
 
 - `SUPABASE_URL` and `SUPABASE_ANON_KEY` to match the browser's Supabase
   project when authentication is required.
-- `SUPABASE_SERVICE_ROLE_KEY` and `CARTOGO_INITIAL_OWNER_EMAIL` only for
-  server-side admin/account configuration that requires them.
-- API data is stored in Supabase. Required tables and RPC functions must
-  already exist; the one-off import utilities and cutover SQL files are not
-  included in this repository.
+- `SUPABASE_SERVICE_ROLE_KEY` for the API's server-side Supabase data access.
+  It must never be exposed to the browser. `CARTOGO_INITIAL_OWNER_EMAIL` is an
+  optional API setting for the initial-owner role check.
+- The Supabase tables and RPC functions listed under
+  [Important data and security boundaries](#important-data-and-security-boundaries)
+  must already be provisioned. This repository does not include the schema,
+  migration, or data-import scripts.
 - Email analytics activity events are stored in the Supabase
-  `email_activity_logs` table. Events contain type, activity, and timestamp
-  only; they do not contain recipient addresses or message content.
+  `email_activity_logs` table. Events contain a generated source ID, type,
+  activity, and timestamp; they do not contain recipient addresses or message
+  content.
 - Admin mutations write sanitized activity records to Supabase's
   `public.admin_activity_logs` table using the server-only Supabase secret
   key (or legacy service-role key). The table must be provisioned before
@@ -272,8 +332,8 @@ Configure the API file (`apps/api/.env`) as needed:
   reasons, PINs, and email contents. If an action succeeds but its log write
   fails, the API reports that the change was applied and advises checking
   Supabase before retrying.
-- `SMTP_*` settings when guest email verification or administrator email
-  workflows need to send mail.
+- `SMTP_*` settings when booking verification/confirmation or administrator
+  email workflows need to send mail.
 - `BOOKING_SMTP_FROM` optionally overrides `SMTP_FROM` for customer booking
   verification and confirmation emails only. Leave it unset to use `SMTP_FROM`;
   owner-approval PIN emails continue to use `SMTP_FROM`.
@@ -295,9 +355,9 @@ Configure the chatbot file (`apps/chatbot/.env`) separately, using
 `apps/chatbot/.env.example` as the template. The chatbot uses Supabase directly
 and requires `SUPABASE_URL`, a server-only
 `SUPABASE_SERVICE_ROLE_KEY`, and the chatbot's provisioned Supabase tables and
-RPC functions. Configure AWS credentials with the approved AWS profile or SSO
-flow and grant access to the selected Bedrock model. Do not reuse the official
-legacy chatbot's environment file.
+RPC functions. Configure AWS credentials with an approved AWS profile or SSO
+flow and grant access to the selected Bedrock model. Do not reuse the legacy
+chatbot's environment file or virtual environment.
 
 Do not paste credential values into source files, commits, tickets, or chat.
 If you do not have the service credentials, ask the project owner for
@@ -311,11 +371,10 @@ development credentials rather than using production credentials.
    npm.cmd run dev
    ```
 
-2. In a separate terminal, optionally start the chatbot:
+   On Linux/macOS, use `npm run dev`.
 
-   ```powershell
-   npm.cmd run dev:chatbot
-   ```
+2. In a separate terminal, optionally start the chatbot using the operating
+   system's launcher above.
 
 3. Visit the `Network` URL printed by Vite from other devices on the same
    network, or <http://127.0.0.1:5173/> on the host computer. The API's
