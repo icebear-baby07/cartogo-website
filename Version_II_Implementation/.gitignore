@@ -7,3 +7,4 @@ ctg-venv/
 .env
 .env.*
 !.env.example
+Next_Steps.txt
